@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type { DeviceTemplate, RackCreateInput, RackDetail, RackDevice, RackDeviceInput, RackSummary } from "../shared/types";
 import { api } from "./api";
 import { Inspector } from "./components/Inspector";
+import { OverviewPage } from "./components/OverviewPage";
 import { Palette } from "./components/Palette";
 import { RackCanvas } from "./components/RackCanvas";
 import { RackSwitcher } from "./components/RackSwitcher";
@@ -32,11 +33,13 @@ function templateToRackDevice(template: DeviceTemplate, startUnit: number | null
 }
 
 export default function App() {
+  const [currentPath, setCurrentPath] = useState(() => window.location.pathname);
   const [racks, setRacks] = useState<RackSummary[]>([]);
   const [activeRackId, setActiveRackId] = useState<number | null>(null);
   const [rackDetail, setRackDetail] = useState<RackDetail | null>(null);
   const [templates, setTemplates] = useState<DeviceTemplate[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
+  const [auditSearch, setAuditSearch] = useState("");
   const [message, setMessage] = useState("Loading workspace...");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -47,10 +50,26 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    function handlePopState() {
+      setCurrentPath(window.location.pathname);
+    }
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
+
+  useEffect(() => {
     if (activeRackId !== null) {
       void loadRack(activeRackId);
     }
   }, [activeRackId]);
+
+  function navigate(path: "/" | "/audits") {
+    window.history.pushState({}, "", path);
+    setCurrentPath(path);
+  }
 
   async function loadInitialData() {
     try {
@@ -223,11 +242,24 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <nav className="app-nav">
+        <button className={currentPath === "/" ? "nav-link selected" : "nav-link"} onClick={() => navigate("/")} type="button">
+          Uebersicht
+        </button>
+        <button
+          className={currentPath === "/audits" ? "nav-link selected" : "nav-link"}
+          onClick={() => navigate("/audits")}
+          type="button"
+        >
+          Rack Audits
+        </button>
+      </nav>
+
       <header className="hero">
         <div>
           <p className="hero-kicker">AetherCab</p>
           <p className="hero-copy">
-            Drag devices into rack units, capture metadata fast and track loose spare parts from the same workspace.
+            Visual rack inventory for teams that need a clear starting point before opening or creating an audit.
           </p>
         </div>
         <div className="hero-actions">
@@ -243,60 +275,66 @@ export default function App() {
 
       {error ? <div className="error-banner">{error}</div> : null}
 
-      <main className="workspace-grid">
-        <RackSwitcher
-          racks={racks}
-          activeRackId={activeRackId}
-          onSelectRack={setActiveRackId}
-          createForm={createForm}
-          onCreateFormChange={setCreateForm}
-          onCreateRack={(event) => {
-            void handleCreateRack(event);
-          }}
-        />
+      {currentPath === "/" ? (
+        <OverviewPage auditCount={racks.length} templateCount={templates.length} onOpenAudits={() => navigate("/audits")} />
+      ) : (
+        <main className="workspace-grid">
+          <RackSwitcher
+            racks={racks}
+            activeRackId={activeRackId}
+            searchValue={auditSearch}
+            onSelectRack={setActiveRackId}
+            onSearchChange={setAuditSearch}
+            createForm={createForm}
+            onCreateFormChange={setCreateForm}
+            onCreateRack={(event) => {
+              void handleCreateRack(event);
+            }}
+          />
 
-        <div className="editor-column">
-          {rackDetail ? (
-            <RackCanvas
-              rack={rackDetail}
-              selectedDeviceId={selectedDeviceId}
-              onSelectDevice={setSelectedDeviceId}
-              onTemplateDrop={(unit, templatePayload) => {
-                void handleTemplateDrop(unit, templatePayload);
-              }}
-              onDeviceMove={(device, nextStartUnit) => {
-                void handleDeviceMove(device, nextStartUnit);
+          <div className="editor-column">
+            {rackDetail ? (
+              <RackCanvas
+                rack={rackDetail}
+                selectedDeviceId={selectedDeviceId}
+                onSelectDevice={setSelectedDeviceId}
+                onTemplateDrop={(unit, templatePayload) => {
+                  void handleTemplateDrop(unit, templatePayload);
+                }}
+                onDeviceMove={(device, nextStartUnit) => {
+                  void handleDeviceMove(device, nextStartUnit);
+                }}
+              />
+            ) : (
+              <section className="panel empty-state-panel">
+                <p className="eyebrow">Audit workspace</p>
+                <h2>No audit selected</h2>
+                <p>Select an existing audit or create a new one to start documenting a rack.</p>
+              </section>
+            )}
+            <SparePartsPanel devices={spareParts} selectedDeviceId={selectedDeviceId} onSelectDevice={setSelectedDeviceId} />
+          </div>
+
+          <div className="side-column">
+            <Palette
+              templates={templates}
+              onAddSpare={(template) => {
+                void handleAddSpare(template);
               }}
             />
-          ) : (
-            <section className="panel empty-state-panel">
-              <p className="eyebrow">Rack editor</p>
-              <h2>No rack selected</h2>
-              <p>Create or select a rack to begin documenting installed devices.</p>
-            </section>
-          )}
-          <SparePartsPanel devices={spareParts} selectedDeviceId={selectedDeviceId} onSelectDevice={setSelectedDeviceId} />
-        </div>
-
-        <div className="side-column">
-          <Palette
-            templates={templates}
-            onAddSpare={(template) => {
-              void handleAddSpare(template);
-            }}
-          />
-          <Inspector
-            device={selectedDevice}
-            onChange={(next) => {
-              void handleInspectorChange(next);
-            }}
-            onDelete={() => {
-              void handleDeleteDevice();
-            }}
-            saving={saving}
-          />
-        </div>
-      </main>
+            <Inspector
+              device={selectedDevice}
+              onChange={(next) => {
+                void handleInspectorChange(next);
+              }}
+              onDelete={() => {
+                void handleDeleteDevice();
+              }}
+              saving={saving}
+            />
+          </div>
+        </main>
+      )}
     </div>
   );
 }
