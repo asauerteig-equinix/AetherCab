@@ -29,6 +29,7 @@ export function RackCanvas({
 }: RackCanvasProps) {
   const [previewPlacement, setPreviewPlacement] = useState<{ startUnit: number; endUnit: number } | null>(null);
   const [draggingDevice, setDraggingDevice] = useState<{ deviceId: number; offsetUnitsFromTop: number } | null>(null);
+  const faceLabel = activeRackFace === "front" ? "Vorderseite" : "Rueckseite";
   const placedDevices = rack.devices.filter(
     (device) =>
       device.placementType === "rack" &&
@@ -127,13 +128,11 @@ export function RackCanvas({
     <section className="panel rack-panel">
       <div className="panel-header">
         <div>
-          <p className="eyebrow">Audit Bearbeitung</p>
-          <h2>{rack.name}</h2>
+          <p className="eyebrow">Rack Editor</p>
+          <h2>Rack Ansicht</h2>
         </div>
-        <div className="rack-meta">
-          <span>{rack.siteName}</span>
-          <span>{rack.roomName}</span>
-          <span>{rack.totalUnits}U</span>
+        <div className="rack-toolbar">
+          <span className="toolbar-label">Ansicht</span>
           <div className="rack-face-toggle">
             <button
               className={activeRackFace === "front" ? "face-toggle selected" : "face-toggle"}
@@ -152,7 +151,7 @@ export function RackCanvas({
           </div>
         </div>
       </div>
-      <div className="rack-face-banner">{activeRackFace === "front" ? "-- Vorderseite --" : "-- Rueckseite --"}</div>
+      <div className="rack-face-banner">{`-- ${faceLabel} --`}</div>
       <div className="rack-frame">
         <div
           className={draggingDevice || previewPlacement !== null ? "rack-units drag-active" : "rack-units"}
@@ -233,7 +232,7 @@ export function RackCanvas({
           })}
         </div>
       </div>
-      <div className="rack-face-banner bottom">{activeRackFace === "front" ? "-- Vorderseite --" : "-- Rueckseite --"}</div>
+      <div className="rack-face-banner bottom">{`-- ${faceLabel} --`}</div>
     </section>
   );
 }

@@ -18,9 +18,15 @@
   --accent: #c9b39a;
   --accent-strong: #a88e72;
   --accent-muted: rgba(201, 179, 154, 0.14);
-  --muted: #b7aa9c;
+  --text-primary: #f3ede6;
+  --text-secondary: #d0c1b1;
+  --text-tertiary: #a39486;
+  --text-quiet: #7f7267;
+  --muted: #a8998b;
   --line-soft: rgba(196, 183, 168, 0.09);
   --line-strong: rgba(196, 183, 168, 0.3);
+  --surface-soft: rgba(188, 175, 159, 0.05);
+  --surface-soft-strong: rgba(188, 175, 159, 0.1);
 }
 
 * {
@@ -31,6 +37,8 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  color: var(--text-primary);
+  background-color: #151311;
 }
 
 button,
@@ -70,8 +78,8 @@ a {
 .primary-button {
   border: 1px solid var(--line-soft);
   border-radius: 12px;
-  background: rgba(188, 175, 159, 0.05);
-  color: inherit;
+  background: var(--surface-soft);
+  color: var(--text-secondary);
   padding: 11px 16px;
   transition:
     transform 140ms ease,
@@ -83,7 +91,7 @@ a {
 .primary-button:hover {
   transform: translateY(-1px);
   border-color: var(--line-strong);
-  background: rgba(188, 175, 159, 0.1);
+  background: var(--surface-soft-strong);
 }
 
 .hero {
@@ -122,12 +130,13 @@ a {
   text-transform: uppercase;
   letter-spacing: 0.16em;
   font-size: 0.75rem;
-  color: var(--accent);
+  color: var(--accent-strong);
+  font-weight: 600;
 }
 
 .hero-copy,
 .muted {
-  color: var(--muted);
+  color: var(--text-secondary);
 }
 
 .hero-copy {
@@ -144,12 +153,16 @@ a {
 
 .status-pill,
 .export-actions a,
-.rack-meta span,
 .template-actions span {
   border: 1px solid var(--panel-border);
-  border-radius: 999px;
+  border-radius: 12px;
   padding: 10px 14px;
-  background: rgba(189, 174, 156, 0.08);
+  background: rgba(189, 174, 156, 0.06);
+}
+
+.status-pill {
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
 .export-actions {
@@ -160,27 +173,40 @@ a {
 .rack-face-toggle {
   display: flex;
   gap: 8px;
-  padding: 4px;
-  border: 1px solid rgba(201, 179, 154, 0.22);
-  border-radius: 999px;
-  background: rgba(12, 10, 9, 0.34);
+  padding: 5px;
+  border: 1px solid rgba(201, 179, 154, 0.24);
+  border-radius: 14px;
+  background: rgba(12, 10, 9, 0.46);
+}
+
+.rack-toolbar {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.toolbar-label {
+  font-size: 0.74rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
 }
 
 .face-toggle {
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-secondary);
+  padding: 9px 14px;
   font-size: 0.82rem;
   letter-spacing: 0.04em;
 }
 
 .face-toggle.selected {
-  background: rgba(201, 179, 154, 0.16);
-  border-color: rgba(201, 179, 154, 0.3) !important;
-  color: #f5ede4;
-  box-shadow: none;
+  background: rgba(201, 179, 154, 0.2);
+  border-color: rgba(201, 179, 154, 0.42) !important;
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 
 .workspace-grid {
@@ -248,7 +274,7 @@ a {
 }
 
 .overview-feature span {
-  color: var(--muted);
+  color: var(--text-secondary);
 }
 
 .overview-audit-list {
@@ -294,11 +320,11 @@ a {
 }
 
 .overview-audit-card span {
-  color: var(--muted);
+  color: var(--text-secondary);
 }
 
 .admin-template-card span {
-  color: var(--muted);
+  color: var(--text-secondary);
 }
 
 .overview-create-form {
@@ -366,6 +392,7 @@ a {
 
 .panel-header h2 {
   font-size: 1.45rem;
+  color: var(--text-primary);
 }
 
 .rack-switcher-list,
@@ -381,8 +408,8 @@ a {
 .ghost-button,
 .create-rack-form button {
   border: 1px solid var(--line-soft);
-  background: rgba(188, 175, 159, 0.05);
-  color: inherit;
+  background: var(--surface-soft);
+  color: var(--text-primary);
   border-radius: 12px;
   transition:
     transform 140ms ease,
@@ -407,7 +434,7 @@ a {
 .rack-device:hover {
   transform: translateY(-1px);
   border-color: var(--line-strong);
-  background: rgba(188, 175, 159, 0.1);
+  background: var(--surface-soft-strong);
 }
 
 .selected {
@@ -428,7 +455,7 @@ a {
 .search-field {
   display: grid;
   gap: 6px;
-  color: var(--muted);
+  color: var(--text-tertiary);
   font-size: 0.92rem;
 }
 
@@ -451,7 +478,7 @@ textarea {
   border: 1px solid rgba(184, 171, 156, 0.15);
   border-radius: 10px;
   background: rgba(12, 10, 9, 0.3);
-  color: #f1ece5;
+  color: var(--text-primary);
   padding: 11px 12px;
 }
 
@@ -474,7 +501,7 @@ textarea {
 
 .template-card p {
   margin: 4px 0 0;
-  color: var(--muted);
+  color: var(--text-secondary);
 }
 
 .template-list.compact {
@@ -496,7 +523,7 @@ textarea {
   border: 1px solid var(--line-soft);
   border-radius: 10px;
   background: rgba(36, 31, 27, 0.96);
-  color: var(--accent);
+  color: var(--accent-strong);
   font-size: 0.78rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -531,6 +558,7 @@ textarea {
 
 .template-copy p {
   font-size: 0.73rem;
+  color: var(--text-secondary);
 }
 
 .search-field {
@@ -553,7 +581,7 @@ textarea {
   border: none;
   border-radius: 999px;
   background: var(--accent-muted);
-  color: #f1e3d3;
+  color: var(--text-primary);
   padding: 7px 10px;
   white-space: nowrap;
 }
@@ -562,18 +590,10 @@ textarea {
   overflow: hidden;
 }
 
-.rack-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: end;
-  align-items: center;
-}
-
 .rack-face-banner {
   margin: 12px 0 10px;
   text-align: center;
-  color: var(--accent);
+  color: var(--accent-strong);
   font-size: 0.82rem;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -638,7 +658,7 @@ textarea {
 .slot-label {
   font-size: 0.76rem;
   letter-spacing: 0.08em;
-  color: rgba(214, 202, 189, 0.5);
+  color: var(--text-quiet);
 }
 
 .rack-device {
@@ -674,12 +694,12 @@ textarea {
 
 .rack-device-content strong {
   font-size: 0.79rem;
-  color: #f7f1ea;
+  color: var(--text-primary);
 }
 
 .rack-device-content span {
   font-size: 0.72rem;
-  color: rgba(230, 220, 210, 0.76);
+  color: var(--text-secondary);
 }
 
 .rack-device-content.compact {
@@ -714,7 +734,7 @@ textarea {
   display: grid;
   place-items: start;
   min-height: 180px;
-  color: var(--muted);
+  color: var(--text-secondary);
 }
 
 .inspector-grid {
