@@ -35,6 +35,12 @@ const pdfPalette = {
   deviceBorder: "#8f7a66"
 } as const;
 
+const pdfPageOptions = {
+  margin: 36,
+  size: "A4",
+  layout: "landscape"
+} as const;
+
 function installedDevices(detail: RackDetail): RackDevice[] {
   return detail.devices.filter((device) => device.placementType === "rack" && device.startUnit !== null);
 }
@@ -65,12 +71,20 @@ function deviceSecondaryLine(device: RackDevice): string {
   return `${device.manufacturer} ${device.model}`.trim();
 }
 
-function deviceVisualLabel(device: RackDevice): string {
+function deviceVisualLines(device: RackDevice): string[] {
   if (device.heightU === 1) {
-    return `${devicePrimaryLine(device)} | ${deviceSecondaryLine(device)}`;
+    return [`${devicePrimaryLine(device)} | ${deviceSecondaryLine(device)}`];
   }
 
-  return `${devicePrimaryLine(device)}\n${deviceSecondaryLine(device)}\n${devicePositionLabel(device)} | ${deviceFaceLabel(device)}`;
+  if (device.heightU === 2) {
+    return [devicePrimaryLine(device), deviceSecondaryLine(device)];
+  }
+
+  return [devicePrimaryLine(device), deviceSecondaryLine(device), `${devicePositionLabel(device)} | ${deviceFaceLabel(device)}`];
+}
+
+function deviceVisualLabel(device: RackDevice): string {
+  return deviceVisualLines(device).join("\n");
 }
 
 function faceSortValue(device: RackDevice): number {
@@ -132,17 +146,6 @@ function styleExcelMeta(cell: ExcelJS.Cell): void {
   cell.alignment = { vertical: "middle", horizontal: "left" };
 }
 
-function styleExcelHeaderRow(row: ExcelJS.Row): void {
-  row.height = 22;
-
-  row.eachCell((cell) => {
-    cell.font = { name: "Bahnschrift", size: 10, bold: true, color: { argb: excelPalette.textPrimary } };
-    cell.alignment = { vertical: "middle", horizontal: "left" };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: excelPalette.panelBackground } };
-    cell.border = createThinBorder(excelPalette.panelBorder);
-  });
-}
-
 function columnHeaderLabel(column: Partial<ExcelJS.Column>): string {
   if (typeof column.header === "string") {
     return column.header;
@@ -153,15 +156,6 @@ function columnHeaderLabel(column: Partial<ExcelJS.Column>): string {
   }
 
   return typeof column.key === "string" ? column.key : "";
-}
-
-function styleExcelBodyRow(row: ExcelJS.Row): void {
-  row.eachCell((cell) => {
-    cell.font = { name: "Bahnschrift", size: 10, color: { argb: excelPalette.textPrimary } };
-    cell.alignment = { vertical: "top", horizontal: "left", wrapText: true };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: excelPalette.slotBackground } };
-    cell.border = createThinBorder(excelPalette.slotLine);
-  });
 }
 
 function applyExcelRangeBorder(
@@ -275,18 +269,30 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, detail: RackDetail): vo
   ];
 
   worksheet.mergeCells("A1:M1");
-  styleExcelTitle(worksheet.getCell("A1"), "AetherCab Inventory Export");
+  const titleCell = worksheet.getCell("A1");
+  titleCell.value = "AetherCab Inventory Export";
+  titleCell.font = { name: "Bahnschrift", size: 16, bold: true, color: { argb: "FF2B2520" } };
+  titleCell.alignment = { vertical: "middle", horizontal: "left" };
   worksheet.mergeCells("A2:M2");
-  worksheet.getCell("A2").value = `${detail.siteName} | ${detail.roomName} | ${detail.name} | ${detail.totalUnits}U`;
-  styleExcelMeta(worksheet.getCell("A2"));
+  const metaCell = worksheet.getCell("A2");
+  metaCell.value = `${detail.siteName} | ${detail.roomName} | ${detail.name} | ${detail.totalUnits}U`;
+  metaCell.font = { name: "Bahnschrift", size: 10, color: { argb: "FF4C433B" } };
+  metaCell.alignment = { vertical: "middle", horizontal: "left" };
 
   worksheet.mergeCells("A3:M3");
-  worksheet.getCell("A3").value = detail.notes ? `Notizen: ${detail.notes}` : "Notizen: -";
-  styleExcelMeta(worksheet.getCell("A3"));
+  const notesCell = worksheet.getCell("A3");
+  notesCell.value = detail.notes ? `Notizen: ${detail.notes}` : "Notizen: -";
+  notesCell.font = { name: "Bahnschrift", size: 10, color: { argb: "FF4C433B" } };
+  notesCell.alignment = { vertical: "middle", horizontal: "left" };
 
   const headerRow = worksheet.getRow(5);
   headerRow.values = [null, ...worksheet.columns.map((column) => columnHeaderLabel(column))];
-  styleExcelHeaderRow(headerRow);
+  headerRow.height = 22;
+  headerRow.eachCell((cell) => {
+    cell.font = { name: "Bahnschrift", size: 10, bold: true, color: { argb: "FF2B2520" } };
+    cell.alignment = { vertical: "middle", horizontal: "left" };
+    cell.border = createThinBorder("FFD6D0C9");
+  });
 
   sortDevices(installedDevices(detail)).forEach((device) => {
     const row = worksheet.addRow({
@@ -304,7 +310,11 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, detail: RackDetail): vo
       serialNumber: device.serialNumber ?? "",
       notes: device.notes ?? ""
     });
-    styleExcelBodyRow(row);
+    row.eachCell((cell) => {
+      cell.font = { name: "Bahnschrift", size: 10, color: { argb: "FF2B2520" } };
+      cell.alignment = { vertical: "top", horizontal: "left", wrapText: true };
+      cell.border = createThinBorder("FFE0DBD4");
+    });
   });
 }
 
@@ -329,11 +339,6 @@ function buildRackViewSheet(workbook: ExcelJS.Workbook, detail: RackDetail): voi
   drawExcelRackFace(worksheet, detail, "front", 1, 5);
   drawExcelRackFace(worksheet, detail, "rear", 8, 5);
 
-  for (let columnIndex = 1; columnIndex <= 13; columnIndex += 1) {
-    worksheet.getColumn(columnIndex).style = {
-      fill: { type: "pattern", pattern: "solid", fgColor: { argb: excelPalette.pageBackground } }
-    };
-  }
 }
 
 function drawPdfPageBackground(pdf: PdfDocument): void {
@@ -362,7 +367,7 @@ function drawPdfRackFace(
 ): void {
   const labelWidth = 42;
   const rackWidth = width - labelWidth;
-  const unitHeight = Math.max(10, Math.min(13, Math.floor((pdf.page.height - y - 64) / detail.totalUnits)));
+  const unitHeight = Math.max(8, Math.min(10, Math.floor((pdf.page.height - y - 90) / detail.totalUnits)));
   const rackHeight = unitHeight * detail.totalUnits;
   const innerPadding = 8;
   const devices = visibleDevicesForFace(detail, face);
@@ -395,31 +400,27 @@ function drawPdfRackFace(
     const height = Math.max(unitHeight * device.heightU - 2, unitHeight - 2);
     const textX = x + labelWidth + innerPadding;
     const textWidth = rackWidth - innerPadding * 2;
-    const label = deviceVisualLabel(device).split("\n");
+    const lines = deviceVisualLines(device);
+    const fontSize = device.heightU === 1 ? 6.2 : device.heightU === 2 ? 6.8 : 7.2;
+    const lineHeight = fontSize + 1.5;
+    const textBlockHeight = lines.length * lineHeight;
+    const startTextY = topY + Math.max(3, (height - textBlockHeight) / 2);
 
     pdf.save();
     pdf.roundedRect(textX - 2, topY, textWidth + 4, height, 8).fill(pdfPalette.deviceFill);
     pdf.roundedRect(textX - 2, topY, textWidth + 4, height, 8).lineWidth(0.8).strokeColor(pdfPalette.deviceBorder).stroke();
     pdf.restore();
 
-    pdf.fillColor(pdfPalette.textPrimary).fontSize(device.heightU === 1 ? 6.8 : 7.8).text(label[0] ?? "", textX + 2, topY + 4, {
-      width: textWidth - 4,
-      ellipsis: true
+    lines.forEach((line, index) => {
+      pdf.fillColor(index === 0 ? pdfPalette.textPrimary : pdfPalette.textSecondary).fontSize(fontSize).text(line, textX + 2, startTextY + index * lineHeight, {
+        width: textWidth - 4,
+        ellipsis: true
+      });
     });
-
-    if (device.heightU > 1) {
-      pdf.fillColor(pdfPalette.textSecondary).fontSize(6.8).text(label[1] ?? "", textX + 2, topY + 15, {
-        width: textWidth - 4,
-        ellipsis: true
-      });
-      pdf.text(label[2] ?? "", textX + 2, topY + 25, {
-        width: textWidth - 4,
-        ellipsis: true
-      });
-    }
   });
 
-  pdf.fillColor(pdfPalette.accentStrong).fontSize(9).text(`-- ${faceLabel(face)} --`, x, y + rackHeight + 10, {
+  const footerY = y + rackHeight + 4;
+  pdf.fillColor(pdfPalette.accentStrong).fontSize(9).text(`-- ${faceLabel(face)} --`, x, footerY, {
     width,
     align: "center"
   });
@@ -430,7 +431,7 @@ function ensurePdfTextSpace(pdf: PdfDocument, neededHeight = 36): void {
     return;
   }
 
-  pdf.addPage({ margin: 36, size: "A4" });
+  pdf.addPage(pdfPageOptions);
   drawPdfPageBackground(pdf);
 }
 
@@ -477,7 +478,7 @@ export async function buildExcelExport(detail: RackDetail): Promise<Buffer> {
 
 export function buildPdfExport(detail: RackDetail): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const pdf = new PDFDocument({ margin: 36, size: "A4", layout: "landscape" });
+    const pdf = new PDFDocument(pdfPageOptions);
     const chunks: Buffer[] = [];
 
     pdf.on("data", (chunk: unknown) => {
@@ -495,10 +496,10 @@ export function buildPdfExport(detail: RackDetail): Promise<Buffer> {
 
     drawPdfPageBackground(pdf);
     drawPdfHeader(pdf, detail, "AetherCab Rack View", "Visuelle Rack-Dokumentation");
-    drawPdfRackFace(pdf, detail, "front", 42, 130, 340);
-    drawPdfRackFace(pdf, detail, "rear", 430, 130, 340);
+    drawPdfRackFace(pdf, detail, "front", 42, 124, 340);
+    drawPdfRackFace(pdf, detail, "rear", 430, 124, 340);
 
-    pdf.addPage({ margin: 36, size: "A4" });
+    pdf.addPage(pdfPageOptions);
     drawPdfPageBackground(pdf);
     drawPdfHeader(pdf, detail, "AetherCab Textliste", "Strukturierte Inventarliste zum Rack");
     pdf.moveDown(4);
