@@ -60,6 +60,7 @@ export async function initializeDatabase(): Promise<void> {
       manufacturer TEXT NOT NULL,
       model TEXT NOT NULL,
       default_height_u INTEGER NOT NULL,
+      blocks_both_faces BOOLEAN NOT NULL DEFAULT FALSE,
       UNIQUE(name, manufacturer, model)
     );
 
@@ -67,6 +68,8 @@ export async function initializeDatabase(): Promise<void> {
       id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
       rack_id INTEGER NOT NULL REFERENCES racks(id) ON DELETE CASCADE,
       placement_type TEXT NOT NULL CHECK (placement_type IN ('rack', 'spare')),
+      rack_face TEXT CHECK (rack_face IN ('front', 'rear')),
+      blocks_both_faces BOOLEAN NOT NULL DEFAULT FALSE,
       start_unit INTEGER,
       height_u INTEGER NOT NULL,
       name TEXT NOT NULL,
@@ -86,21 +89,42 @@ export async function initializeDatabase(): Promise<void> {
     ADD COLUMN IF NOT EXISTS template_type TEXT NOT NULL DEFAULT 'other'
   `);
 
+  await pool.query(`
+    ALTER TABLE device_templates
+    ADD COLUMN IF NOT EXISTS blocks_both_faces BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+
+  await pool.query(`
+    ALTER TABLE rack_devices
+    ADD COLUMN IF NOT EXISTS rack_face TEXT CHECK (rack_face IN ('front', 'rear'))
+  `);
+
+  await pool.query(`
+    ALTER TABLE rack_devices
+    ADD COLUMN IF NOT EXISTS blocks_both_faces BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+
+  await pool.query(`
+    UPDATE rack_devices
+    SET rack_face = 'front'
+    WHERE placement_type = 'rack' AND rack_face IS NULL
+  `);
+
   await seedDatabase();
 }
 
 async function seedDatabase(): Promise<void> {
   await pool.query(
     `
-      INSERT INTO device_templates (template_type, name, manufacturer, model, default_height_u)
+      INSERT INTO device_templates (template_type, name, manufacturer, model, default_height_u, blocks_both_faces)
       VALUES
-        ('server', 'Server 1U', 'Generic', 'Rack Server 1U', 1),
-        ('server', 'Server 2U', 'Generic', 'Rack Server 2U', 2),
-        ('switch-router', 'Switch/Router 1U', 'Generic', 'Network Device 1U', 1),
-        ('switch-router', 'Switch/Router 2U', 'Generic', 'Network Device 2U', 2),
-        ('patch-panel', 'Patchpanel 1U', 'Generic', 'Patchpanel 1U', 1),
-        ('storage', 'Storage 2U', 'Generic', 'Storage Shelf 2U', 2),
-        ('ups', 'UPS 2U', 'Generic', 'UPS 2U', 2)
+        ('server', 'Server 1U', 'Generic', 'Rack Server 1U', 1, TRUE),
+        ('server', 'Server 2U', 'Generic', 'Rack Server 2U', 2, TRUE),
+        ('switch-router', 'Switch/Router 1U', 'Generic', 'Network Device 1U', 1, FALSE),
+        ('switch-router', 'Switch/Router 2U', 'Generic', 'Network Device 2U', 2, TRUE),
+        ('patch-panel', 'Patchpanel 1U', 'Generic', 'Patchpanel 1U', 1, FALSE),
+        ('storage', 'Storage 2U', 'Generic', 'Storage Shelf 2U', 2, TRUE),
+        ('ups', 'UPS 2U', 'Generic', 'UPS 2U', 2, TRUE)
       ON CONFLICT (name, manufacturer, model) DO NOTHING
     `
   );
@@ -133,6 +157,8 @@ async function seedDatabase(): Promise<void> {
       INSERT INTO rack_devices (
         rack_id,
         placement_type,
+        rack_face,
+        blocks_both_faces,
         start_unit,
         height_u,
         name,
@@ -143,9 +169,9 @@ async function seedDatabase(): Promise<void> {
         notes,
         storage_location
       ) VALUES
-        ($1, 'rack', 40, 2, 'Storage Shelf 01', 'Dell', 'EMC Unity Shelf', 'D-EMC-4401', 'unity-shelf-01', 'Primary storage shelf', NULL),
-        ($1, 'rack', 38, 1, 'Core Switch 01', 'Cisco', 'Catalyst 9300', 'C9300-01', 'core-sw-01', 'Top of rack core switch', NULL),
-        ($1, 'spare', NULL, 1, 'SFP Module Kit', 'Cisco', 'SFP-10G-SR', NULL, NULL, 'Loose spare transceivers', 'Accessory box')
+        ($1, 'rack', 'front', TRUE, 40, 2, 'Storage Shelf 01', 'Dell', 'EMC Unity Shelf', 'D-EMC-4401', 'unity-shelf-01', 'Primary storage shelf', NULL),
+        ($1, 'rack', 'rear', FALSE, 38, 1, 'Core Switch 01', 'Cisco', 'Catalyst 9300', 'C9300-01', 'core-sw-01', 'Top of rack core switch', NULL),
+        ($1, 'spare', NULL, FALSE, NULL, 1, 'SFP Module Kit', 'Cisco', 'SFP-10G-SR', NULL, NULL, 'Loose spare transceivers', 'Accessory box')
     `,
     [rackId]
   );

@@ -15,6 +15,8 @@ function normalizeValue(value: string): string | null {
 function toDeviceInput(device: RackDevice): RackDeviceInput {
   return {
     placementType: device.placementType,
+    rackFace: device.rackFace,
+    blocksBothFaces: device.blocksBothFaces,
     startUnit: device.startUnit,
     heightU: device.heightU,
     name: device.name,
@@ -42,9 +44,9 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
 
   function updateInput(
     key: keyof RackDeviceInput,
-    transform?: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => RackDeviceInput[keyof RackDeviceInput]
+    transform?: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => RackDeviceInput[keyof RackDeviceInput]
   ) {
-    return (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    return (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
       onChange({
         ...draft,
         [key]: transform ? transform(event) : event.target.value
@@ -84,6 +86,32 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
             type="number"
             value={device.heightU}
             onChange={updateInput("heightU", (event) => Number(event.target.value))}
+          />
+        </label>
+        <label>
+          Rack Seite
+          <select
+            value={device.rackFace ?? "front"}
+            disabled={device.placementType === "spare" || device.blocksBothFaces}
+            onChange={updateInput("rackFace", (event) => event.target.value as RackDeviceInput["rackFace"])}
+          >
+            <option value="front">Vorderseite</option>
+            <option value="rear">Rueckseite</option>
+          </select>
+        </label>
+        <label className="checkbox-field">
+          Blockiert vorne und hinten
+          <input
+            checked={device.blocksBothFaces}
+            disabled={device.placementType === "spare"}
+            type="checkbox"
+            onChange={(event) => {
+              onChange({
+                ...draft,
+                blocksBothFaces: event.target.checked,
+                rackFace: event.target.checked ? device.rackFace ?? "front" : device.rackFace ?? "front"
+              });
+            }}
           />
         </label>
         <label>

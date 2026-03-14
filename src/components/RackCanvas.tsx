@@ -1,11 +1,13 @@
 import { useState, type DragEvent } from "react";
-import { getEndUnit } from "../../shared/rack";
-import type { RackDetail, RackDevice } from "../../shared/types";
+import { getAnchoredStartUnit, getEndUnit } from "../../shared/rack";
+import type { DeviceTemplate, RackDetail, RackDevice, RackFace } from "../../shared/types";
 
 interface RackCanvasProps {
   rack: RackDetail;
+  activeRackFace: RackFace;
   selectedDeviceId: number | null;
   onSelectDevice(deviceId: number): void;
+  onRackFaceChange(nextFace: RackFace): void;
   onTemplateDrop(unit: number, templatePayload: string): void;
   onDeviceMove(device: RackDevice, nextStartUnit: number): void;
 }
@@ -18,14 +20,21 @@ function clamp(value: number, minimum: number, maximum: number): number {
 
 export function RackCanvas({
   rack,
+  activeRackFace,
   selectedDeviceId,
   onSelectDevice,
+  onRackFaceChange,
   onTemplateDrop,
   onDeviceMove
 }: RackCanvasProps) {
-  const [previewUnit, setPreviewUnit] = useState<number | null>(null);
+  const [previewPlacement, setPreviewPlacement] = useState<{ startUnit: number; endUnit: number } | null>(null);
   const [draggingDevice, setDraggingDevice] = useState<{ deviceId: number; offsetUnitsFromTop: number } | null>(null);
-  const placedDevices = rack.devices.filter((device) => device.placementType === "rack" && device.startUnit !== null);
+  const placedDevices = rack.devices.filter(
+    (device) =>
+      device.placementType === "rack" &&
+      device.startUnit !== null &&
+      (device.blocksBothFaces || device.rackFace === activeRackFace)
+  );
 
   function getUnitFromPointer(event: DragEvent<HTMLDivElement>): number {
     const rackBounds = event.currentTarget.getBoundingClientRect();
@@ -38,7 +47,42 @@ export function RackCanvas({
   function handleDragOver(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     event.dataTransfer.dropEffect = draggingDevice ? "move" : "copy";
-    setPreviewUnit(getUnitFromPointer(event));
+    const hoveredUnit = getUnitFromPointer(event);
+    const templatePayload = event.dataTransfer.getData("application/x-aethercab-template");
+    const devicePayload = event.dataTransfer.getData("application/x-aethercab-device");
+
+    if (templatePayload) {
+      const template = JSON.parse(templatePayload) as DeviceTemplate;
+      const startUnit =
+        template.defaultHeightU > 1
+          ? getAnchoredStartUnit(
+              hoveredUnit,
+              template.defaultHeightU,
+              rack.totalUnits,
+              activeRackFace,
+              template.blocksBothFaces,
+              rack.devices
+            )
+          : hoveredUnit;
+
+      setPreviewPlacement(startUnit === null ? null : { startUnit, endUnit: getEndUnit(startUnit, template.defaultHeightU) });
+      return;
+    }
+
+    if (devicePayload) {
+      const device = placedDevices.find((entry) => String(entry.id) === devicePayload);
+      if (!device) {
+        setPreviewPlacement(null);
+        return;
+      }
+
+      const offsetUnitsFromTop = draggingDevice?.deviceId === device.id ? draggingDevice.offsetUnitsFromTop : device.heightU - 1;
+      const startUnit = clamp(hoveredUnit - (device.heightU - 1 - offsetUnitsFromTop), 1, rack.totalUnits - device.heightU + 1);
+      setPreviewPlacement({ startUnit, endUnit: getEndUnit(startUnit, device.heightU) });
+      return;
+    }
+
+    setPreviewPlacement(null);
   }
 
   function handleDrop(event: DragEvent<HTMLDivElement>) {
@@ -47,7 +91,7 @@ export function RackCanvas({
     const templatePayload = event.dataTransfer.getData("application/x-aethercab-template");
     const devicePayload = event.dataTransfer.getData("application/x-aethercab-device");
 
-    setPreviewUnit(null);
+    setPreviewPlacement(null);
 
     if (templatePayload) {
       onTemplateDrop(hoveredUnit, templatePayload);
@@ -75,7 +119,7 @@ export function RackCanvas({
       event.clientY > rackBounds.bottom;
 
     if (isOutsideRack) {
-      setPreviewUnit(null);
+      setPreviewPlacement(null);
     }
   }
 
@@ -90,11 +134,27 @@ export function RackCanvas({
           <span>{rack.siteName}</span>
           <span>{rack.roomName}</span>
           <span>{rack.totalUnits}U</span>
+          <div className="rack-face-toggle">
+            <button
+              className={activeRackFace === "front" ? "face-toggle selected" : "face-toggle"}
+              onClick={() => onRackFaceChange("front")}
+              type="button"
+            >
+              Vorderseite
+            </button>
+            <button
+              className={activeRackFace === "rear" ? "face-toggle selected" : "face-toggle"}
+              onClick={() => onRackFaceChange("rear")}
+              type="button"
+            >
+              Rueckseite
+            </button>
+          </div>
         </div>
       </div>
       <div className="rack-frame">
         <div
-          className={draggingDevice || previewUnit !== null ? "rack-units drag-active" : "rack-units"}
+          className={draggingDevice || previewPlacement !== null ? "rack-units drag-active" : "rack-units"}
           style={{ height: rack.totalUnits * slotHeight }}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
@@ -103,7 +163,14 @@ export function RackCanvas({
           {Array.from({ length: rack.totalUnits }, (_, index) => {
             const unit = rack.totalUnits - index;
             return (
-              <div className={previewUnit === unit ? "rack-slot drop-target" : "rack-slot"} key={unit}>
+              <div
+                className={
+                  previewPlacement && unit >= previewPlacement.startUnit && unit <= previewPlacement.endUnit
+                    ? "rack-slot drop-target"
+                    : "rack-slot"
+                }
+                key={unit}
+              >
                 <span className="slot-label">{unit}U</span>
               </div>
             );
@@ -117,6 +184,7 @@ export function RackCanvas({
             const top = rack.totalUnits * slotHeight - bottom - height - 2;
             const detailLine = `${device.manufacturer} ${device.model}`;
             const positionLine = `${startUnit}U - ${endUnit}U`;
+            const faceLine = device.blocksBothFaces ? "Front + Rear" : device.rackFace === "rear" ? "Rear" : "Front";
             const contentClassName =
               device.heightU === 1
                 ? "rack-device-content compact"
@@ -138,11 +206,11 @@ export function RackCanvas({
                   event.dataTransfer.setData("application/x-aethercab-device", String(device.id));
                   event.dataTransfer.effectAllowed = "move";
                   setDraggingDevice({ deviceId: device.id, offsetUnitsFromTop });
-                  setPreviewUnit(startUnit);
+                  setPreviewPlacement({ startUnit, endUnit });
                 }}
                 onDragEnd={() => {
                   setDraggingDevice(null);
-                  setPreviewUnit(null);
+                  setPreviewPlacement(null);
                 }}
                 onClick={() => onSelectDevice(device.id)}
                 type="button"
@@ -155,7 +223,7 @@ export function RackCanvas({
                   ) : (
                     <>
                       <span>{detailLine}</span>
-                      <span>{positionLine}</span>
+                      <span>{`${positionLine} | ${faceLine}`}</span>
                     </>
                   )}
                 </span>

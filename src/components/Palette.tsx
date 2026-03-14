@@ -37,6 +37,7 @@ export function Palette({ templates, onAddSpare }: PaletteProps) {
               <p>
                 {formatTemplateType(template.templateType)} | {template.manufacturer} {template.model}
               </p>
+              <p>{template.blocksBothFaces ? "Front + Rear" : "eine Seite"}</p>
             </div>
             <div className="template-actions">
               <span>{template.defaultHeightU}U</span>

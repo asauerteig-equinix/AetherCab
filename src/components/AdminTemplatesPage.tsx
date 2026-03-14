@@ -78,6 +78,14 @@ export function AdminTemplatesPage({
               onChange={(event) => onFormChange({ ...form, defaultHeightU: Number(event.target.value) })}
             />
           </label>
+          <label className="checkbox-field">
+            Blockiert Vorder- und Rueckseite
+            <input
+              checked={form.blocksBothFaces}
+              type="checkbox"
+              onChange={(event) => onFormChange({ ...form, blocksBothFaces: event.target.checked })}
+            />
+          </label>
           <button className="primary-button" type="submit">
             Vorlage anlegen
           </button>
@@ -102,7 +110,7 @@ export function AdminTemplatesPage({
                   {formatTemplateType(template.templateType)} | {template.defaultHeightU}U
                 </span>
                 <span>
-                  {template.manufacturer} | {template.model}
+                  {template.manufacturer} | {template.model} | {template.blocksBothFaces ? "Front + Rear" : "eine Seite"}
                 </span>
               </div>
               <button className="ghost-button" onClick={() => onDeleteTemplate(template.id)} type="button">

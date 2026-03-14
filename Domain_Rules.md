@@ -4,8 +4,8 @@
 A rack is a vertical stack of rack units (U).
 
 Typical rack size:
-- 42U
-- 48U
+- 47U
+- 50U
 
 Units are numbered from bottom (1U) to top.
 

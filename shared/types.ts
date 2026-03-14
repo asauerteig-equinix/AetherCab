@@ -1,4 +1,5 @@
 export type PlacementType = "rack" | "spare";
+export type RackFace = "front" | "rear";
 
 export interface RackSummary {
   id: number;
@@ -18,6 +19,7 @@ export interface DeviceTemplate {
   manufacturer: string;
   model: string;
   defaultHeightU: number;
+  blocksBothFaces: boolean;
 }
 
 export interface DeviceTemplateInput {
@@ -26,12 +28,15 @@ export interface DeviceTemplateInput {
   manufacturer: string;
   model: string;
   defaultHeightU: number;
+  blocksBothFaces: boolean;
 }
 
 export interface RackDevice {
   id: number;
   rackId: number;
   placementType: PlacementType;
+  rackFace: RackFace | null;
+  blocksBothFaces: boolean;
   startUnit: number | null;
   heightU: number;
   name: string;
@@ -51,6 +56,8 @@ export interface RackDetail extends RackSummary {
 
 export interface RackDeviceInput {
   placementType: PlacementType;
+  rackFace: RackFace | null;
+  blocksBothFaces: boolean;
   startUnit: number | null;
   heightU: number;
   name: string;

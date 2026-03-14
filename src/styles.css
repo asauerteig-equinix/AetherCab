@@ -157,6 +157,19 @@ a {
   gap: 10px;
 }
 
+.rack-face-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.face-toggle {
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  background: rgba(188, 175, 159, 0.05);
+  color: inherit;
+  padding: 8px 12px;
+}
+
 .workspace-grid {
   display: grid;
   grid-template-columns: minmax(260px, 300px) minmax(420px, 1fr) minmax(300px, 360px);
@@ -404,6 +417,19 @@ a {
   gap: 6px;
   color: var(--muted);
   font-size: 0.92rem;
+}
+
+.checkbox-field {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.checkbox-field input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
 }
 
 input,

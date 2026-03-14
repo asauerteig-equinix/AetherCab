@@ -6,6 +6,7 @@ import type {
   RackDetail,
   RackDevice,
   RackDeviceInput,
+  RackFace,
   RackSummary
 } from "../shared/types.js";
 import { pool } from "./db.js";
@@ -25,6 +26,8 @@ interface RackDeviceRow {
   id: number;
   rack_id: number;
   placement_type: "rack" | "spare";
+  rack_face: RackFace | null;
+  blocks_both_faces: boolean;
   start_unit: number | null;
   height_u: number;
   name: string;
@@ -45,6 +48,7 @@ interface DeviceTemplateRow {
   manufacturer: string;
   model: string;
   default_height_u: number;
+  blocks_both_faces: boolean;
 }
 
 function mapRackSummary(row: RackSummaryRow): RackSummary {
@@ -65,6 +69,8 @@ function mapRackDevice(row: RackDeviceRow): RackDevice {
     id: row.id,
     rackId: row.rack_id,
     placementType: row.placement_type,
+    rackFace: row.rack_face,
+    blocksBothFaces: row.blocks_both_faces,
     startUnit: row.start_unit,
     heightU: row.height_u,
     name: row.name,
@@ -82,6 +88,8 @@ function mapRackDevice(row: RackDeviceRow): RackDevice {
 function normalizeDeviceInput(input: RackDeviceInput): RackDeviceInput {
   const normalized: RackDeviceInput = {
     placementType: input.placementType,
+    rackFace: input.rackFace,
+    blocksBothFaces: input.blocksBothFaces,
     startUnit: input.startUnit,
     heightU: input.heightU,
     name: input.name.trim(),
@@ -95,6 +103,10 @@ function normalizeDeviceInput(input: RackDeviceInput): RackDeviceInput {
 
   if (!normalized.name || !normalized.manufacturer || !normalized.model) {
     throw new Error("Name, manufacturer and model are required.");
+  }
+
+  if (normalized.placementType === "rack" && normalized.rackFace === null) {
+    throw new Error("Rack face is required for rack devices.");
   }
 
   return normalized;
@@ -139,7 +151,7 @@ export async function listRacks(): Promise<RackSummary[]> {
 
 export async function listDeviceTemplates(): Promise<DeviceTemplate[]> {
   const result = await pool.query<DeviceTemplateRow>(`
-    SELECT id, template_type, name, manufacturer, model, default_height_u
+    SELECT id, template_type, name, manufacturer, model, default_height_u, blocks_both_faces
     FROM device_templates
     ORDER BY template_type, default_height_u, name
   `);
@@ -150,7 +162,8 @@ export async function listDeviceTemplates(): Promise<DeviceTemplate[]> {
     name: row.name,
     manufacturer: row.manufacturer,
     model: row.model,
-    defaultHeightU: row.default_height_u
+    defaultHeightU: row.default_height_u,
+    blocksBothFaces: row.blocks_both_faces
   }));
 }
 
@@ -160,7 +173,8 @@ function normalizeTemplateInput(input: DeviceTemplateInput): DeviceTemplateInput
     name: input.name.trim(),
     manufacturer: input.manufacturer.trim(),
     model: input.model.trim(),
-    defaultHeightU: input.defaultHeightU
+    defaultHeightU: input.defaultHeightU,
+    blocksBothFaces: input.blocksBothFaces
   };
 
   if (!normalized.templateType || !normalized.name || !normalized.manufacturer || !normalized.model) {
@@ -179,11 +193,11 @@ export async function createDeviceTemplate(input: DeviceTemplateInput): Promise<
 
   const result = await pool.query<DeviceTemplateRow>(
     `
-      INSERT INTO device_templates (template_type, name, manufacturer, model, default_height_u)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING id, template_type, name, manufacturer, model, default_height_u
+      INSERT INTO device_templates (template_type, name, manufacturer, model, default_height_u, blocks_both_faces)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING id, template_type, name, manufacturer, model, default_height_u, blocks_both_faces
     `,
-    [normalized.templateType, normalized.name, normalized.manufacturer, normalized.model, normalized.defaultHeightU]
+    [normalized.templateType, normalized.name, normalized.manufacturer, normalized.model, normalized.defaultHeightU, normalized.blocksBothFaces]
   );
 
   const row = result.rows[0];
@@ -193,7 +207,8 @@ export async function createDeviceTemplate(input: DeviceTemplateInput): Promise<
     name: row.name,
     manufacturer: row.manufacturer,
     model: row.model,
-    defaultHeightU: row.default_height_u
+    defaultHeightU: row.default_height_u,
+    blocksBothFaces: row.blocks_both_faces
   };
 }
 
@@ -306,6 +321,8 @@ export async function createRackDevice(rackId: number, input: RackDeviceInput): 
       INSERT INTO rack_devices (
         rack_id,
         placement_type,
+        rack_face,
+        blocks_both_faces,
         start_unit,
         height_u,
         name,
@@ -316,12 +333,14 @@ export async function createRackDevice(rackId: number, input: RackDeviceInput): 
         notes,
         storage_location,
         updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, CURRENT_TIMESTAMP)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
       RETURNING *
     `,
     [
       rackId,
       normalized.placementType,
+      normalized.rackFace,
+      normalized.blocksBothFaces,
       normalized.startUnit,
       normalized.heightU,
       normalized.name,
@@ -355,21 +374,25 @@ export async function updateRackDevice(rackId: number, deviceId: number, input: 
       UPDATE rack_devices
       SET
         placement_type = $1,
-        start_unit = $2,
-        height_u = $3,
-        name = $4,
-        manufacturer = $5,
-        model = $6,
-        serial_number = $7,
-        hostname = $8,
-        notes = $9,
-        storage_location = $10,
+        rack_face = $2,
+        blocks_both_faces = $3,
+        start_unit = $4,
+        height_u = $5,
+        name = $6,
+        manufacturer = $7,
+        model = $8,
+        serial_number = $9,
+        hostname = $10,
+        notes = $11,
+        storage_location = $12,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $11 AND rack_id = $12
+      WHERE id = $13 AND rack_id = $14
       RETURNING *
     `,
     [
       normalized.placementType,
+      normalized.rackFace,
+      normalized.blocksBothFaces,
       normalized.startUnit,
       normalized.heightU,
       normalized.name,

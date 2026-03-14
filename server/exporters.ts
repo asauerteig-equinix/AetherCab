@@ -23,6 +23,8 @@ export async function buildExcelExport(detail: RackDetail): Promise<Buffer> {
     { header: "Start U", key: "startUnit", width: 10 },
     { header: "End U", key: "endUnit", width: 10 },
     { header: "Height U", key: "heightU", width: 10 },
+    { header: "Face", key: "rackFace", width: 14 },
+    { header: "Blocks Both", key: "blocksBothFaces", width: 14 },
     { header: "Name", key: "name", width: 24 },
     { header: "Manufacturer", key: "manufacturer", width: 20 },
     { header: "Model", key: "model", width: 24 },
@@ -39,6 +41,8 @@ export async function buildExcelExport(detail: RackDetail): Promise<Buffer> {
       startUnit: device.startUnit,
       endUnit: device.startUnit === null ? null : getEndUnit(device.startUnit, device.heightU),
       heightU: device.heightU,
+      rackFace: device.blocksBothFaces ? "front+rear" : device.rackFace,
+      blocksBothFaces: device.blocksBothFaces ? "yes" : "no",
       name: device.name,
       manufacturer: device.manufacturer,
       model: device.model,
@@ -107,9 +111,10 @@ export function buildPdfExport(detail: RackDetail): Promise<Buffer> {
     installedDevices(detail).forEach((device) => {
       const startUnit = device.startUnit ?? "-";
       const endUnit = device.startUnit === null ? "-" : getEndUnit(device.startUnit, device.heightU);
+      const rackFace = device.blocksBothFaces ? "Front + Rear" : device.rackFace === "rear" ? "Rear" : "Front";
       pdf
         .fontSize(11)
-        .text(`${startUnit}U-${endUnit}U | ${device.heightU}U | ${device.name} | ${device.manufacturer} ${device.model}`);
+        .text(`${startUnit}U-${endUnit}U | ${device.heightU}U | ${rackFace} | ${device.name} | ${device.manufacturer} ${device.model}`);
     });
 
     pdf.moveDown();

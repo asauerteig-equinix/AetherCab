@@ -1,8 +1,10 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
+import { getAnchoredStartUnit } from "../shared/rack";
 import type {
   DeviceTemplate,
   DeviceTemplateInput,
+  RackFace,
   RackCreateInput,
   RackDetail,
   RackDevice,
@@ -31,12 +33,20 @@ const initialTemplateForm: DeviceTemplateInput = {
   name: "",
   manufacturer: "Generic",
   model: "",
-  defaultHeightU: 1
+  defaultHeightU: 1,
+  blocksBothFaces: false
 };
 
-function templateToRackDevice(template: DeviceTemplate, startUnit: number | null, placementType: "rack" | "spare"): RackDeviceInput {
+function templateToRackDevice(
+  template: DeviceTemplate,
+  startUnit: number | null,
+  placementType: "rack" | "spare",
+  rackFace: RackFace
+): RackDeviceInput {
   return {
     placementType,
+    rackFace: placementType === "rack" ? rackFace : null,
+    blocksBothFaces: template.blocksBothFaces,
     startUnit,
     heightU: template.defaultHeightU,
     name: template.name,
@@ -56,6 +66,7 @@ export default function App() {
   const [rackDetail, setRackDetail] = useState<RackDetail | null>(null);
   const [templates, setTemplates] = useState<DeviceTemplate[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
+  const [activeRackFace, setActiveRackFace] = useState<RackFace>("front");
   const [auditSearch, setAuditSearch] = useState("");
   const [message, setMessage] = useState("Loading workspace...");
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +94,24 @@ export default function App() {
       void loadRack(activeRackId);
     }
   }, [activeRackId]);
+
+  useEffect(() => {
+    if (!rackDetail || selectedDeviceId === null) {
+      return;
+    }
+
+    const selectedDevice = rackDetail.devices.find((device) => device.id === selectedDeviceId);
+    if (!selectedDevice || selectedDevice.placementType !== "rack") {
+      return;
+    }
+
+    const isVisibleOnFace =
+      selectedDevice.blocksBothFaces || selectedDevice.rackFace === null || selectedDevice.rackFace === activeRackFace;
+
+    if (!isVisibleOnFace) {
+      setSelectedDeviceId(null);
+    }
+  }, [activeRackFace, rackDetail, selectedDeviceId]);
 
   function navigate(path: "/" | "/audits" | "/admin") {
     window.history.pushState({}, "", path);
@@ -140,16 +169,33 @@ export default function App() {
   const spareParts = rackDetail?.devices.filter((device) => device.placementType === "spare") ?? [];
 
   async function handleTemplateDrop(unit: number, templatePayload: string) {
-    if (activeRackId === null) {
+    if (activeRackId === null || rackDetail === null) {
       return;
     }
 
     try {
       const template = JSON.parse(templatePayload) as DeviceTemplate;
+      const anchoredStartUnit =
+        template.defaultHeightU > 1
+          ? getAnchoredStartUnit(
+              unit,
+              template.defaultHeightU,
+              rackDetail.totalUnits,
+              activeRackFace,
+              template.blocksBothFaces,
+              rackDetail.devices
+            )
+          : unit;
+
+      if (anchoredStartUnit === null) {
+        setError("Das Geraet passt von der angezielten Unit aus weder nach oben noch nach unten.");
+        return;
+      }
+
       setSaving(true);
-      await api.createDevice(activeRackId, templateToRackDevice(template, unit, "rack"));
+      await api.createDevice(activeRackId, templateToRackDevice(template, anchoredStartUnit, "rack", activeRackFace));
       await loadRack(activeRackId);
-      setMessage(`${template.name} wurde bei ${unit}U platziert.`);
+      setMessage(`${template.name} wurde bei ${anchoredStartUnit}U platziert.`);
       setError(null);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Geraet konnte nicht platziert werden.");
@@ -165,7 +211,7 @@ export default function App() {
 
     try {
       setSaving(true);
-      await api.createDevice(activeRackId, templateToRackDevice(template, null, "spare"));
+      await api.createDevice(activeRackId, templateToRackDevice(template, null, "spare", activeRackFace));
       await loadRack(activeRackId);
       setMessage(`${template.name} wurde als Ersatzteil erfasst.`);
       setError(null);
@@ -185,6 +231,8 @@ export default function App() {
       setSaving(true);
       await api.updateDevice(activeRackId, device.id, {
         placementType: "rack",
+        rackFace: device.rackFace,
+        blocksBothFaces: device.blocksBothFaces,
         startUnit: nextStartUnit,
         heightU: device.heightU,
         name: device.name,
@@ -317,23 +365,25 @@ export default function App() {
         </button>
       </nav>
 
-      <header className="hero">
-        <div>
-          <p className="hero-kicker">AetherCab</p>
-          <p className="hero-copy">
-            Bestandsaufnahme fuer Racks mit klarem Einstieg: erst Audit waehlen oder anlegen, dann gezielt bearbeiten.
-          </p>
-        </div>
-        <div className="hero-actions">
-          <span className="status-pill">{saving ? "Speichere Datenbankstatus" : message}</span>
-          {rackDetail ? (
-            <div className="export-actions">
-              <a href={api.excelExportUrl(rackDetail.id)}>Excel Export</a>
-              <a href={api.pdfExportUrl(rackDetail.id)}>PDF Export</a>
-            </div>
-          ) : null}
-        </div>
-      </header>
+      {currentPath === "/audits" ? (
+        <header className="hero">
+          <div>
+            <p className="hero-kicker">AetherCab</p>
+            <p className="hero-copy">
+              Bestandsaufnahme fuer Racks mit klarem Einstieg: erst Audit waehlen oder anlegen, dann gezielt bearbeiten.
+            </p>
+          </div>
+          <div className="hero-actions">
+            <span className="status-pill">{saving ? "Speichere Datenbankstatus" : message}</span>
+            {rackDetail ? (
+              <div className="export-actions">
+                <a href={api.excelExportUrl(rackDetail.id)}>Excel Export</a>
+                <a href={api.pdfExportUrl(rackDetail.id)}>PDF Export</a>
+              </div>
+            ) : null}
+          </div>
+        </header>
+      ) : null}
 
       {error ? <div className="error-banner">{error}</div> : null}
 
@@ -370,8 +420,10 @@ export default function App() {
             {rackDetail ? (
               <RackCanvas
                 rack={rackDetail}
+                activeRackFace={activeRackFace}
                 selectedDeviceId={selectedDeviceId}
                 onSelectDevice={setSelectedDeviceId}
+                onRackFaceChange={setActiveRackFace}
                 onTemplateDrop={(unit, templatePayload) => {
                   void handleTemplateDrop(unit, templatePayload);
                 }}
