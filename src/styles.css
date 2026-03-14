@@ -160,14 +160,27 @@ a {
 .rack-face-toggle {
   display: flex;
   gap: 8px;
+  padding: 4px;
+  border: 1px solid rgba(201, 179, 154, 0.22);
+  border-radius: 999px;
+  background: rgba(12, 10, 9, 0.34);
 }
 
 .face-toggle {
-  border: 1px solid var(--line-soft);
+  border: 1px solid transparent;
   border-radius: 999px;
-  background: rgba(188, 175, 159, 0.05);
-  color: inherit;
-  padding: 8px 12px;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 14px;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+}
+
+.face-toggle.selected {
+  background: rgba(201, 179, 154, 0.16);
+  border-color: rgba(201, 179, 154, 0.3) !important;
+  color: #f5ede4;
+  box-shadow: none;
 }
 
 .workspace-grid {
@@ -464,6 +477,62 @@ textarea {
   color: var(--muted);
 }
 
+.template-list.compact {
+  max-height: 560px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.template-group {
+  display: grid;
+  gap: 8px;
+}
+
+.template-group-title {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(36, 31, 27, 0.96);
+  color: var(--accent);
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.template-group-list {
+  display: grid;
+  gap: 8px;
+}
+
+.template-card.compact {
+  align-items: center;
+  padding: 10px 12px;
+  gap: 12px;
+}
+
+.template-copy {
+  min-width: 0;
+}
+
+.template-copy strong,
+.template-copy p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-copy strong {
+  display: block;
+  font-size: 0.86rem;
+}
+
+.template-copy p {
+  font-size: 0.73rem;
+}
+
 .search-field {
   margin-bottom: 14px;
 }
@@ -475,11 +544,18 @@ textarea {
   align-items: end;
 }
 
+.template-actions.compact {
+  flex-direction: row;
+  align-items: center;
+}
+
 .template-actions button {
   border: none;
   border-radius: 999px;
   background: var(--accent-muted);
   color: #f1e3d3;
+  padding: 7px 10px;
+  white-space: nowrap;
 }
 
 .rack-panel {
@@ -491,6 +567,20 @@ textarea {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: end;
+  align-items: center;
+}
+
+.rack-face-banner {
+  margin: 12px 0 10px;
+  text-align: center;
+  color: var(--accent);
+  font-size: 0.82rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.rack-face-banner.bottom {
+  margin: 10px 0 0;
 }
 
 .rack-frame {

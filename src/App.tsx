@@ -18,7 +18,6 @@ import { OverviewPage } from "./components/OverviewPage";
 import { Palette } from "./components/Palette";
 import { RackCanvas } from "./components/RackCanvas";
 import { RackSwitcher } from "./components/RackSwitcher";
-import { SparePartsPanel } from "./components/SparePartsPanel";
 
 const initialRackCreateForm: RackCreateInput = {
   siteName: "",
@@ -40,12 +39,12 @@ const initialTemplateForm: DeviceTemplateInput = {
 function templateToRackDevice(
   template: DeviceTemplate,
   startUnit: number | null,
-  placementType: "rack" | "spare",
+  placementType: "rack",
   rackFace: RackFace
 ): RackDeviceInput {
   return {
     placementType,
-    rackFace: placementType === "rack" ? rackFace : null,
+    rackFace,
     blocksBothFaces: template.blocksBothFaces,
     startUnit,
     heightU: template.defaultHeightU,
@@ -55,7 +54,7 @@ function templateToRackDevice(
     serialNumber: null,
     hostname: null,
     notes: null,
-    storageLocation: placementType === "spare" ? "Accessory box" : null
+    storageLocation: null
   };
 }
 
@@ -165,8 +164,8 @@ export default function App() {
     }
   }
 
-  const selectedDevice = rackDetail?.devices.find((device) => device.id === selectedDeviceId) ?? null;
-  const spareParts = rackDetail?.devices.filter((device) => device.placementType === "spare") ?? [];
+  const selectedDevice =
+    rackDetail?.devices.find((device) => device.id === selectedDeviceId && device.placementType === "rack") ?? null;
 
   async function handleTemplateDrop(unit: number, templatePayload: string) {
     if (activeRackId === null || rackDetail === null) {
@@ -199,24 +198,6 @@ export default function App() {
       setError(null);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Geraet konnte nicht platziert werden.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleAddSpare(template: DeviceTemplate) {
-    if (activeRackId === null) {
-      return;
-    }
-
-    try {
-      setSaving(true);
-      await api.createDevice(activeRackId, templateToRackDevice(template, null, "spare", activeRackFace));
-      await loadRack(activeRackId);
-      setMessage(`${template.name} wurde als Ersatzteil erfasst.`);
-      setError(null);
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Ersatzteil konnte nicht angelegt werden.");
     } finally {
       setSaving(false);
     }
@@ -438,16 +419,10 @@ export default function App() {
                 <p>Bitte waehle in der Uebersicht ein Audit aus oder lege ein neues Audit an.</p>
               </section>
             )}
-            <SparePartsPanel devices={spareParts} selectedDeviceId={selectedDeviceId} onSelectDevice={setSelectedDeviceId} />
           </div>
 
           <div className="side-column">
-            <Palette
-              templates={templates}
-              onAddSpare={(template) => {
-                void handleAddSpare(template);
-              }}
-            />
+            <Palette templates={templates} />
             <Inspector
               device={selectedDevice}
               onChange={(next) => {

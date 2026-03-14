@@ -6,9 +6,8 @@ Visual rack inventory editor for fast rack documentation.
 
 - place devices visually into rack units
 - prevent overlaps and out-of-bounds placement
-- store rack layouts in SQLite
+- store rack layouts in PostgreSQL
 - reload and edit existing racks
-- track spare parts stored in the rack area or in boxes
 - export the current stored rack state to Excel and PDF
 
 ## Local development

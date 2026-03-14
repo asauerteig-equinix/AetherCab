@@ -152,6 +152,7 @@ export function RackCanvas({
           </div>
         </div>
       </div>
+      <div className="rack-face-banner">{activeRackFace === "front" ? "-- Vorderseite --" : "-- Rueckseite --"}</div>
       <div className="rack-frame">
         <div
           className={draggingDevice || previewPlacement !== null ? "rack-units drag-active" : "rack-units"}
@@ -232,6 +233,7 @@ export function RackCanvas({
           })}
         </div>
       </div>
+      <div className="rack-face-banner bottom">{activeRackFace === "front" ? "-- Vorderseite --" : "-- Rueckseite --"}</div>
     </section>
   );
 }

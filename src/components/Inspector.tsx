@@ -35,7 +35,7 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
       <section className="panel inspector-panel empty">
         <p className="eyebrow">Inspector</p>
         <h2>Schnellbearbeitung</h2>
-        <p>Waehle ein Geraet oder Ersatzteil aus, um die Metadaten zu bearbeiten.</p>
+        <p>Waehle ein Geraet aus, um die Metadaten zu bearbeiten.</p>
       </section>
     );
   }
