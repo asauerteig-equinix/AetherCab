@@ -1,0 +1,35 @@
+services:
+  aethercab:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: aethercab:latest
+    depends_on:
+      aethercab-db:
+        condition: service_healthy
+    ports:
+      - "5500:5500"
+    environment:
+      PORT: "5500"
+      DATABASE_URL: postgresql://aethercab:aethercab@aethercab-db:5432/aethercab
+    restart: unless-stopped
+
+  aethercab-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: aethercab
+      POSTGRES_USER: aethercab
+      POSTGRES_PASSWORD: aethercab
+    ports:
+      - "5496:5432"
+    volumes:
+      - aethercab-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aethercab -d aethercab"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  aethercab-db-data:
