@@ -4,6 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     image: aethercab:latest
+    container_name: aethercab-app
     depends_on:
       aethercab-db:
         condition: service_healthy
@@ -16,6 +17,7 @@ services:
 
   aethercab-db:
     image: postgres:17-alpine
+    container_name: aethercab-db
     environment:
       POSTGRES_DB: aethercab
       POSTGRES_USER: aethercab

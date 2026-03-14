@@ -32,8 +32,8 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
     return (
       <section className="panel inspector-panel empty">
         <p className="eyebrow">Inspector</p>
-        <h2>Quick edit</h2>
-        <p>Select a rack device or spare part to edit metadata.</p>
+        <h2>Schnellbearbeitung</h2>
+        <p>Waehle ein Geraet oder Ersatzteil aus, um die Metadaten zu bearbeiten.</p>
       </section>
     );
   }
@@ -60,7 +60,7 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
           <h2>{device.name}</h2>
         </div>
         <button className="ghost-button" onClick={onDelete} type="button">
-          Remove
+          Entfernen
         </button>
       </div>
 
@@ -70,15 +70,15 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
           <input value={device.name} onChange={updateInput("name")} />
         </label>
         <label>
-          Manufacturer
+          Hersteller
           <input value={device.manufacturer} onChange={updateInput("manufacturer")} />
         </label>
         <label>
-          Model
+          Modell
           <input value={device.model} onChange={updateInput("model")} />
         </label>
         <label>
-          Height U
+          Hoehe U
           <input
             min={1}
             type="number"
@@ -97,7 +97,7 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
           />
         </label>
         <label>
-          Storage
+          Lagerort
           <input
             value={device.storageLocation ?? ""}
             disabled={device.placementType === "rack"}
@@ -109,18 +109,18 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
           <input value={device.hostname ?? ""} onChange={updateInput("hostname", (event) => normalizeValue(event.target.value))} />
         </label>
         <label>
-          Serial
+          Seriennummer
           <input
             value={device.serialNumber ?? ""}
             onChange={updateInput("serialNumber", (event) => normalizeValue(event.target.value))}
           />
         </label>
         <label className="full-width">
-          Notes
+          Notizen
           <textarea rows={4} value={device.notes ?? ""} onChange={updateInput("notes", (event) => normalizeValue(event.target.value))} />
         </label>
       </div>
-      <p className="muted">{saving ? "Saving changes..." : "Changes save immediately to the database."}</p>
+      <p className="muted">{saving ? "Aenderungen werden gespeichert..." : "Aenderungen werden direkt in der Datenbank gespeichert."}</p>
     </section>
   );
 }

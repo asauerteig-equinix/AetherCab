@@ -1,4 +1,12 @@
-import type { DeviceTemplate, RackCreateInput, RackDetail, RackDevice, RackDeviceInput, RackSummary } from "../shared/types";
+import type {
+  DeviceTemplate,
+  DeviceTemplateInput,
+  RackCreateInput,
+  RackDetail,
+  RackDevice,
+  RackDeviceInput,
+  RackSummary
+} from "../shared/types";
 
 async function request<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
@@ -36,6 +44,17 @@ export const api = {
   },
   listTemplates(): Promise<DeviceTemplate[]> {
     return request("/api/device-templates");
+  },
+  createTemplate(payload: DeviceTemplateInput): Promise<DeviceTemplate> {
+    return request("/api/device-templates", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  },
+  deleteTemplate(templateId: number): Promise<void> {
+    return request(`/api/device-templates/${templateId}`, {
+      method: "DELETE"
+    });
   },
   createDevice(rackId: number, payload: RackDeviceInput): Promise<RackDevice> {
     return request(`/api/racks/${rackId}/devices`, {

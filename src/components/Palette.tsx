@@ -5,15 +5,22 @@ interface PaletteProps {
   onAddSpare(template: DeviceTemplate): void;
 }
 
+function formatTemplateType(templateType: string): string {
+  return templateType
+    .split("-")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join("/");
+}
+
 export function Palette({ templates, onAddSpare }: PaletteProps) {
   return (
     <section className="panel">
       <div className="panel-header">
         <div>
-          <p className="eyebrow">Templates</p>
-          <h2>Device palette</h2>
+          <p className="eyebrow">Vorlagen</p>
+          <h2>Geraete Vorlagen</h2>
         </div>
-        <span className="muted">Drag into rack</span>
+        <span className="muted">In das Audit ziehen</span>
       </div>
       <div className="template-list">
         {templates.map((template) => (
@@ -28,13 +35,13 @@ export function Palette({ templates, onAddSpare }: PaletteProps) {
             <div>
               <strong>{template.name}</strong>
               <p>
-                {template.manufacturer} {template.model}
+                {formatTemplateType(template.templateType)} | {template.manufacturer} {template.model}
               </p>
             </div>
             <div className="template-actions">
               <span>{template.defaultHeightU}U</span>
               <button onClick={() => onAddSpare(template)} type="button">
-                Spare
+                Ersatzteil
               </button>
             </div>
           </article>

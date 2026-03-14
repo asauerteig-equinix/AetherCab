@@ -1,7 +1,16 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
-import type { DeviceTemplate, RackCreateInput, RackDetail, RackDevice, RackDeviceInput, RackSummary } from "../shared/types";
+import type {
+  DeviceTemplate,
+  DeviceTemplateInput,
+  RackCreateInput,
+  RackDetail,
+  RackDevice,
+  RackDeviceInput,
+  RackSummary
+} from "../shared/types";
 import { api } from "./api";
+import { AdminTemplatesPage } from "./components/AdminTemplatesPage";
 import { Inspector } from "./components/Inspector";
 import { OverviewPage } from "./components/OverviewPage";
 import { Palette } from "./components/Palette";
@@ -15,6 +24,14 @@ const initialRackCreateForm: RackCreateInput = {
   rackName: "",
   totalUnits: 42,
   notes: ""
+};
+
+const initialTemplateForm: DeviceTemplateInput = {
+  templateType: "server",
+  name: "",
+  manufacturer: "Generic",
+  model: "",
+  defaultHeightU: 1
 };
 
 function templateToRackDevice(template: DeviceTemplate, startUnit: number | null, placementType: "rack" | "spare"): RackDeviceInput {
@@ -44,6 +61,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [createForm, setCreateForm] = useState<RackCreateInput>(initialRackCreateForm);
+  const [templateForm, setTemplateForm] = useState<DeviceTemplateInput>(initialTemplateForm);
 
   useEffect(() => {
     void loadInitialData();
@@ -66,9 +84,14 @@ export default function App() {
     }
   }, [activeRackId]);
 
-  function navigate(path: "/" | "/audits") {
+  function navigate(path: "/" | "/audits" | "/admin") {
     window.history.pushState({}, "", path);
     setCurrentPath(path);
+  }
+
+  function openAudit(rackId: number) {
+    setActiveRackId(rackId);
+    navigate("/audits");
   }
 
   async function loadInitialData() {
@@ -79,12 +102,16 @@ export default function App() {
       if (rackList.length > 0) {
         setActiveRackId(rackList[0].id);
       } else {
-        setMessage("Create the first rack to start documenting inventory.");
+        setMessage("Erstelle das erste Audit, um mit der Dokumentation zu beginnen.");
       }
       setError(null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Failed to load initial data.");
+      setError(loadError instanceof Error ? loadError.message : "Initiale Daten konnten nicht geladen werden.");
     }
+  }
+
+  async function refreshTemplates() {
+    setTemplates(await api.listTemplates());
   }
 
   async function loadRack(rackId: number) {
@@ -92,10 +119,10 @@ export default function App() {
       const detail = await api.getRack(rackId);
       setRackDetail(detail);
       setSelectedDeviceId((current) => (current && detail.devices.some((device) => device.id === current) ? current : null));
-      setMessage(`${detail.name} ready for documentation.`);
+      setMessage(`${detail.name} ist zur Bearbeitung geoeffnet.`);
       setError(null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Failed to load rack.");
+      setError(loadError instanceof Error ? loadError.message : "Audit konnte nicht geladen werden.");
     }
   }
 
@@ -122,10 +149,10 @@ export default function App() {
       setSaving(true);
       await api.createDevice(activeRackId, templateToRackDevice(template, unit, "rack"));
       await loadRack(activeRackId);
-      setMessage(`Placed ${template.name} at ${unit}U.`);
+      setMessage(`${template.name} wurde bei ${unit}U platziert.`);
       setError(null);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Failed to place device.");
+      setError(saveError instanceof Error ? saveError.message : "Geraet konnte nicht platziert werden.");
     } finally {
       setSaving(false);
     }
@@ -140,10 +167,10 @@ export default function App() {
       setSaving(true);
       await api.createDevice(activeRackId, templateToRackDevice(template, null, "spare"));
       await loadRack(activeRackId);
-      setMessage(`Added ${template.name} as spare part.`);
+      setMessage(`${template.name} wurde als Ersatzteil erfasst.`);
       setError(null);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Failed to add spare part.");
+      setError(saveError instanceof Error ? saveError.message : "Ersatzteil konnte nicht angelegt werden.");
     } finally {
       setSaving(false);
     }
@@ -169,10 +196,10 @@ export default function App() {
         storageLocation: null
       });
       await loadRack(activeRackId);
-      setMessage(`Moved ${device.name} to ${nextStartUnit}U.`);
+      setMessage(`${device.name} wurde auf ${nextStartUnit}U verschoben.`);
       setError(null);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Failed to move device.");
+      setError(saveError instanceof Error ? saveError.message : "Geraet konnte nicht verschoben werden.");
     } finally {
       setSaving(false);
     }
@@ -198,7 +225,7 @@ export default function App() {
       });
       setError(null);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Failed to save changes.");
+      setError(saveError instanceof Error ? saveError.message : "Aenderungen konnten nicht gespeichert werden.");
     } finally {
       setSaving(false);
     }
@@ -214,10 +241,10 @@ export default function App() {
       await api.deleteDevice(activeRackId, selectedDevice.id);
       setSelectedDeviceId(null);
       await loadRack(activeRackId);
-      setMessage(`${selectedDevice.name} removed.`);
+      setMessage(`${selectedDevice.name} wurde entfernt.`);
       setError(null);
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : "Failed to remove device.");
+      setError(deleteError instanceof Error ? deleteError.message : "Element konnte nicht entfernt werden.");
     } finally {
       setSaving(false);
     }
@@ -231,10 +258,42 @@ export default function App() {
       const rack = await api.createRack(createForm);
       await refreshRackList(rack.id);
       setCreateForm(initialRackCreateForm);
-      setMessage(`Created ${rack.name}.`);
+      setMessage(`${rack.name} wurde erstellt.`);
+      setError(null);
+      navigate("/audits");
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Audit konnte nicht erstellt werden.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleCreateTemplate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    try {
+      setSaving(true);
+      const template = await api.createTemplate(templateForm);
+      await refreshTemplates();
+      setTemplateForm(initialTemplateForm);
+      setMessage(`${template.name} wurde als Vorlage angelegt.`);
       setError(null);
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Failed to create rack.");
+      setError(createError instanceof Error ? createError.message : "Vorlage konnte nicht erstellt werden.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteTemplate(templateId: number) {
+    try {
+      setSaving(true);
+      await api.deleteTemplate(templateId);
+      await refreshTemplates();
+      setMessage("Vorlage wurde geloescht.");
+      setError(null);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Vorlage konnte nicht geloescht werden.");
     } finally {
       setSaving(false);
     }
@@ -251,7 +310,10 @@ export default function App() {
           onClick={() => navigate("/audits")}
           type="button"
         >
-          Rack Audits
+          Audits bearbeiten
+        </button>
+        <button className={currentPath === "/admin" ? "nav-link selected" : "nav-link"} onClick={() => navigate("/admin")} type="button">
+          Admin
         </button>
       </nav>
 
@@ -259,15 +321,15 @@ export default function App() {
         <div>
           <p className="hero-kicker">AetherCab</p>
           <p className="hero-copy">
-            Visual rack inventory for teams that need a clear starting point before opening or creating an audit.
+            Bestandsaufnahme fuer Racks mit klarem Einstieg: erst Audit waehlen oder anlegen, dann gezielt bearbeiten.
           </p>
         </div>
         <div className="hero-actions">
-          <span className="status-pill">{saving ? "Syncing database" : message}</span>
+          <span className="status-pill">{saving ? "Speichere Datenbankstatus" : message}</span>
           {rackDetail ? (
             <div className="export-actions">
-              <a href={api.excelExportUrl(rackDetail.id)}>Excel export</a>
-              <a href={api.pdfExportUrl(rackDetail.id)}>PDF export</a>
+              <a href={api.excelExportUrl(rackDetail.id)}>Excel Export</a>
+              <a href={api.pdfExportUrl(rackDetail.id)}>PDF Export</a>
             </div>
           ) : null}
         </div>
@@ -276,21 +338,33 @@ export default function App() {
       {error ? <div className="error-banner">{error}</div> : null}
 
       {currentPath === "/" ? (
-        <OverviewPage auditCount={racks.length} templateCount={templates.length} onOpenAudits={() => navigate("/audits")} />
+        <OverviewPage
+          racks={racks}
+          searchValue={auditSearch}
+          createForm={createForm}
+          templateCount={templates.length}
+          onSearchChange={setAuditSearch}
+          onOpenAudit={openAudit}
+          onCreateFormChange={setCreateForm}
+          onCreateAudit={(event) => {
+            void handleCreateRack(event);
+          }}
+        />
+      ) : currentPath === "/admin" ? (
+        <AdminTemplatesPage
+          templates={templates}
+          form={templateForm}
+          onFormChange={setTemplateForm}
+          onCreateTemplate={(event) => {
+            void handleCreateTemplate(event);
+          }}
+          onDeleteTemplate={(templateId) => {
+            void handleDeleteTemplate(templateId);
+          }}
+        />
       ) : (
         <main className="workspace-grid">
-          <RackSwitcher
-            racks={racks}
-            activeRackId={activeRackId}
-            searchValue={auditSearch}
-            onSelectRack={setActiveRackId}
-            onSearchChange={setAuditSearch}
-            createForm={createForm}
-            onCreateFormChange={setCreateForm}
-            onCreateRack={(event) => {
-              void handleCreateRack(event);
-            }}
-          />
+          <RackSwitcher rack={rackDetail} onBackToOverview={() => navigate("/")} />
 
           <div className="editor-column">
             {rackDetail ? (
@@ -307,9 +381,9 @@ export default function App() {
               />
             ) : (
               <section className="panel empty-state-panel">
-                <p className="eyebrow">Audit workspace</p>
-                <h2>No audit selected</h2>
-                <p>Select an existing audit or create a new one to start documenting a rack.</p>
+                <p className="eyebrow">Audit Bearbeitung</p>
+                <h2>Kein Audit geoeffnet</h2>
+                <p>Bitte waehle in der Uebersicht ein Audit aus oder lege ein neues Audit an.</p>
               </section>
             )}
             <SparePartsPanel devices={spareParts} selectedDeviceId={selectedDeviceId} onSelectDevice={setSelectedDeviceId} />

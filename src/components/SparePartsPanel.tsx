@@ -11,14 +11,14 @@ export function SparePartsPanel({ devices, selectedDeviceId, onSelectDevice }: S
     <section className="panel">
       <div className="panel-header">
         <div>
-          <p className="eyebrow">Storage</p>
-          <h2>Spare parts</h2>
+          <p className="eyebrow">Lagerung</p>
+          <h2>Ersatzteile</h2>
         </div>
-        <span className="muted">{devices.length} items</span>
+        <span className="muted">{devices.length} Eintraege</span>
       </div>
       <div className="spare-list">
         {devices.length === 0 ? (
-          <div className="empty-state">No spare parts documented yet.</div>
+          <div className="empty-state">Noch keine Ersatzteile dokumentiert.</div>
         ) : (
           devices.map((device) => (
             <button
@@ -31,7 +31,7 @@ export function SparePartsPanel({ devices, selectedDeviceId, onSelectDevice }: S
               <span>
                 {device.manufacturer} {device.model}
               </span>
-              <span>{device.storageLocation ?? "Storage location pending"}</span>
+              <span>{device.storageLocation ?? "Lagerort noch offen"}</span>
             </button>
           ))
         )}

@@ -1,13 +1,15 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import type { RackCreateInput, RackDeviceInput } from "../shared/types.js";
+import type { DeviceTemplateInput, RackCreateInput, RackDeviceInput } from "../shared/types.js";
 import { initializeDatabase } from "./db.js";
 import { buildExcelExport, buildPdfExport } from "./exporters.js";
 import {
   createRack,
   createRackDevice,
+  createDeviceTemplate,
   deleteRackDevice,
+  deleteDeviceTemplate,
   getRack,
   listDeviceTemplates,
   listRacks,
@@ -65,6 +67,21 @@ async function bootstrap(): Promise<void> {
     "/api/device-templates",
     asyncRoute(async (_request, response) => {
       response.json(await listDeviceTemplates());
+    })
+  );
+
+  app.post(
+    "/api/device-templates",
+    asyncRoute(async (request, response) => {
+      response.status(201).json(await createDeviceTemplate(request.body as DeviceTemplateInput));
+    })
+  );
+
+  app.delete(
+    "/api/device-templates/:templateId",
+    asyncRoute(async (request, response) => {
+      await deleteDeviceTemplate(Number(request.params.templateId));
+      response.status(204).send();
     })
   );
 

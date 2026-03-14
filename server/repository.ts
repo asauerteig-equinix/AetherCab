@@ -1,5 +1,13 @@
 import { findOverlaps, sortRackDevices, validateRackPlacement } from "../shared/rack.js";
-import type { DeviceTemplate, RackCreateInput, RackDetail, RackDevice, RackDeviceInput, RackSummary } from "../shared/types.js";
+import type {
+  DeviceTemplate,
+  DeviceTemplateInput,
+  RackCreateInput,
+  RackDetail,
+  RackDevice,
+  RackDeviceInput,
+  RackSummary
+} from "../shared/types.js";
 import { pool } from "./db.js";
 
 interface RackSummaryRow {
@@ -32,6 +40,7 @@ interface RackDeviceRow {
 
 interface DeviceTemplateRow {
   id: number;
+  template_type: string;
   name: string;
   manufacturer: string;
   model: string;
@@ -130,18 +139,69 @@ export async function listRacks(): Promise<RackSummary[]> {
 
 export async function listDeviceTemplates(): Promise<DeviceTemplate[]> {
   const result = await pool.query<DeviceTemplateRow>(`
-    SELECT id, name, manufacturer, model, default_height_u
+    SELECT id, template_type, name, manufacturer, model, default_height_u
     FROM device_templates
-    ORDER BY manufacturer, model
+    ORDER BY template_type, default_height_u, name
   `);
 
   return result.rows.map((row) => ({
     id: row.id,
+    templateType: row.template_type,
     name: row.name,
     manufacturer: row.manufacturer,
     model: row.model,
     defaultHeightU: row.default_height_u
   }));
+}
+
+function normalizeTemplateInput(input: DeviceTemplateInput): DeviceTemplateInput {
+  const normalized: DeviceTemplateInput = {
+    templateType: input.templateType.trim().toLowerCase(),
+    name: input.name.trim(),
+    manufacturer: input.manufacturer.trim(),
+    model: input.model.trim(),
+    defaultHeightU: input.defaultHeightU
+  };
+
+  if (!normalized.templateType || !normalized.name || !normalized.manufacturer || !normalized.model) {
+    throw new Error("Template type, name, manufacturer and model are required.");
+  }
+
+  if (normalized.defaultHeightU < 1) {
+    throw new Error("Template height must be at least 1U.");
+  }
+
+  return normalized;
+}
+
+export async function createDeviceTemplate(input: DeviceTemplateInput): Promise<DeviceTemplate> {
+  const normalized = normalizeTemplateInput(input);
+
+  const result = await pool.query<DeviceTemplateRow>(
+    `
+      INSERT INTO device_templates (template_type, name, manufacturer, model, default_height_u)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, template_type, name, manufacturer, model, default_height_u
+    `,
+    [normalized.templateType, normalized.name, normalized.manufacturer, normalized.model, normalized.defaultHeightU]
+  );
+
+  const row = result.rows[0];
+  return {
+    id: row.id,
+    templateType: row.template_type,
+    name: row.name,
+    manufacturer: row.manufacturer,
+    model: row.model,
+    defaultHeightU: row.default_height_u
+  };
+}
+
+export async function deleteDeviceTemplate(templateId: number): Promise<void> {
+  const result = await pool.query("DELETE FROM device_templates WHERE id = $1", [templateId]);
+  if ((result.rowCount ?? 0) === 0) {
+    throw new Error("Device template not found.");
+  }
 }
 
 export async function getRack(rackId: number): Promise<RackDetail | null> {

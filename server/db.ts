@@ -55,6 +55,7 @@ export async function initializeDatabase(): Promise<void> {
 
     CREATE TABLE IF NOT EXISTS device_templates (
       id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      template_type TEXT NOT NULL DEFAULT 'other',
       name TEXT NOT NULL,
       manufacturer TEXT NOT NULL,
       model TEXT NOT NULL,
@@ -80,18 +81,26 @@ export async function initializeDatabase(): Promise<void> {
     );
   `);
 
+  await pool.query(`
+    ALTER TABLE device_templates
+    ADD COLUMN IF NOT EXISTS template_type TEXT NOT NULL DEFAULT 'other'
+  `);
+
   await seedDatabase();
 }
 
 async function seedDatabase(): Promise<void> {
   await pool.query(
     `
-      INSERT INTO device_templates (name, manufacturer, model, default_height_u)
+      INSERT INTO device_templates (template_type, name, manufacturer, model, default_height_u)
       VALUES
-        ('Core Switch', 'Cisco', 'Catalyst 9300', 1),
-        ('Storage Shelf', 'Dell', 'EMC Unity Shelf', 2),
-        ('UPS', 'APC', 'Smart-UPS 3000', 2),
-        ('Patch Panel', 'Digitus', 'DN-91624S-EA', 1)
+        ('server', 'Server 1U', 'Generic', 'Rack Server 1U', 1),
+        ('server', 'Server 2U', 'Generic', 'Rack Server 2U', 2),
+        ('switch-router', 'Switch/Router 1U', 'Generic', 'Network Device 1U', 1),
+        ('switch-router', 'Switch/Router 2U', 'Generic', 'Network Device 2U', 2),
+        ('patch-panel', 'Patchpanel 1U', 'Generic', 'Patchpanel 1U', 1),
+        ('storage', 'Storage 2U', 'Generic', 'Storage Shelf 2U', 2),
+        ('ups', 'UPS 2U', 'Generic', 'UPS 2U', 2)
       ON CONFLICT (name, manufacturer, model) DO NOTHING
     `
   );

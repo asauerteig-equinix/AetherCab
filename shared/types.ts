@@ -13,6 +13,15 @@ export interface RackSummary {
 
 export interface DeviceTemplate {
   id: number;
+  templateType: string;
+  name: string;
+  manufacturer: string;
+  model: string;
+  defaultHeightU: number;
+}
+
+export interface DeviceTemplateInput {
+  templateType: string;
   name: string;
   manufacturer: string;
   model: string;
