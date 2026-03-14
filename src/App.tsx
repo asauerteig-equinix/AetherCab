@@ -130,11 +130,11 @@ export default function App() {
       if (rackList.length > 0) {
         setActiveRackId(rackList[0].id);
       } else {
-        setMessage("Erstelle das erste Audit, um mit der Dokumentation zu beginnen.");
+        setMessage("Create the first audit to start documenting racks.");
       }
       setError(null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Initiale Daten konnten nicht geladen werden.");
+      setError(loadError instanceof Error ? loadError.message : "Initial data could not be loaded.");
     }
   }
 
@@ -147,10 +147,10 @@ export default function App() {
       const detail = await api.getRack(rackId);
       setRackDetail(detail);
       setSelectedDeviceId((current) => (current && detail.devices.some((device) => device.id === current) ? current : null));
-      setMessage(`${detail.name} ist zur Bearbeitung geoeffnet.`);
+      setMessage(`${detail.name} is open for editing.`);
       setError(null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Audit konnte nicht geladen werden.");
+      setError(loadError instanceof Error ? loadError.message : "Audit could not be loaded.");
     }
   }
 
@@ -187,17 +187,17 @@ export default function App() {
           : unit;
 
       if (anchoredStartUnit === null) {
-        setError("Das Geraet passt von der angezielten Unit aus weder nach oben noch nach unten.");
+        setError("The device does not fit from the selected unit either upward or downward.");
         return;
       }
 
       setSaving(true);
       await api.createDevice(activeRackId, templateToRackDevice(template, anchoredStartUnit, "rack", activeRackFace));
       await loadRack(activeRackId);
-      setMessage(`${template.name} wurde bei ${anchoredStartUnit}U platziert.`);
+      setMessage(`${template.name} was placed at ${anchoredStartUnit}U.`);
       setError(null);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Geraet konnte nicht platziert werden.");
+      setError(saveError instanceof Error ? saveError.message : "Device could not be placed.");
     } finally {
       setSaving(false);
     }
@@ -225,10 +225,10 @@ export default function App() {
         storageLocation: null
       });
       await loadRack(activeRackId);
-      setMessage(`${device.name} wurde auf ${nextStartUnit}U verschoben.`);
+      setMessage(`${device.name} was moved to ${nextStartUnit}U.`);
       setError(null);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Geraet konnte nicht verschoben werden.");
+      setError(saveError instanceof Error ? saveError.message : "Device could not be moved.");
     } finally {
       setSaving(false);
     }
@@ -254,7 +254,7 @@ export default function App() {
       });
       setError(null);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Aenderungen konnten nicht gespeichert werden.");
+      setError(saveError instanceof Error ? saveError.message : "Changes could not be saved.");
     } finally {
       setSaving(false);
     }
@@ -270,10 +270,10 @@ export default function App() {
       await api.deleteDevice(activeRackId, selectedDevice.id);
       setSelectedDeviceId(null);
       await loadRack(activeRackId);
-      setMessage(`${selectedDevice.name} wurde entfernt.`);
+      setMessage(`${selectedDevice.name} was removed.`);
       setError(null);
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : "Element konnte nicht entfernt werden.");
+      setError(deleteError instanceof Error ? deleteError.message : "Item could not be removed.");
     } finally {
       setSaving(false);
     }
@@ -287,11 +287,11 @@ export default function App() {
       const rack = await api.createRack(createForm);
       await refreshRackList(rack.id);
       setCreateForm(initialRackCreateForm);
-      setMessage(`${rack.name} wurde erstellt.`);
+      setMessage(`${rack.name} was created.`);
       setError(null);
       navigate("/audits");
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Audit konnte nicht erstellt werden.");
+      setError(createError instanceof Error ? createError.message : "Audit could not be created.");
     } finally {
       setSaving(false);
     }
@@ -305,10 +305,10 @@ export default function App() {
       const template = await api.createTemplate(templateForm);
       await refreshTemplates();
       setTemplateForm(initialTemplateForm);
-      setMessage(`${template.name} wurde als Vorlage angelegt.`);
+      setMessage(`${template.name} was added as a template.`);
       setError(null);
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Vorlage konnte nicht erstellt werden.");
+      setError(createError instanceof Error ? createError.message : "Template could not be created.");
     } finally {
       setSaving(false);
     }
@@ -319,10 +319,10 @@ export default function App() {
       setSaving(true);
       await api.deleteTemplate(templateId);
       await refreshTemplates();
-      setMessage("Vorlage wurde geloescht.");
+      setMessage("Template was deleted.");
       setError(null);
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : "Vorlage konnte nicht geloescht werden.");
+      setError(deleteError instanceof Error ? deleteError.message : "Template could not be deleted.");
     } finally {
       setSaving(false);
     }
@@ -332,14 +332,14 @@ export default function App() {
     <div className="app-shell">
       <nav className="app-nav">
         <button className={currentPath === "/" ? "nav-link selected" : "nav-link"} onClick={() => navigate("/")} type="button">
-          Uebersicht
+          Overview
         </button>
         <button
           className={currentPath === "/audits" ? "nav-link selected" : "nav-link"}
           onClick={() => navigate("/audits")}
           type="button"
         >
-          Audits bearbeiten
+          Audits
         </button>
         <button className={currentPath === "/admin" ? "nav-link selected" : "nav-link"} onClick={() => navigate("/admin")} type="button">
           Admin
@@ -351,15 +351,15 @@ export default function App() {
           <div>
             <p className="hero-kicker">AetherCab</p>
             <p className="hero-copy">
-              Bestandsaufnahme fuer Racks mit klarem Einstieg: erst Audit waehlen oder anlegen, dann gezielt bearbeiten.
+              Rack inventory with a clear workflow: create or open an audit first, then edit it with focus.
             </p>
           </div>
           <div className="hero-actions">
-            <span className="status-pill">{saving ? "Speichere Datenbankstatus" : message}</span>
+            <span className="status-pill">{saving ? "Saving database changes" : message}</span>
             {rackDetail ? (
               <div className="export-actions">
-                <a href={api.excelExportUrl(rackDetail.id)}>Excel Export</a>
-                <a href={api.pdfExportUrl(rackDetail.id)}>PDF Export</a>
+                <a href={api.excelExportUrl(rackDetail.id)}>Export Excel</a>
+                <a href={api.pdfExportUrl(rackDetail.id)}>Export PDF</a>
               </div>
             ) : null}
           </div>
@@ -414,9 +414,9 @@ export default function App() {
               />
             ) : (
               <section className="panel empty-state-panel">
-                <p className="eyebrow">Audit Bearbeitung</p>
-                <h2>Kein Audit geoeffnet</h2>
-                <p>Bitte waehle in der Uebersicht ein Audit aus oder lege ein neues Audit an.</p>
+                <p className="eyebrow">Audit Editor</p>
+                <h2>No audit open</h2>
+                <p>Please select an audit from the overview or create a new one.</p>
               </section>
             )}
           </div>

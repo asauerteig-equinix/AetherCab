@@ -6,33 +6,33 @@ import type { RackDetail, RackDevice, RackFace } from "../shared/types.js";
 type PdfDocument = InstanceType<typeof PDFDocument>;
 
 const excelPalette = {
-  pageBackground: "FF151311",
-  panelBackground: "FF1C1916",
-  panelBorder: "FF4C433B",
-  slotBackground: "FF24201C",
-  slotLine: "FF3B332C",
-  slotLabel: "FF7F7267",
-  accent: "FFC9B39A",
-  accentStrong: "FFA88E72",
-  textPrimary: "FFF3EDE6",
-  textSecondary: "FFD0C1B1",
-  deviceFill: "FF3A322B",
-  deviceBorder: "FF8F7A66"
+  pageBackground: "FFF4F7FA",
+  panelBackground: "FFEFF3F7",
+  panelBorder: "FFB6C2CD",
+  slotBackground: "FFF8FAFC",
+  slotLine: "FFD9E1E8",
+  slotLabel: "FF6E7D8C",
+  accent: "FF4F6F86",
+  accentStrong: "FF2F5067",
+  textPrimary: "FF18232D",
+  textSecondary: "FF546372",
+  deviceFill: "FFDDE6ED",
+  deviceBorder: "FF96A8B7"
 } as const;
 
 const pdfPalette = {
-  pageBackground: "#151311",
-  panelBackground: "#1c1916",
-  panelBorder: "#4c433b",
-  slotBackground: "#24201c",
-  slotLine: "#3b332c",
-  slotLabel: "#7f7267",
-  accent: "#c9b39a",
-  accentStrong: "#a88e72",
-  textPrimary: "#f3ede6",
-  textSecondary: "#d0c1b1",
-  deviceFill: "#3a322b",
-  deviceBorder: "#8f7a66"
+  pageBackground: "#f5f7fa",
+  panelBackground: "#eef2f6",
+  panelBorder: "#b8c3cd",
+  slotBackground: "#f9fbfc",
+  slotLine: "#d9e1e8",
+  slotLabel: "#6e7d8c",
+  accent: "#4f6f86",
+  accentStrong: "#2f5067",
+  textPrimary: "#18232d",
+  textSecondary: "#546372",
+  deviceFill: "#dde6ed",
+  deviceBorder: "#96a8b7"
 } as const;
 
 const pdfPageOptions = {
@@ -46,7 +46,7 @@ function installedDevices(detail: RackDetail): RackDevice[] {
 }
 
 function faceLabel(face: RackFace): string {
-  return face === "front" ? "Vorderseite" : "Rueckseite";
+  return face === "front" ? "Front" : "Rear";
 }
 
 function deviceFaceLabel(device: RackDevice): string {
@@ -54,7 +54,7 @@ function deviceFaceLabel(device: RackDevice): string {
     return "Front + Rear";
   }
 
-  return device.rackFace === "rear" ? "Rueckseite" : "Vorderseite";
+  return device.rackFace === "rear" ? "Rear" : "Front";
 }
 
 function devicePositionLabel(device: RackDevice): string {
@@ -281,7 +281,7 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, detail: RackDetail): vo
 
   worksheet.mergeCells("A3:M3");
   const notesCell = worksheet.getCell("A3");
-  notesCell.value = detail.notes ? `Notizen: ${detail.notes}` : "Notizen: -";
+  notesCell.value = detail.notes ? `Notes: ${detail.notes}` : "Notes: -";
   notesCell.font = { name: "Bahnschrift", size: 10, color: { argb: "FF4C433B" } };
   notesCell.alignment = { vertical: "middle", horizontal: "left" };
 
@@ -333,7 +333,7 @@ function buildRackViewSheet(workbook: ExcelJS.Workbook, detail: RackDetail): voi
   styleExcelMeta(worksheet.getCell("A2"));
 
   worksheet.mergeCells("A3:M3");
-  worksheet.getCell("A3").value = detail.notes ? `Notizen: ${detail.notes}` : "Notizen: -";
+  worksheet.getCell("A3").value = detail.notes ? `Notes: ${detail.notes}` : "Notes: -";
   styleExcelMeta(worksheet.getCell("A3"));
 
   drawExcelRackFace(worksheet, detail, "front", 1, 5);
@@ -353,7 +353,7 @@ function drawPdfHeader(pdf: PdfDocument, detail: RackDetail, title: string, subt
   pdf.text(`${detail.siteName} | ${detail.roomName} | ${detail.name} | ${detail.totalUnits}U`, 36, 74);
 
   if (detail.notes) {
-    pdf.text(`Notizen: ${detail.notes}`, 36, 90, { width: pdf.page.width - 72 });
+    pdf.text(`Notes: ${detail.notes}`, 36, 90, { width: pdf.page.width - 72 });
   }
 }
 
@@ -457,7 +457,7 @@ function drawPdfDeviceTextLine(pdf: PdfDocument, device: RackDevice): void {
   pdf.text(metadataParts.join(" | "));
 
   if (device.notes) {
-    pdf.text(`Notizen: ${device.notes}`);
+    pdf.text(`Notes: ${device.notes}`);
   }
 
   pdf.moveDown(0.45);
@@ -495,19 +495,19 @@ export function buildPdfExport(detail: RackDetail): Promise<Buffer> {
     pdf.on("error", reject);
 
     drawPdfPageBackground(pdf);
-    drawPdfHeader(pdf, detail, "AetherCab Rack View", "Visuelle Rack-Dokumentation");
+    drawPdfHeader(pdf, detail, "AetherCab Rack View", "Visual rack documentation");
     drawPdfRackFace(pdf, detail, "front", 42, 124, 340);
     drawPdfRackFace(pdf, detail, "rear", 430, 124, 340);
 
     pdf.addPage(pdfPageOptions);
     drawPdfPageBackground(pdf);
-    drawPdfHeader(pdf, detail, "AetherCab Textliste", "Strukturierte Inventarliste zum Rack");
+    drawPdfHeader(pdf, detail, "AetherCab Device List", "Structured inventory list for this rack");
     pdf.moveDown(4);
 
-    drawPdfTextSectionTitle(pdf, "Installierte Geraete");
+    drawPdfTextSectionTitle(pdf, "Installed Devices");
     const devices = sortDevices(installedDevices(detail));
     if (devices.length === 0) {
-      pdf.fillColor(pdfPalette.textSecondary).fontSize(10).text("Keine installierten Geraete dokumentiert.");
+      pdf.fillColor(pdfPalette.textSecondary).fontSize(10).text("No installed devices documented.");
     } else {
       devices.forEach((device) => {
         drawPdfDeviceTextLine(pdf, device);

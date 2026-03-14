@@ -35,15 +35,15 @@ export function OverviewPage({
     <main className="overview-grid">
       <section className="panel overview-panel overview-panel-primary">
         <p className="eyebrow">Start</p>
-        <h2>Audits zuerst finden oder neu anlegen, dann gezielt bearbeiten</h2>
+        <h2>Find or create audits first, then edit with focus</h2>
         <p className="hero-copy">
-          Die Uebersicht ist der zentrale Einstieg fuer Mitarbeitende. Hier werden alle vorhandenen Audits angezeigt,
-          gefiltert und geoeffnet. Die eigentliche Rack-Arbeitsflaeche bleibt dadurch auf ein einzelnes Audit fokussiert.
+          The overview is the main entry point for the team. Existing audits can be listed, filtered, and opened here,
+          while the rack workspace stays focused on a single audit at a time.
         </p>
         <div className="overview-stats-inline">
           <div className="overview-stat-card">
             <strong>{racks.length}</strong>
-            <span>gespeicherte Audits</span>
+            <span>saved audits</span>
           </div>
           <div className="overview-stat-card">
             <strong>{templateCount}</strong>
@@ -55,20 +55,20 @@ export function OverviewPage({
       <section className="panel overview-panel">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">Audit Uebersicht</p>
-            <h2>Vorhandene Audits</h2>
+            <p className="eyebrow">Audit Overview</p>
+            <h2>Existing audits</h2>
           </div>
-          <span className="muted">{visibleRacks.length} sichtbar</span>
+          <span className="muted">{visibleRacks.length} visible</span>
         </div>
 
         <label className="search-field">
-          Suche
-          <input value={searchValue} onChange={(event) => onSearchChange(event.target.value)} placeholder="Audit, Site oder Room" />
+          Search
+          <input value={searchValue} onChange={(event) => onSearchChange(event.target.value)} placeholder="Audit, site, or room" />
         </label>
 
         <div className="overview-audit-list">
           {visibleRacks.length === 0 ? (
-            <div className="empty-state">Keine Audits passen zur aktuellen Suche.</div>
+            <div className="empty-state">No audits match the current search.</div>
           ) : (
             visibleRacks.map((rack) => (
               <article className="overview-audit-card" key={rack.id}>
@@ -80,7 +80,7 @@ export function OverviewPage({
                   <span>{rack.totalUnits}U</span>
                 </div>
                 <button className="primary-button" onClick={() => onOpenAudit(rack.id)} type="button">
-                  Oeffnen
+                  Open
                 </button>
               </article>
             ))
@@ -89,8 +89,8 @@ export function OverviewPage({
       </section>
 
       <section className="panel overview-panel">
-        <p className="eyebrow">Neues Audit</p>
-        <h2>Audit erstellen</h2>
+        <p className="eyebrow">New Audit</p>
+        <h2>Create audit</h2>
         <form className="create-rack-form overview-create-form" onSubmit={onCreateAudit}>
           <label>
             Site
@@ -130,7 +130,7 @@ export function OverviewPage({
             />
           </label>
           <button className="primary-button" type="submit">
-            Audit erstellen
+            Create audit
           </button>
         </form>
       </section>

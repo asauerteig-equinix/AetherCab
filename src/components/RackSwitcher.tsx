@@ -10,11 +10,11 @@ export function RackSwitcher({ rack, onBackToOverview }: RackSwitcherProps) {
     <section className="panel audit-context-panel">
       <div className="panel-header">
         <div>
-          <p className="eyebrow">Aktives Audit</p>
-          <h2>{rack ? rack.name : "Kein Audit geoeffnet"}</h2>
+          <p className="eyebrow">Active Audit</p>
+          <h2>{rack ? rack.name : "No audit open"}</h2>
         </div>
         <button className="ghost-button" onClick={onBackToOverview} type="button">
-          Zur Uebersicht
+          Back to overview
         </button>
       </div>
 
@@ -29,17 +29,17 @@ export function RackSwitcher({ rack, onBackToOverview }: RackSwitcherProps) {
             <span>{rack.roomName}</span>
           </div>
           <div className="overview-feature">
-            <strong>Audit Hoehe</strong>
+            <strong>Rack Height</strong>
             <span>{rack.totalUnits}U</span>
           </div>
           <div className="overview-feature">
-            <strong>Notizen</strong>
-            <span>{rack.notes || "Noch keine Notizen vorhanden."}</span>
+            <strong>Notes</strong>
+            <span>{rack.notes || "No notes yet."}</span>
           </div>
         </div>
       ) : (
         <div className="empty-state">
-          Kein Audit geoeffnet. Bitte in der Uebersicht ein Audit auswaehlen oder neu anlegen.
+          No audit open. Please select an audit from the overview or create a new one.
         </div>
       )}
     </section>

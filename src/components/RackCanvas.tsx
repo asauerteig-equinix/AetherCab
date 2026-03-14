@@ -29,7 +29,7 @@ export function RackCanvas({
 }: RackCanvasProps) {
   const [previewPlacement, setPreviewPlacement] = useState<{ startUnit: number; endUnit: number } | null>(null);
   const [draggingDevice, setDraggingDevice] = useState<{ deviceId: number; offsetUnitsFromTop: number } | null>(null);
-  const faceLabel = activeRackFace === "front" ? "Vorderseite" : "Rueckseite";
+  const faceLabel = activeRackFace === "front" ? "Front" : "Rear";
   const placedDevices = rack.devices.filter(
     (device) =>
       device.placementType === "rack" &&
@@ -129,24 +129,24 @@ export function RackCanvas({
       <div className="panel-header">
         <div>
           <p className="eyebrow">Rack Editor</p>
-          <h2>Rack Ansicht</h2>
+          <h2>Rack View</h2>
         </div>
         <div className="rack-toolbar">
-          <span className="toolbar-label">Ansicht</span>
+          <span className="toolbar-label">View</span>
           <div className="rack-face-toggle">
             <button
               className={activeRackFace === "front" ? "face-toggle selected" : "face-toggle"}
               onClick={() => onRackFaceChange("front")}
               type="button"
             >
-              Vorderseite
+              Front
             </button>
             <button
               className={activeRackFace === "rear" ? "face-toggle selected" : "face-toggle"}
               onClick={() => onRackFaceChange("rear")}
               type="button"
             >
-              Rueckseite
+              Rear
             </button>
           </div>
         </div>

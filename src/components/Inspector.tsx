@@ -34,8 +34,8 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
     return (
       <section className="panel inspector-panel empty">
         <p className="eyebrow">Inspector</p>
-        <h2>Schnellbearbeitung</h2>
-        <p>Waehle ein Geraet aus, um die Metadaten zu bearbeiten.</p>
+        <h2>Quick edit</h2>
+        <p>Select a device to edit its metadata.</p>
       </section>
     );
   }
@@ -62,7 +62,7 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
           <h2>{device.name}</h2>
         </div>
         <button className="ghost-button" onClick={onDelete} type="button">
-          Entfernen
+          Remove
         </button>
       </div>
 
@@ -72,15 +72,15 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
           <input value={device.name} onChange={updateInput("name")} />
         </label>
         <label>
-          Hersteller
+          Manufacturer
           <input value={device.manufacturer} onChange={updateInput("manufacturer")} />
         </label>
         <label>
-          Modell
+          Model
           <input value={device.model} onChange={updateInput("model")} />
         </label>
         <label>
-          Hoehe U
+          Height U
           <input
             min={1}
             type="number"
@@ -89,18 +89,18 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
           />
         </label>
         <label>
-          Rack Seite
+          Rack face
           <select
             value={device.rackFace ?? "front"}
             disabled={device.placementType === "spare" || device.blocksBothFaces}
             onChange={updateInput("rackFace", (event) => event.target.value as RackDeviceInput["rackFace"])}
           >
-            <option value="front">Vorderseite</option>
-            <option value="rear">Rueckseite</option>
+            <option value="front">Front</option>
+            <option value="rear">Rear</option>
           </select>
         </label>
         <label className="checkbox-field">
-          Blockiert vorne und hinten
+          Blocks front and rear
           <input
             checked={device.blocksBothFaces}
             disabled={device.placementType === "spare"}
@@ -125,7 +125,7 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
           />
         </label>
         <label>
-          Lagerort
+          Storage location
           <input
             value={device.storageLocation ?? ""}
             disabled={device.placementType === "rack"}
@@ -137,18 +137,18 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
           <input value={device.hostname ?? ""} onChange={updateInput("hostname", (event) => normalizeValue(event.target.value))} />
         </label>
         <label>
-          Seriennummer
+          Serial number
           <input
             value={device.serialNumber ?? ""}
             onChange={updateInput("serialNumber", (event) => normalizeValue(event.target.value))}
           />
         </label>
         <label className="full-width">
-          Notizen
+          Notes
           <textarea rows={4} value={device.notes ?? ""} onChange={updateInput("notes", (event) => normalizeValue(event.target.value))} />
         </label>
       </div>
-      <p className="muted">{saving ? "Aenderungen werden gespeichert..." : "Aenderungen werden direkt in der Datenbank gespeichert."}</p>
+      <p className="muted">{saving ? "Saving changes..." : "Changes are written directly to the database."}</p>
     </section>
   );
 }

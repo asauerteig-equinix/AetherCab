@@ -25,10 +25,10 @@ export function Palette({ templates }: PaletteProps) {
     <section className="panel">
       <div className="panel-header">
         <div>
-          <p className="eyebrow">Vorlagen</p>
-          <h2>Geraete Vorlagen</h2>
+          <p className="eyebrow">Templates</p>
+          <h2>Device Templates</h2>
         </div>
-        <span className="muted">In das Audit ziehen</span>
+        <span className="muted">Drag into the audit</span>
       </div>
       <div className="template-list compact">
         {Object.entries(templatesByType).map(([templateType, group]) => (
@@ -49,10 +49,10 @@ export function Palette({ templates }: PaletteProps) {
                     <p>
                       {template.defaultHeightU}U | {template.manufacturer} {template.model}
                     </p>
-                    <p>{template.blocksBothFaces ? "Front + Rear" : "eine Seite"}</p>
+                    <p>{template.blocksBothFaces ? "Front + Rear" : "Single side"}</p>
                   </div>
                   <div className="template-actions compact">
-                    <span>{template.blocksBothFaces ? "Front + Rear" : "eine Seite"}</span>
+                    <span>{template.blocksBothFaces ? "Front + Rear" : "Single side"}</span>
                   </div>
                 </article>
               ))}

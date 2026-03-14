@@ -15,7 +15,7 @@ const templateTypeOptions = [
   { value: "patch-panel", label: "Patchpanel" },
   { value: "storage", label: "Storage" },
   { value: "ups", label: "UPS" },
-  { value: "other", label: "Sonstiges" }
+  { value: "other", label: "Other" }
 ];
 
 function formatTemplateType(templateType: string): string {
@@ -31,21 +31,12 @@ export function AdminTemplatesPage({
 }: AdminTemplatesPageProps) {
   return (
     <main className="admin-grid">
-      <section className="panel overview-panel overview-panel-primary">
-        <p className="eyebrow">Admin</p>
-        <h2>Geraetevorlagen fuer Audits zentral pflegen</h2>
-        <p className="hero-copy">
-          Templates repraesentieren Rack-Geraetetypen und ihre Standardhoehen. Neue Vorlagen wie `Server 1U` oder
-          `Switch/Router 2U` lassen sich hier zentral anlegen und stehen danach direkt im Audit-Editor bereit.
-        </p>
-      </section>
-
       <section className="panel overview-panel">
-        <p className="eyebrow">Neue Vorlage</p>
-        <h2>Template anlegen</h2>
+        <p className="eyebrow">New Template</p>
+        <h2>Create template</h2>
         <form className="create-rack-form overview-create-form" onSubmit={onCreateTemplate}>
           <label>
-            Geraeteart
+            Device type
             <select value={form.templateType} onChange={(event) => onFormChange({ ...form, templateType: event.target.value })}>
               {templateTypeOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -59,18 +50,18 @@ export function AdminTemplatesPage({
             <input value={form.name} onChange={(event) => onFormChange({ ...form, name: event.target.value })} />
           </label>
           <label>
-            Standard Hersteller
+            Default manufacturer
             <input
               value={form.manufacturer}
               onChange={(event) => onFormChange({ ...form, manufacturer: event.target.value })}
             />
           </label>
           <label>
-            Standard Modell
+            Default model
             <input value={form.model} onChange={(event) => onFormChange({ ...form, model: event.target.value })} />
           </label>
           <label>
-            Hoehe U
+            Height U
             <input
               min={1}
               type="number"
@@ -79,7 +70,7 @@ export function AdminTemplatesPage({
             />
           </label>
           <label className="checkbox-field">
-            Blockiert Vorder- und Rueckseite
+            Blocks front and rear
             <input
               checked={form.blocksBothFaces}
               type="checkbox"
@@ -87,7 +78,7 @@ export function AdminTemplatesPage({
             />
           </label>
           <button className="primary-button" type="submit">
-            Vorlage anlegen
+            Create template
           </button>
         </form>
       </section>
@@ -95,10 +86,10 @@ export function AdminTemplatesPage({
       <section className="panel overview-panel admin-templates-panel">
         <div className="panel-header">
           <div>
-            <p className="eyebrow">Vorlagen</p>
-            <h2>Aktuelle Templates</h2>
+            <p className="eyebrow">Templates</p>
+            <h2>Current templates</h2>
           </div>
-          <span className="muted">{templates.length} Vorlagen</span>
+          <span className="muted">{templates.length} templates</span>
         </div>
 
         <div className="admin-template-list">
@@ -110,11 +101,11 @@ export function AdminTemplatesPage({
                   {formatTemplateType(template.templateType)} | {template.defaultHeightU}U
                 </span>
                 <span>
-                  {template.manufacturer} | {template.model} | {template.blocksBothFaces ? "Front + Rear" : "eine Seite"}
+                  {template.manufacturer} | {template.model} | {template.blocksBothFaces ? "Front + Rear" : "Single side"}
                 </span>
               </div>
               <button className="ghost-button" onClick={() => onDeleteTemplate(template.id)} type="button">
-                Loeschen
+                Delete
               </button>
             </article>
           ))}
