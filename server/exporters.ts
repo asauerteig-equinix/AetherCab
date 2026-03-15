@@ -38,7 +38,6 @@ const excelPalette = {
 
 const pdfPalette = {
   pageBackground: "#f5f7fa",
-  pageOverlay: "#eef4f8",
   panelBackground: "#eef2f6",
   panelBorder: "#b8c3cd",
   slotBackground: "#f9fbfc",
@@ -54,10 +53,7 @@ const pdfPalette = {
   capacityGood: "#3ba55d",
   capacityMedium: "#86b94f",
   capacityWarning: "#de9646",
-  capacityCritical: "#d45a4c",
-  brandWarm: "#d5913b",
-  brandWarmSoft: "#f3dfbf",
-  equinixAccent: "#c24a3f"
+  capacityCritical: "#d45a4c"
 } as const;
 
 const pdfPageOptions = {
@@ -68,7 +64,6 @@ const pdfPageOptions = {
 
 const appBrandName = "Aether C.A.D";
 const appBrandSlogan = "Customer Audit Documentation";
-const preparedByLabel = "Prepared by Equinix";
 
 function drawPdfDeviceIcon(pdf: PdfDocument, iconKey: DeviceIconKey | null | undefined, x: number, y: number, size: number): void {
   const key = iconKey ?? "generic-device";
@@ -757,73 +752,37 @@ function buildRackViewSheet(workbook: ExcelJS.Workbook, audit: AuditExportDetail
 function drawPdfPageBackground(pdf: PdfDocument): void {
   pdf.save();
   pdf.rect(0, 0, pdf.page.width, pdf.page.height).fill(pdfPalette.pageBackground);
-  pdf.opacity(0.28);
-  pdf.circle(pdf.page.width - 72, 44, 88).fill(pdfPalette.pageOverlay);
-  pdf.opacity(0.12);
-  pdf.circle(pdf.page.width - 108, 26, 44).fill(pdfPalette.brandWarmSoft);
-  pdf.opacity(1);
   pdf.restore();
 }
 
 function drawPdfCapacityBar(pdf: PdfDocument, x: number, y: number, width: number, stats: RackFaceCapacityStats): void {
-  const cardHeight = 34;
-  const padding = 10;
-  const barY = y + 19;
-  const barHeight = 7;
-  const barWidth = Math.max(52, width - padding * 2);
+  const labelWidth = 84;
+  const valueWidth = 82;
+  const barGap = 10;
+  const barWidth = Math.max(52, width - labelWidth - valueWidth - barGap * 2);
+  const barHeight = 10;
   const fillWidth = Math.max(0, Math.min(barWidth, Math.round((stats.usedPercent / 100) * barWidth)));
 
-  pdf.save();
-  pdf.roundedRect(x, y, width, cardHeight, 10).fill("#ffffff");
-  pdf.roundedRect(x, y, width, cardHeight, 10).lineWidth(0.7).strokeColor(pdfPalette.panelBorder).stroke();
-  pdf.restore();
-
-  pdf.fillColor(pdfPalette.textSecondary).fontSize(7.4).text(faceLabel(stats.face).toUpperCase(), x + padding, y + 6, {
-    width: width / 2
-  });
-  pdf.fillColor(pdfPalette.textPrimary).fontSize(8.1).text(`${stats.usedPercent}% occupied`, x + width - 92, y + 6, {
-    width: 82,
-    align: "right"
+  pdf.fillColor(pdfPalette.textSecondary).fontSize(8.2).text(faceLabel(stats.face), x, y + 1, {
+    width: labelWidth
   });
 
   pdf.save();
-  pdf.roundedRect(x + padding, barY, barWidth, barHeight, 999).fill(pdfPalette.capacityTrack);
+  pdf.roundedRect(x + labelWidth + barGap, y, barWidth, barHeight, 999).fill(pdfPalette.capacityTrack);
   if (fillWidth > 0) {
-    pdf.roundedRect(x + padding, barY, fillWidth, barHeight, 999).fill(getPdfCapacityFill(stats.tone));
+    pdf.roundedRect(x + labelWidth + barGap, y, fillWidth, barHeight, 999).fill(getPdfCapacityFill(stats.tone));
   }
   pdf.restore();
 
-  pdf.fillColor(pdfPalette.textSecondary).fontSize(6.8).text(`${stats.freePercent}% free`, x + padding, y + 24, {
-    width: width - padding * 2,
+  pdf.fillColor(pdfPalette.textPrimary).fontSize(8.2).text(`${stats.usedPercent}% occ. | ${stats.freePercent}% free`, x + labelWidth + barGap + barWidth + barGap, y, {
+    width: valueWidth,
     align: "right"
   });
 }
 
-function drawPdfFooter(pdf: PdfDocument, audit: AuditExportDetail): void {
-  const footerY = pdf.page.height - 22;
-
-  pdf.save();
-  pdf.moveTo(36, footerY - 6).lineTo(pdf.page.width - 36, footerY - 6).lineWidth(0.6).strokeColor("#d5dee6").stroke();
-  pdf.restore();
-
-  pdf.fillColor(pdfPalette.textSecondary).fontSize(7.2).text(`${preparedByLabel} | ${appBrandName}`, 36, footerY, {
-    width: 220
-  });
-  pdf.fillColor(pdfPalette.textSecondary).fontSize(7.2).text(audit.name, pdf.page.width - 200, footerY, {
-    width: 164,
-    align: "right",
-    ellipsis: true
-  });
-}
-
-function drawPdfHeader(pdf: PdfDocument, audit: AuditExportDetail, title: string, subtitle: string, rack?: RackDetail): number {
+function drawPdfHeader(pdf: PdfDocument, audit: AuditExportDetail, title: string, subtitle: string, rack?: RackDetail): void {
   const headerX = 36;
   const headerWidth = pdf.page.width - 72;
-  const headerY = 24;
-  const headerHeight = rack ? 96 : 78;
-  const brandBlockWidth = 172;
-  const detailsX = headerX + brandBlockWidth + 18;
-  const detailsWidth = headerWidth - brandBlockWidth - 18;
   const metaParts = rack
     ? [
         audit.siteName,
@@ -850,67 +809,27 @@ function drawPdfHeader(pdf: PdfDocument, audit: AuditExportDetail, title: string
     metaParts.push(`Notes: ${audit.notes}`);
   }
 
-  pdf.save();
-  pdf.roundedRect(headerX, headerY, headerWidth, headerHeight, 18).fill("#ffffff");
-  pdf.roundedRect(headerX, headerY, headerWidth, headerHeight, 18).lineWidth(0.9).strokeColor(pdfPalette.panelBorder).stroke();
-  pdf.roundedRect(headerX, headerY, brandBlockWidth, headerHeight, 18).fill(pdfPalette.accentStrong);
-  pdf.restore();
-
-  pdf.save();
-  pdf.opacity(0.14);
-  pdf.circle(headerX + brandBlockWidth - 12, headerY + 18, 30).fill(pdfPalette.brandWarmSoft);
-  pdf.opacity(0.2);
-  pdf.circle(headerX + brandBlockWidth - 30, headerY + headerHeight - 10, 40).fill(pdfPalette.brandWarm);
-  pdf.restore();
-
-  pdf.fillColor("#ffffff").fontSize(10).text(appBrandName, headerX + 18, headerY + 18, {
-    width: brandBlockWidth - 36
+  pdf.fillColor(pdfPalette.textPrimary).fontSize(17).text(title, headerX, 28, {
+    width: 220
   });
-  pdf.fillColor("#dbe7ef").fontSize(8.4).text(appBrandSlogan, headerX + 18, headerY + 34, {
-    width: brandBlockWidth - 36
+  pdf.fillColor(pdfPalette.textSecondary).fontSize(9).text(subtitle, headerX + 224, 32, {
+    width: headerWidth - 224,
+    align: "right"
   });
-  pdf.fillColor("#f7e8d0").fontSize(8.2).text(preparedByLabel, headerX + 18, headerY + 56, {
-    width: brandBlockWidth - 36
-  });
-
-  pdf.save();
-  pdf.roundedRect(headerX + 18, headerY + headerHeight - 26, 104, 16, 999).fill(pdfPalette.brandWarmSoft);
-  pdf.restore();
-  pdf.fillColor(pdfPalette.accentStrong).fontSize(7.2).text("Equinix Customer Delivery", headerX + 24, headerY + headerHeight - 21, {
-    width: 92
-  });
-
-  pdf.fillColor(pdfPalette.textPrimary).fontSize(17).text(title, detailsX, headerY + 16, {
-    width: detailsWidth - 126
-  });
-  pdf.fillColor(pdfPalette.textSecondary).fontSize(8.8).text(subtitle, detailsX, headerY + 35, {
-    width: detailsWidth - 126
-  });
-
-  pdf.save();
-  pdf.roundedRect(headerX + headerWidth - 124, headerY + 14, 104, 18, 999).fill("#fff6eb");
-  pdf.roundedRect(headerX + headerWidth - 124, headerY + 14, 104, 18, 999).lineWidth(0.6).strokeColor("#ecd5b5").stroke();
-  pdf.restore();
-  pdf.fillColor(pdfPalette.equinixAccent).fontSize(7.4).text(preparedByLabel, headerX + headerWidth - 116, headerY + 19, {
-    width: 88,
-    align: "center"
-  });
-
-  pdf.fillColor(pdfPalette.textSecondary).fontSize(8.6).text(metaParts.join(" | "), detailsX, headerY + 52, {
-    width: detailsWidth,
+  pdf.fillColor(pdfPalette.textSecondary).fontSize(9.5).text(metaParts.join(" | "), headerX, 50, {
+    width: headerWidth,
     ellipsis: true
   });
 
   if (rack) {
     const capacitySummary = getRackCapacitySummary(rack.totalUnits, rack.devices);
-    drawPdfCapacityBar(pdf, detailsX, headerY + headerHeight - 36, (detailsWidth - 12) / 2, capacitySummary.front);
-    drawPdfCapacityBar(pdf, detailsX + ((detailsWidth - 12) / 2) + 12, headerY + headerHeight - 36, (detailsWidth - 12) / 2, capacitySummary.rear);
-    pdf.y = headerY + headerHeight + 12;
-    return pdf.y;
+    drawPdfCapacityBar(pdf, headerX, 65, (headerWidth - 14) / 2, capacitySummary.front);
+    drawPdfCapacityBar(pdf, headerX + (headerWidth / 2) + 7, 65, (headerWidth - 14) / 2, capacitySummary.rear);
+    pdf.y = 84;
+    return;
   }
 
-  pdf.y = headerY + headerHeight + 10;
-  return pdf.y;
+  pdf.y = 72;
 }
 
 function getPdfRackDeviceFrame(
@@ -1287,7 +1206,6 @@ function drawPdfInventoryRow(pdf: PdfDocument, rack: RackDetail, device: RackDev
 function startPdfInventoryPage(pdf: PdfDocument, audit: AuditExportDetail, rack: RackDetail, continuation = false): void {
   pdf.addPage(pdfPageOptions);
   drawPdfPageBackground(pdf);
-  drawPdfFooter(pdf, audit);
   drawPdfHeader(
     pdf,
     audit,
@@ -1390,10 +1308,9 @@ export function buildPdfExport(audit: AuditExportDetail): Promise<Buffer> {
       const rearX = frontX + frontWidth + rackGap;
 
       drawPdfPageBackground(pdf);
-      drawPdfFooter(pdf, audit);
-      const rackStartY = drawPdfHeader(pdf, audit, `${appBrandName} Rack View`, appBrandSlogan, rack);
-      drawPdfRackFace(pdf, rack, "front", frontX, rackStartY + 6, frontWidth);
-      drawPdfRackFace(pdf, rack, "rear", rearX, rackStartY + 6, rearWidth);
+      drawPdfHeader(pdf, audit, `${appBrandName} Rack View`, appBrandSlogan, rack);
+      drawPdfRackFace(pdf, rack, "front", frontX, 86, frontWidth);
+      drawPdfRackFace(pdf, rack, "rear", rearX, 86, rearWidth);
 
       startPdfInventoryPage(pdf, audit, rack);
       drawPdfGroupedInventory(pdf, audit, rack);
