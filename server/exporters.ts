@@ -756,28 +756,38 @@ function drawPdfPageBackground(pdf: PdfDocument): void {
 }
 
 function drawPdfCapacityBar(pdf: PdfDocument, x: number, y: number, width: number, stats: RackFaceCapacityStats): void {
-  const labelWidth = 84;
-  const valueWidth = 82;
-  const barGap = 10;
+  const labelWidth = 76;
+  const valueWidth = 90;
+  const barGap = 8;
   const barWidth = Math.max(52, width - labelWidth - valueWidth - barGap * 2);
-  const barHeight = 10;
+  const barHeight = 8;
+  const barY = y + 1;
   const fillWidth = Math.max(0, Math.min(barWidth, Math.round((stats.usedPercent / 100) * barWidth)));
+  const fillRadiusWidth = fillWidth > 0 ? Math.max(fillWidth, barHeight) : 0;
 
-  pdf.fillColor(pdfPalette.textSecondary).fontSize(8.2).text(faceLabel(stats.face), x, y + 1, {
+  pdf.fillColor(pdfPalette.textSecondary).fontSize(7.8).text(faceLabel(stats.face).toUpperCase(), x, y + 1, {
     width: labelWidth
   });
 
   pdf.save();
-  pdf.roundedRect(x + labelWidth + barGap, y, barWidth, barHeight, 999).fill(pdfPalette.capacityTrack);
-  if (fillWidth > 0) {
-    pdf.roundedRect(x + labelWidth + barGap, y, fillWidth, barHeight, 999).fill(getPdfCapacityFill(stats.tone));
+  pdf.roundedRect(x + labelWidth + barGap, barY, barWidth, barHeight, 999).fill(pdfPalette.capacityTrack);
+  pdf
+    .roundedRect(x + labelWidth + barGap, barY, barWidth, barHeight, 999)
+    .lineWidth(0.45)
+    .strokeColor("#d7e0e7")
+    .stroke();
+  if (fillRadiusWidth > 0) {
+    pdf.roundedRect(x + labelWidth + barGap, barY, fillRadiusWidth, barHeight, 999).fill(getPdfCapacityFill(stats.tone));
   }
   pdf.restore();
 
-  pdf.fillColor(pdfPalette.textPrimary).fontSize(8.2).text(`${stats.usedPercent}% occ. | ${stats.freePercent}% free`, x + labelWidth + barGap + barWidth + barGap, y, {
-    width: valueWidth,
-    align: "right"
-  });
+  pdf
+    .fillColor(pdfPalette.textPrimary)
+    .fontSize(7.8)
+    .text(`${stats.usedPercent}% used`, x + labelWidth + barGap + barWidth + barGap, y + 1, {
+      width: valueWidth,
+      align: "right"
+    });
 }
 
 function drawPdfHeader(pdf: PdfDocument, audit: AuditExportDetail, title: string, subtitle: string, rack?: RackDetail): void {
