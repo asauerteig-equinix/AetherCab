@@ -68,7 +68,7 @@ const initialAuditCreateForm: AuditCreateInput = {
   auditName: "",
   salesOrder: "",
   status: "created",
-  initialRackName: "",
+  initialRackName: "0101",
   initialRackUnits: 47,
   notes: ""
 };
@@ -872,7 +872,11 @@ export default function App() {
   async function handleCreateAudit() {
     try {
       setSaving(true);
-      const audit = await api.createAudit(createAuditForm);
+      const audit = await api.createAudit({
+        ...createAuditForm,
+        initialRackName: "0101",
+        initialRackUnits: 47
+      });
       setCreateAuditForm(initialAuditCreateForm);
       setAuditDetail(audit);
       setAuditForm(toAuditUpdateForm(audit));
@@ -1095,13 +1099,14 @@ export default function App() {
       {error ? <div className="error-banner">{error}</div> : null}
 
       {currentPath === "/" ? (
-        <OverviewPage
-          audits={audits}
-          searchValue={auditSearch}
-          createForm={createAuditForm}
-          templateCount={templates.length}
-          onSearchChange={setAuditSearch}
-          onOpenAudit={openAudit}
+      <OverviewPage
+        audits={audits}
+        searchValue={auditSearch}
+        createForm={createAuditForm}
+        saving={saving}
+        templateCount={templates.length}
+        onSearchChange={setAuditSearch}
+        onOpenAudit={openAudit}
           onCreateFormChange={setCreateAuditForm}
           onCreateAudit={() => {
             void handleCreateAudit();
