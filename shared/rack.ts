@@ -228,7 +228,10 @@ export function getRackCapacitySummary(rackUnits: number, devices: RackDevice[])
 }
 
 export function validateRackPlacement(
-  device: Pick<RackDeviceInput, "placementType" | "rackFace" | "mountPosition" | "blocksBothFaces" | "startUnit" | "heightU">,
+  device: Pick<
+    RackDeviceInput,
+    "placementType" | "rackFace" | "mountPosition" | "blocksBothFaces" | "allowSharedDepth" | "startUnit" | "heightU"
+  >,
   rackUnits: number
 ): string[] {
   const issues: string[] = [];
@@ -254,6 +257,14 @@ export function validateRackPlacement(
     if (device.blocksBothFaces) {
       issues.push("Vertical PDUs cannot block both rack faces.");
     }
+
+    if (device.allowSharedDepth) {
+      issues.push("Vertical PDUs cannot use the shared-depth shelf exception.");
+    }
+  }
+
+  if (device.allowSharedDepth && device.blocksBothFaces) {
+    issues.push("Shared-depth devices cannot block both rack faces.");
   }
 
   if (device.startUnit === null) {
@@ -273,8 +284,8 @@ export function validateRackPlacement(
 }
 
 export function devicesOverlap(
-  first: Pick<RackDeviceInput, "rackFace" | "mountPosition" | "blocksBothFaces" | "startUnit" | "heightU">,
-  second: Pick<RackDeviceInput, "rackFace" | "mountPosition" | "blocksBothFaces" | "startUnit" | "heightU">
+  first: Pick<RackDeviceInput, "rackFace" | "mountPosition" | "blocksBothFaces" | "allowSharedDepth" | "startUnit" | "heightU">,
+  second: Pick<RackDeviceInput, "rackFace" | "mountPosition" | "blocksBothFaces" | "allowSharedDepth" | "startUnit" | "heightU">
 ): boolean {
   if (first.startUnit === null || second.startUnit === null || first.rackFace === null || second.rackFace === null) {
     return false;
@@ -288,7 +299,12 @@ export function devicesOverlap(
       return false;
     }
   } else {
-    const facesConflict = first.blocksBothFaces || second.blocksBothFaces || first.rackFace === second.rackFace;
+    const sameFace = first.rackFace === second.rackFace;
+    const facesConflict =
+      sameFace ||
+      (first.blocksBothFaces && second.blocksBothFaces) ||
+      (first.blocksBothFaces && !second.allowSharedDepth) ||
+      (second.blocksBothFaces && !first.allowSharedDepth);
     if (!facesConflict) {
       return false;
     }
@@ -301,7 +317,10 @@ export function devicesOverlap(
 }
 
 export function findOverlaps(
-  device: Pick<RackDeviceInput, "placementType" | "rackFace" | "mountPosition" | "blocksBothFaces" | "startUnit" | "heightU">,
+  device: Pick<
+    RackDeviceInput,
+    "placementType" | "rackFace" | "mountPosition" | "blocksBothFaces" | "allowSharedDepth" | "startUnit" | "heightU"
+  >,
   existingDevices: RackDevice[],
   currentDeviceId?: number
 ): RackDevice[] {
@@ -323,7 +342,10 @@ export function findOverlaps(
 }
 
 export function canPlaceRackDeviceAtStartUnit(
-  device: Pick<RackDeviceInput, "placementType" | "rackFace" | "mountPosition" | "blocksBothFaces" | "heightU">,
+  device: Pick<
+    RackDeviceInput,
+    "placementType" | "rackFace" | "mountPosition" | "blocksBothFaces" | "allowSharedDepth" | "heightU"
+  >,
   startUnit: number,
   rackUnits: number,
   existingDevices: RackDevice[],
@@ -338,7 +360,10 @@ export function canPlaceRackDeviceAtStartUnit(
 }
 
 export function findClosestAvailableStartUnit(
-  device: Pick<RackDeviceInput, "placementType" | "rackFace" | "mountPosition" | "blocksBothFaces" | "heightU">,
+  device: Pick<
+    RackDeviceInput,
+    "placementType" | "rackFace" | "mountPosition" | "blocksBothFaces" | "allowSharedDepth" | "heightU"
+  >,
   rackUnits: number,
   existingDevices: RackDevice[],
   referenceStartUnit: number,
@@ -394,6 +419,7 @@ function isUnitOccupiedOnFace(
   rackFace: RackFace,
   mountPosition: RackMountPosition,
   blocksBothFaces: boolean,
+  allowSharedDepth: boolean,
   devices: RackDevice[],
   currentDeviceId?: number
 ): boolean {
@@ -415,7 +441,12 @@ function isUnitOccupiedOnFace(
       return targetVerticalPdu && existingVerticalPdu && mountPosition === device.mountPosition;
     }
 
-    return blocksBothFaces || device.blocksBothFaces || device.rackFace === rackFace;
+    return (
+      device.rackFace === rackFace ||
+      (blocksBothFaces && device.blocksBothFaces) ||
+      (blocksBothFaces && !device.allowSharedDepth) ||
+      (device.blocksBothFaces && !allowSharedDepth)
+    );
   });
 }
 
@@ -425,6 +456,7 @@ export function findFreeUnitSpan(
   rackFace: RackFace,
   mountPosition: RackMountPosition,
   blocksBothFaces: boolean,
+  allowSharedDepth: boolean,
   devices: RackDevice[],
   currentDeviceId?: number
 ): { startUnit: number; endUnit: number } | null {
@@ -432,18 +464,24 @@ export function findFreeUnitSpan(
     return null;
   }
 
-  if (isUnitOccupiedOnFace(targetUnit, rackFace, mountPosition, blocksBothFaces, devices, currentDeviceId)) {
+  if (isUnitOccupiedOnFace(targetUnit, rackFace, mountPosition, blocksBothFaces, allowSharedDepth, devices, currentDeviceId)) {
     return null;
   }
 
   let startUnit = targetUnit;
   let endUnit = targetUnit;
 
-  while (startUnit > 1 && !isUnitOccupiedOnFace(startUnit - 1, rackFace, mountPosition, blocksBothFaces, devices, currentDeviceId)) {
+  while (
+    startUnit > 1 &&
+    !isUnitOccupiedOnFace(startUnit - 1, rackFace, mountPosition, blocksBothFaces, allowSharedDepth, devices, currentDeviceId)
+  ) {
     startUnit -= 1;
   }
 
-  while (endUnit < rackUnits && !isUnitOccupiedOnFace(endUnit + 1, rackFace, mountPosition, blocksBothFaces, devices, currentDeviceId)) {
+  while (
+    endUnit < rackUnits &&
+    !isUnitOccupiedOnFace(endUnit + 1, rackFace, mountPosition, blocksBothFaces, allowSharedDepth, devices, currentDeviceId)
+  ) {
     endUnit += 1;
   }
 
@@ -457,10 +495,20 @@ export function getAnchoredStartUnit(
   rackFace: RackFace,
   mountPosition: RackMountPosition,
   blocksBothFaces: boolean,
+  allowSharedDepth: boolean,
   devices: RackDevice[],
   currentDeviceId?: number
 ): number | null {
-  const freeSpan = findFreeUnitSpan(targetUnit, rackUnits, rackFace, mountPosition, blocksBothFaces, devices, currentDeviceId);
+  const freeSpan = findFreeUnitSpan(
+    targetUnit,
+    rackUnits,
+    rackFace,
+    mountPosition,
+    blocksBothFaces,
+    allowSharedDepth,
+    devices,
+    currentDeviceId
+  );
   if (!freeSpan) {
     return null;
   }

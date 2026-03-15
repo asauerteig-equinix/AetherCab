@@ -63,6 +63,7 @@ export interface DeviceTemplate {
   model: string;
   defaultHeightU: number;
   blocksBothFaces: boolean;
+  allowSharedDepth: boolean;
 }
 
 export interface DeviceTemplateInput {
@@ -74,6 +75,7 @@ export interface DeviceTemplateInput {
   model: string;
   defaultHeightU: number;
   blocksBothFaces: boolean;
+  allowSharedDepth: boolean;
 }
 
 export interface RackDevice {
@@ -84,6 +86,7 @@ export interface RackDevice {
   rackFace: RackFace | null;
   mountPosition: RackMountPosition;
   blocksBothFaces: boolean;
+  allowSharedDepth: boolean;
   startUnit: number | null;
   heightU: number;
   iconKey: DeviceIconKey | null;
@@ -116,6 +119,7 @@ export interface RackDeviceInput {
   rackFace: RackFace | null;
   mountPosition: RackMountPosition;
   blocksBothFaces: boolean;
+  allowSharedDepth: boolean;
   startUnit: number | null;
   heightU: number;
   iconKey?: DeviceIconKey | null;

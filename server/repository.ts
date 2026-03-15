@@ -67,6 +67,7 @@ interface RackDeviceRow {
   rack_face: RackFace | null;
   mount_position: RackDevice["mountPosition"];
   blocks_both_faces: boolean;
+  allow_shared_depth: boolean;
   start_unit: number | null;
   height_u: number;
   icon_key: RackDevice["iconKey"];
@@ -91,6 +92,7 @@ interface DeviceTemplateRow {
   model: string;
   default_height_u: number;
   blocks_both_faces: boolean;
+  allow_shared_depth: boolean;
 }
 
 function mapAuditSummary(row: AuditSummaryRow): AuditSummary {
@@ -128,6 +130,7 @@ function mapRackDevice(row: RackDeviceRow): RackDevice {
     rackFace: row.rack_face,
     mountPosition: row.mount_position,
     blocksBothFaces: row.blocks_both_faces,
+    allowSharedDepth: row.allow_shared_depth,
     startUnit: row.start_unit,
     heightU: row.height_u,
     iconKey: row.icon_key,
@@ -149,7 +152,8 @@ function normalizeDeviceInput(input: RackDeviceInput): RackDeviceInput {
     placementType: input.placementType,
     rackFace: input.rackFace,
     mountPosition: input.mountPosition,
-    blocksBothFaces: input.blocksBothFaces,
+    blocksBothFaces: input.blocksBothFaces ?? false,
+    allowSharedDepth: input.allowSharedDepth ?? false,
     startUnit: input.startUnit,
     heightU: input.heightU,
     iconKey: input.iconKey ?? null,
@@ -172,6 +176,11 @@ function normalizeDeviceInput(input: RackDeviceInput): RackDeviceInput {
   if (normalized.mountPosition !== "full") {
     normalized.rackFace = getMountPositionFace(normalized.mountPosition);
     normalized.blocksBothFaces = false;
+    normalized.allowSharedDepth = false;
+  }
+
+  if (normalized.blocksBothFaces) {
+    normalized.allowSharedDepth = false;
   }
 
   if (!normalized.name || !normalized.manufacturer || !normalized.model) {
@@ -195,7 +204,8 @@ function normalizeTemplateInput(input: DeviceTemplateInput): DeviceTemplateInput
     manufacturer: input.manufacturer.trim(),
     model: input.model.trim(),
     defaultHeightU: input.defaultHeightU,
-    blocksBothFaces: input.blocksBothFaces
+    blocksBothFaces: input.blocksBothFaces ?? false,
+    allowSharedDepth: input.allowSharedDepth ?? false
   };
 
   if (!normalized.templateType || !normalized.name || !normalized.manufacturer || !normalized.model) {
@@ -204,6 +214,11 @@ function normalizeTemplateInput(input: DeviceTemplateInput): DeviceTemplateInput
 
   if (normalized.mountStyle === "vertical-pdu") {
     normalized.blocksBothFaces = false;
+    normalized.allowSharedDepth = false;
+  }
+
+  if (normalized.blocksBothFaces) {
+    normalized.allowSharedDepth = false;
   }
 
   if (normalized.defaultHeightU < 1) {
@@ -585,7 +600,7 @@ export async function deleteRack(rackId: number): Promise<void> {
 
 export async function listDeviceTemplates(): Promise<DeviceTemplate[]> {
   const result = await pool.query<DeviceTemplateRow>(`
-    SELECT id, template_type, mount_style, icon_key, name, manufacturer, model, default_height_u, blocks_both_faces
+    SELECT id, template_type, mount_style, icon_key, name, manufacturer, model, default_height_u, blocks_both_faces, allow_shared_depth
     FROM device_templates
     ORDER BY template_type, default_height_u, name
   `);
@@ -599,7 +614,8 @@ export async function listDeviceTemplates(): Promise<DeviceTemplate[]> {
     manufacturer: row.manufacturer,
     model: row.model,
     defaultHeightU: row.default_height_u,
-    blocksBothFaces: row.blocks_both_faces
+    blocksBothFaces: row.blocks_both_faces,
+    allowSharedDepth: row.allow_shared_depth
   }));
 }
 
@@ -608,9 +624,19 @@ export async function createDeviceTemplate(input: DeviceTemplateInput): Promise<
 
   const result = await pool.query<DeviceTemplateRow>(
     `
-      INSERT INTO device_templates (template_type, mount_style, icon_key, name, manufacturer, model, default_height_u, blocks_both_faces)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING id, template_type, mount_style, icon_key, name, manufacturer, model, default_height_u, blocks_both_faces
+      INSERT INTO device_templates (
+        template_type,
+        mount_style,
+        icon_key,
+        name,
+        manufacturer,
+        model,
+        default_height_u,
+        blocks_both_faces,
+        allow_shared_depth
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING id, template_type, mount_style, icon_key, name, manufacturer, model, default_height_u, blocks_both_faces, allow_shared_depth
     `,
     [
       normalized.templateType,
@@ -620,7 +646,8 @@ export async function createDeviceTemplate(input: DeviceTemplateInput): Promise<
       normalized.manufacturer,
       normalized.model,
       normalized.defaultHeightU,
-      normalized.blocksBothFaces
+      normalized.blocksBothFaces,
+      normalized.allowSharedDepth
     ]
   );
 
@@ -634,7 +661,8 @@ export async function createDeviceTemplate(input: DeviceTemplateInput): Promise<
     manufacturer: row.manufacturer,
     model: row.model,
     defaultHeightU: row.default_height_u,
-    blocksBothFaces: row.blocks_both_faces
+    blocksBothFaces: row.blocks_both_faces,
+    allowSharedDepth: row.allow_shared_depth
   };
 }
 
@@ -652,9 +680,10 @@ export async function updateDeviceTemplate(templateId: number, input: DeviceTemp
         manufacturer = $5,
         model = $6,
         default_height_u = $7,
-        blocks_both_faces = $8
-      WHERE id = $9
-      RETURNING id, template_type, mount_style, icon_key, name, manufacturer, model, default_height_u, blocks_both_faces
+        blocks_both_faces = $8,
+        allow_shared_depth = $9
+      WHERE id = $10
+      RETURNING id, template_type, mount_style, icon_key, name, manufacturer, model, default_height_u, blocks_both_faces, allow_shared_depth
     `,
     [
       normalized.templateType,
@@ -665,6 +694,7 @@ export async function updateDeviceTemplate(templateId: number, input: DeviceTemp
       normalized.model,
       normalized.defaultHeightU,
       normalized.blocksBothFaces,
+      normalized.allowSharedDepth,
       templateId
     ]
   );
@@ -685,7 +715,8 @@ export async function updateDeviceTemplate(templateId: number, input: DeviceTemp
     manufacturer: row.manufacturer,
     model: row.model,
     defaultHeightU: row.default_height_u,
-    blocksBothFaces: row.blocks_both_faces
+    blocksBothFaces: row.blocks_both_faces,
+    allowSharedDepth: row.allow_shared_depth
   };
 }
 
@@ -709,6 +740,7 @@ export async function createRackDevice(rackId: number, input: RackDeviceInput): 
         rack_face,
         mount_position,
         blocks_both_faces,
+        allow_shared_depth,
         start_unit,
         height_u,
         icon_key,
@@ -720,7 +752,7 @@ export async function createRackDevice(rackId: number, input: RackDeviceInput): 
         notes,
         storage_location,
         updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP)
       RETURNING *
     `,
     [
@@ -730,6 +762,7 @@ export async function createRackDevice(rackId: number, input: RackDeviceInput): 
       normalized.rackFace,
       normalized.mountPosition,
       normalized.blocksBothFaces,
+      normalized.allowSharedDepth,
       normalized.startUnit,
       normalized.heightU,
       normalized.iconKey ?? null,
@@ -845,18 +878,19 @@ export async function updateRackDevice(rackId: number, deviceId: number, input: 
         rack_face = $3,
         mount_position = $4,
         blocks_both_faces = $5,
-        start_unit = $6,
-        height_u = $7,
-        icon_key = $8,
-        name = $9,
-        manufacturer = $10,
-        model = $11,
-        serial_number = $12,
-        hostname = $13,
-        notes = $14,
-        storage_location = $15,
+        allow_shared_depth = $6,
+        start_unit = $7,
+        height_u = $8,
+        icon_key = $9,
+        name = $10,
+        manufacturer = $11,
+        model = $12,
+        serial_number = $13,
+        hostname = $14,
+        notes = $15,
+        storage_location = $16,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $16 AND rack_id = $17
+      WHERE id = $17 AND rack_id = $18
       RETURNING *
     `,
     [
@@ -865,6 +899,7 @@ export async function updateRackDevice(rackId: number, deviceId: number, input: 
       resolvedInput.rackFace,
       resolvedInput.mountPosition,
       resolvedInput.blocksBothFaces,
+      resolvedInput.allowSharedDepth,
       resolvedInput.startUnit,
       resolvedInput.heightU,
       resolvedInput.iconKey ?? null,

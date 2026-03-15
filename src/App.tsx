@@ -98,7 +98,8 @@ const initialTemplateForm: DeviceTemplateInput = {
   manufacturer: "Generic",
   model: "",
   defaultHeightU: 1,
-  blocksBothFaces: false
+  blocksBothFaces: false,
+  allowSharedDepth: false
 };
 
 const initialFeedbackForm: FeedbackInput = {
@@ -139,6 +140,7 @@ function templateToRackDevice(
     rackFace,
     mountPosition,
     blocksBothFaces: template.mountStyle === "vertical-pdu" ? false : template.blocksBothFaces,
+    allowSharedDepth: template.mountStyle === "vertical-pdu" ? false : template.allowSharedDepth,
     startUnit,
     heightU: template.defaultHeightU,
     iconKey: template.iconKey,
@@ -456,6 +458,7 @@ export default function App() {
         resolvedRackFace,
         targetMountPosition,
         template.mountStyle === "vertical-pdu" ? false : template.blocksBothFaces,
+        template.mountStyle === "vertical-pdu" ? false : template.allowSharedDepth,
         rackDetail.devices
       );
 
@@ -503,6 +506,7 @@ export default function App() {
         rackFace: resolvedRackFace,
         mountPosition: nextMountPosition,
         blocksBothFaces: nextMountPosition === "full" ? device.blocksBothFaces : false,
+        allowSharedDepth: nextMountPosition === "full" ? device.allowSharedDepth : false,
         startUnit: nextStartUnit,
         heightU: device.heightU,
         iconKey: device.iconKey,
@@ -570,6 +574,7 @@ export default function App() {
       rackFace: device.rackFace,
       mountPosition: device.mountPosition,
       blocksBothFaces: device.blocksBothFaces,
+      allowSharedDepth: device.allowSharedDepth,
       startUnit: null,
       heightU: device.heightU,
       iconKey: device.iconKey,
@@ -642,6 +647,7 @@ export default function App() {
         rackFace: device.rackFace,
         mountPosition: device.mountPosition,
         blocksBothFaces: device.blocksBothFaces,
+        allowSharedDepth: device.allowSharedDepth,
         startUnit: device.startUnit,
         heightU: device.heightU,
         iconKey: device.iconKey,
@@ -672,6 +678,7 @@ export default function App() {
             rackFace: device.rackFace,
             mountPosition: device.mountPosition,
             blocksBothFaces: device.blocksBothFaces,
+            allowSharedDepth: device.allowSharedDepth,
             startUnit: null,
             heightU: device.heightU,
             iconKey: device.iconKey,

@@ -255,7 +255,16 @@ function RackFacePane({
       device.placementType === "rack" &&
       device.startUnit !== null &&
       (device.blocksBothFaces || device.rackFace === rackFace)
-  );
+  ).sort((left, right) => {
+    const leftMirrored = left.blocksBothFaces && left.rackFace !== null && left.rackFace !== rackFace;
+    const rightMirrored = right.blocksBothFaces && right.rackFace !== null && right.rackFace !== rackFace;
+
+    if (leftMirrored !== rightMirrored) {
+      return leftMirrored ? -1 : 1;
+    }
+
+    return left.id - right.id;
+  });
   const panePreviewPlacement = previewPlacement?.rackFace === rackFace ? previewPlacement : null;
   const panePduGuide = pduGuide?.rackFace === rackFace ? pduGuide : null;
   const facePduLanePositions = getVisiblePduMountPositionsForFace(rackFace, rack.devices, panePduGuide?.extraSide);
@@ -371,6 +380,7 @@ function RackFacePane({
                 : device.heightU === 2
                   ? "rack-device-content medium"
                   : "rack-device-content large";
+            const sharedDepthLabel = device.allowSharedDepth ? " | Shared depth shelf device" : "";
 
             return (
               <button
@@ -384,14 +394,18 @@ function RackFacePane({
                         : "rack-device selected mirrored-face"
                       : isVerticalPduMountPosition(device.mountPosition)
                         ? "rack-device selected pdu-device"
-                        : "rack-device selected"
+                        : device.allowSharedDepth
+                          ? "rack-device selected shared-depth-device"
+                          : "rack-device selected"
                     : isMirroredFromOppositeFace
                       ? isVerticalPduMountPosition(device.mountPosition)
                         ? "rack-device mirrored-face pdu-device"
                         : "rack-device mirrored-face"
                       : isVerticalPduMountPosition(device.mountPosition)
                         ? "rack-device pdu-device"
-                        : "rack-device"
+                        : device.allowSharedDepth
+                          ? "rack-device shared-depth-device"
+                          : "rack-device"
                 }
                 data-origin-face={isMirroredFromOppositeFace ? device.rackFace : undefined}
                 style={getDeviceStyle(rack, device, rackWidth, facePduLanePositions)}
@@ -400,7 +414,7 @@ function RackFacePane({
                 onDragEnd={onDeviceDragEnd}
                 onClick={() => onSelectDevice(device.id)}
                 type="button"
-                title={`${device.name} | ${detailLine} | ${positionLine} | ${faceLine}${isMirroredFromOppositeFace ? ` | Mounted on ${device.rackFace}` : ""}`}
+                title={`${device.name} | ${detailLine} | ${positionLine} | ${faceLine}${sharedDepthLabel}${isMirroredFromOppositeFace ? ` | Mounted on ${device.rackFace}` : ""}`}
               >
                 <span className="rack-device-shell">
                   <img alt="" aria-hidden="true" className="rack-device-icon" src={getDeviceIconUrl(device.iconKey)} />
@@ -500,6 +514,7 @@ export function RackCanvas({
         rackFace,
         mountPosition,
         isPdu ? false : template.blocksBothFaces,
+        isPdu ? false : template.allowSharedDepth,
         rack.devices
       );
       const previewStartUnit = startUnit ?? previewRange.startUnit;
@@ -512,6 +527,7 @@ export function RackCanvas({
             rackFace: previewRackFace,
             mountPosition,
             blocksBothFaces: isPdu ? false : template.blocksBothFaces,
+            allowSharedDepth: isPdu ? false : template.allowSharedDepth,
             heightU: template.defaultHeightU
           },
           previewStartUnit,
@@ -562,13 +578,14 @@ export function RackCanvas({
 
       const previewRackFace = getMountPositionFace(hoveredMountPosition) ?? rackFace;
       const isValid = canPlaceRackDeviceAtStartUnit(
-        {
-          placementType: "rack",
-          rackFace: previewRackFace,
-          mountPosition: hoveredMountPosition,
-          blocksBothFaces: isPdu ? false : device.blocksBothFaces,
-          heightU: device.heightU
-        },
+          {
+            placementType: "rack",
+            rackFace: previewRackFace,
+            mountPosition: hoveredMountPosition,
+            blocksBothFaces: isPdu ? false : device.blocksBothFaces,
+            allowSharedDepth: isPdu ? false : device.allowSharedDepth,
+            heightU: device.heightU
+          },
         startUnit,
         rack.totalUnits,
         rack.devices,

@@ -262,10 +262,6 @@ function compareSortedDevices(left: RackDevice, right: RackDevice): number {
   return left.name.localeCompare(right.name);
 }
 
-function sortDevices(devices: RackDevice[]): RackDevice[] {
-  return [...devices].sort(compareSortedDevices);
-}
-
 function deviceExportGroup(device: RackDevice): string {
   if (!isVerticalPduMountPosition(device.mountPosition)) {
     return "Rack Devices";
@@ -306,8 +302,8 @@ function groupDevicesForExport(devices: RackDevice[]): Array<{ label: string; de
 }
 
 function visibleDevicesForFace(rack: RackDetail, face: RackFace): RackDevice[] {
-  return sortDevices(
-    installedDevices(rack).filter((device) => {
+  return installedDevices(rack)
+    .filter((device) => {
       if (device.blocksBothFaces) {
         return true;
       }
@@ -315,7 +311,42 @@ function visibleDevicesForFace(rack: RackDetail, face: RackFace): RackDevice[] {
       const deviceFace = device.rackFace ?? "front";
       return deviceFace === face;
     })
-  );
+    .sort((left, right) => {
+      const leftMirrored = left.blocksBothFaces && left.rackFace !== null && left.rackFace !== face;
+      const rightMirrored = right.blocksBothFaces && right.rackFace !== null && right.rackFace !== face;
+
+      if (leftMirrored !== rightMirrored) {
+        return leftMirrored ? -1 : 1;
+      }
+
+      return compareSortedDevices(left, right);
+    });
+}
+
+function deviceCoversUnitRange(device: RackDevice, startUnit: number, endUnit: number): boolean {
+  const deviceStart = device.startUnit ?? 0;
+  const deviceEnd = getEndUnit(deviceStart, device.heightU);
+  return deviceStart <= endUnit && startUnit <= deviceEnd;
+}
+
+function isMirroredDeviceOnFace(device: RackDevice, face: RackFace): boolean {
+  return device.blocksBothFaces && device.rackFace !== null && device.rackFace !== face;
+}
+
+function hasSharedDepthConflictOnFace(device: RackDevice, rack: RackDetail, face: RackFace): boolean {
+  if (!isMirroredDeviceOnFace(device, face) || device.startUnit === null) {
+    return false;
+  }
+
+  const deviceEnd = getEndUnit(device.startUnit, device.heightU);
+
+  return installedDevices(rack).some((candidate) => {
+    if (candidate.id === device.id || candidate.rackFace !== face || !candidate.allowSharedDepth || candidate.startUnit === null) {
+      return false;
+    }
+
+    return deviceCoversUnitRange(candidate, device.startUnit!, deviceEnd);
+  });
 }
 
 function createThinBorder(color: string): Partial<ExcelJS.Borders> {
@@ -504,6 +535,10 @@ function drawExcelRackFace(worksheet: ExcelJS.Worksheet, rack: RackDetail, face:
   }
 
   rackDevices.forEach((device) => {
+    if (hasSharedDepthConflictOnFace(device, rack, face)) {
+      return;
+    }
+
     const startUnit = device.startUnit ?? 1;
     const endUnit = getEndUnit(startUnit, device.heightU);
     const topRow = rackStartRow + (rack.totalUnits - endUnit);
@@ -522,11 +557,15 @@ function drawExcelRackFace(worksheet: ExcelJS.Worksheet, rack: RackDetail, face:
       color: { argb: excelPalette.textPrimary }
     };
     deviceCell.alignment = {
-      vertical: "middle",
+      vertical: device.heightU > 1 ? "top" : "middle",
       horizontal: "left",
       wrapText: true
     };
-    deviceCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: excelPalette.deviceFill } };
+    deviceCell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: device.allowSharedDepth ? "FFE8F3E6" : excelPalette.deviceFill }
+    };
   });
 
   const footerRow = rackStartRow + rack.totalUnits;
@@ -655,7 +694,7 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, audit: AuditExportDetai
           model: device.model,
           hostname: device.hostname ?? "",
           serialNumber: device.serialNumber ?? "",
-          notes: device.notes ?? ""
+          notes: [device.allowSharedDepth ? "Shared depth shelf placement" : null, device.notes ?? null].filter(Boolean).join(" | ")
         });
         row.eachCell((cell) => {
           cell.font = { name: "Bahnschrift", size: 10, color: { argb: excelPalette.textPrimary } };
@@ -995,6 +1034,7 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
     const iconSize = Math.min(14, Math.max(8, Math.min(height - 6, frame.width * 0.22)));
     const isPdu = isVerticalPduMountPosition(device.mountPosition);
     const isMirroredFromOppositeFace = device.blocksBothFaces && device.rackFace !== null && device.rackFace !== face;
+    const isSharedDepthDevice = device.allowSharedDepth && !isMirroredFromOppositeFace;
     const showIcon = frame.width >= 24 && height >= 12 && !isPdu;
     const textX = frame.x + innerPadding + (showIcon ? iconSize + 6 : 0);
     const textWidth = frame.width - innerPadding * 2 - (showIcon ? iconSize + 6 : 0);
@@ -1007,14 +1047,22 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
     pdf.save();
     pdf
       .roundedRect(frame.x, topY, frame.width, height, isPdu ? 6 : 8)
-      .fill(isMirroredFromOppositeFace ? "#edf3f7" : pdfPalette.deviceFill);
+      .fill(isMirroredFromOppositeFace ? "#edf3f7" : isSharedDepthDevice ? "#e8f3e6" : pdfPalette.deviceFill);
+    if (isSharedDepthDevice) {
+      pdf.dash(3, { space: 2 });
+    }
     pdf
       .roundedRect(frame.x, topY, frame.width, height, isPdu ? 6 : 8)
       .lineWidth(0.8)
-      .strokeColor(pdfPalette.deviceBorder)
+      .strokeColor(isSharedDepthDevice ? "#6f9d62" : pdfPalette.deviceBorder)
       .stroke();
+    if (isSharedDepthDevice) {
+      pdf.undash();
+    }
 
     if (isMirroredFromOppositeFace) {
+      pdf.save();
+      pdf.roundedRect(frame.x, topY, frame.width, height, isPdu ? 6 : 8).clip();
       pdf.opacity(0.22);
       for (let offset = -height; offset < frame.width + height; offset += 8) {
         pdf
@@ -1024,6 +1072,7 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
           .strokeColor(pdfPalette.accentStrong)
           .stroke();
       }
+      pdf.restore();
     }
     pdf.restore();
 
@@ -1111,6 +1160,7 @@ function drawPdfInventoryRow(pdf: PdfDocument, rack: RackDetail, device: RackDev
   const y = pdf.y;
   const details = [
     `${device.heightU}U`,
+    device.allowSharedDepth ? "Shared depth shelf" : null,
     device.hostname ? `Host: ${device.hostname}` : null,
     device.serialNumber ? `Serial: ${device.serialNumber}` : null,
     device.notes ? `Notes: ${device.notes}` : null

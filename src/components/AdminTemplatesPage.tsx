@@ -40,7 +40,8 @@ function toTemplateForm(template: DeviceTemplate): DeviceTemplateInput {
     manufacturer: template.manufacturer,
     model: template.model,
     defaultHeightU: template.defaultHeightU,
-    blocksBothFaces: template.blocksBothFaces
+    blocksBothFaces: template.blocksBothFaces,
+    allowSharedDepth: template.allowSharedDepth
   };
 }
 
@@ -52,7 +53,8 @@ function applyTemplateTypeToForm(nextTemplateType: string, currentForm: DeviceTe
     templateType: nextTemplateType,
     mountStyle: nextMountStyle,
     iconKey: getDefaultIconKeyForTemplateType(nextTemplateType),
-    blocksBothFaces: nextTemplateType === "pdu" ? false : currentForm.blocksBothFaces
+    blocksBothFaces: nextTemplateType === "pdu" ? false : currentForm.blocksBothFaces,
+    allowSharedDepth: nextTemplateType === "pdu" ? false : currentForm.allowSharedDepth
   };
 }
 
@@ -104,7 +106,8 @@ export function AdminTemplatesPage({
                       event.target.value === "vertical-pdu"
                         ? "pdu-vertical"
                         : form.iconKey,
-                    blocksBothFaces: event.target.value === "vertical-pdu" ? false : form.blocksBothFaces
+                    blocksBothFaces: event.target.value === "vertical-pdu" ? false : form.blocksBothFaces,
+                    allowSharedDepth: event.target.value === "vertical-pdu" ? false : form.allowSharedDepth
                   })
                 }
               >
@@ -146,7 +149,22 @@ export function AdminTemplatesPage({
                 checked={form.blocksBothFaces}
                 disabled={form.mountStyle === "vertical-pdu"}
                 type="checkbox"
-                onChange={(event) => onFormChange({ ...form, blocksBothFaces: event.target.checked })}
+                onChange={(event) =>
+                  onFormChange({
+                    ...form,
+                    blocksBothFaces: event.target.checked,
+                    allowSharedDepth: event.target.checked ? false : form.allowSharedDepth
+                  })
+                }
+              />
+            </label>
+            <label className="checkbox-field full-width">
+              Allow shared depth shelf placement
+              <input
+                checked={form.allowSharedDepth}
+                disabled={form.mountStyle === "vertical-pdu" || form.blocksBothFaces}
+                type="checkbox"
+                onChange={(event) => onFormChange({ ...form, allowSharedDepth: event.target.checked })}
               />
             </label>
             <button className="primary-button" type="submit">
@@ -179,7 +197,9 @@ export function AdminTemplatesPage({
                       ? "Vertical PDU"
                       : template.blocksBothFaces
                         ? "Front + Rear"
-                        : "Single side"}
+                        : template.allowSharedDepth
+                          ? "Shared depth"
+                          : "Single side"}
                   </span>
                 </div>
                 <div className="template-actions">
@@ -263,7 +283,8 @@ export function AdminTemplatesPage({
                       templateType: event.target.value === "vertical-pdu" ? "pdu" : editingForm.templateType,
                       mountStyle: event.target.value as DeviceTemplateInput["mountStyle"],
                       iconKey: event.target.value === "vertical-pdu" ? "pdu-vertical" : editingForm.iconKey,
-                      blocksBothFaces: event.target.value === "vertical-pdu" ? false : editingForm.blocksBothFaces
+                      blocksBothFaces: event.target.value === "vertical-pdu" ? false : editingForm.blocksBothFaces,
+                      allowSharedDepth: event.target.value === "vertical-pdu" ? false : editingForm.allowSharedDepth
                     })
                   }
                 >
@@ -308,7 +329,22 @@ export function AdminTemplatesPage({
                   checked={editingForm.blocksBothFaces}
                   disabled={editingForm.mountStyle === "vertical-pdu"}
                   type="checkbox"
-                  onChange={(event) => setEditingForm({ ...editingForm, blocksBothFaces: event.target.checked })}
+                  onChange={(event) =>
+                    setEditingForm({
+                      ...editingForm,
+                      blocksBothFaces: event.target.checked,
+                      allowSharedDepth: event.target.checked ? false : editingForm.allowSharedDepth
+                    })
+                  }
+                />
+              </label>
+              <label className="checkbox-field full-width">
+                Allow shared depth shelf placement
+                <input
+                  checked={editingForm.allowSharedDepth}
+                  disabled={editingForm.mountStyle === "vertical-pdu" || editingForm.blocksBothFaces}
+                  type="checkbox"
+                  onChange={(event) => setEditingForm({ ...editingForm, allowSharedDepth: event.target.checked })}
                 />
               </label>
 

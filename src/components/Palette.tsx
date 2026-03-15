@@ -82,6 +82,8 @@ export function Palette({ templates, collapsed }: PaletteProps) {
                         ? "Vertical PDU lane"
                         : template.blocksBothFaces
                           ? "Front + Rear"
+                          : template.allowSharedDepth
+                            ? "Shared depth shelf"
                           : "Single side"}
                     </p>
                   </div>
@@ -91,6 +93,8 @@ export function Palette({ templates, collapsed }: PaletteProps) {
                         ? "Vertical PDU"
                         : template.blocksBothFaces
                           ? "Front + Rear"
+                          : template.allowSharedDepth
+                            ? "Shared depth"
                           : "Single side"}
                     </span>
                   </div>

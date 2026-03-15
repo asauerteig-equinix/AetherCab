@@ -40,6 +40,7 @@ function toDeviceInput(device: RackDevice): RackDeviceInput {
     rackFace: device.rackFace,
     mountPosition: device.mountPosition,
     blocksBothFaces: device.blocksBothFaces,
+    allowSharedDepth: device.allowSharedDepth,
     startUnit: device.startUnit,
     heightU: device.heightU,
     iconKey: device.iconKey,
@@ -60,6 +61,7 @@ function hasDraftChanges(left: RackDeviceInput, right: RackDeviceInput): boolean
     left.rackFace !== right.rackFace ||
     left.mountPosition !== right.mountPosition ||
     left.blocksBothFaces !== right.blocksBothFaces ||
+    left.allowSharedDepth !== right.allowSharedDepth ||
     left.startUnit !== right.startUnit ||
     left.heightU !== right.heightU ||
     left.iconKey !== right.iconKey ||
@@ -202,6 +204,7 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
                 ...draft,
                 rackFace: draft.rackFace ?? "front",
                 blocksBothFaces: nextMountStyle === "vertical" ? false : draft.blocksBothFaces,
+                allowSharedDepth: nextMountStyle === "vertical" ? false : draft.allowSharedDepth,
                 mountPosition:
                   nextMountStyle === "vertical" ? resolveVerticalMountPosition(draft.rackFace, draft.mountPosition) : "full"
               });
@@ -222,6 +225,23 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
               setDraft({
                 ...draft,
                 blocksBothFaces: event.target.checked,
+                allowSharedDepth: event.target.checked ? false : draft.allowSharedDepth,
+                rackFace: draft.rackFace ?? "front"
+              });
+            }}
+            onBlur={() => commitDraft()}
+          />
+        </label>
+        <label className="checkbox-field full-width">
+          Allow shared depth shelf placement
+          <input
+            checked={draft.allowSharedDepth}
+            disabled={isVerticalPduMountPosition(draft.mountPosition) || draft.blocksBothFaces}
+            type="checkbox"
+            onChange={(event) => {
+              setDraft({
+                ...draft,
+                allowSharedDepth: event.target.checked,
                 rackFace: draft.rackFace ?? "front"
               });
             }}
@@ -249,6 +269,9 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
         </label>
       </div>
       {isVerticalPduMountPosition(draft.mountPosition) ? <p className="muted">Vertical PDUs use side lanes and do not block the main rack width.</p> : null}
+      {draft.allowSharedDepth ? (
+        <p className="muted">This device may share the same U-range with a full-depth device on the opposite rack face.</p>
+      ) : null}
       {device.placementType === "spare" ? (
         <p className="muted">This device is only parked temporarily and will not appear in exports.</p>
       ) : null}

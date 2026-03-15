@@ -75,6 +75,7 @@ export async function initializeDatabase(): Promise<void> {
       model TEXT NOT NULL,
       default_height_u INTEGER NOT NULL,
       blocks_both_faces BOOLEAN NOT NULL DEFAULT FALSE,
+      allow_shared_depth BOOLEAN NOT NULL DEFAULT FALSE,
       UNIQUE(name, manufacturer, model)
     );
 
@@ -86,6 +87,7 @@ export async function initializeDatabase(): Promise<void> {
       rack_face TEXT CHECK (rack_face IN ('front', 'rear')),
       mount_position TEXT NOT NULL DEFAULT 'full' CHECK (mount_position IN ('full', 'front-left-outer', 'front-left-inner', 'front-right-inner', 'front-right-outer', 'rear-left-outer', 'rear-left-inner', 'rear-right-inner', 'rear-right-outer')),
       blocks_both_faces BOOLEAN NOT NULL DEFAULT FALSE,
+      allow_shared_depth BOOLEAN NOT NULL DEFAULT FALSE,
       start_unit INTEGER,
       height_u INTEGER NOT NULL,
       icon_key TEXT,
@@ -175,6 +177,11 @@ export async function initializeDatabase(): Promise<void> {
   `);
 
   await pool.query(`
+    ALTER TABLE device_templates
+    ADD COLUMN IF NOT EXISTS allow_shared_depth BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+
+  await pool.query(`
     ALTER TABLE rack_devices
     ADD COLUMN IF NOT EXISTS template_id INTEGER
   `);
@@ -223,6 +230,11 @@ export async function initializeDatabase(): Promise<void> {
 
   await pool.query(`
     ALTER TABLE rack_devices
+    ADD COLUMN IF NOT EXISTS allow_shared_depth BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+
+  await pool.query(`
+    ALTER TABLE rack_devices
     ADD COLUMN IF NOT EXISTS icon_key TEXT
   `);
 
@@ -253,6 +265,12 @@ export async function initializeDatabase(): Promise<void> {
   `);
 
   await pool.query(`
+    UPDATE device_templates
+    SET allow_shared_depth = FALSE
+    WHERE mount_style = 'vertical-pdu' OR blocks_both_faces = TRUE
+  `);
+
+  await pool.query(`
     UPDATE rack_devices
     SET mount_position = 'full'
     WHERE mount_position IS NULL
@@ -265,6 +283,12 @@ export async function initializeDatabase(): Promise<void> {
       ELSE 'generic-device'
     END
     WHERE icon_key IS NULL OR icon_key = ''
+  `);
+
+  await pool.query(`
+    UPDATE rack_devices
+    SET allow_shared_depth = FALSE
+    WHERE mount_position <> 'full' OR blocks_both_faces = TRUE
   `);
 
   await pool.query(`
@@ -317,16 +341,26 @@ export async function initializeDatabase(): Promise<void> {
 async function seedDatabase(): Promise<void> {
   await pool.query(
     `
-      INSERT INTO device_templates (template_type, mount_style, icon_key, name, manufacturer, model, default_height_u, blocks_both_faces)
+      INSERT INTO device_templates (
+        template_type,
+        mount_style,
+        icon_key,
+        name,
+        manufacturer,
+        model,
+        default_height_u,
+        blocks_both_faces,
+        allow_shared_depth
+      )
       VALUES
-        ('server', 'full', 'server', 'Server 1U', 'Generic', 'Rack Server 1U', 1, TRUE),
-        ('server', 'full', 'server', 'Server 2U', 'Generic', 'Rack Server 2U', 2, TRUE),
-        ('switch-router', 'full', 'switch', 'Switch/Router 1U', 'Generic', 'Network Device 1U', 1, FALSE),
-        ('switch-router', 'full', 'switch', 'Switch/Router 2U', 'Generic', 'Network Device 2U', 2, TRUE),
-        ('patch-panel', 'full', 'patch-panel', 'Patchpanel 1U', 'Generic', 'Patchpanel 1U', 1, FALSE),
-        ('storage', 'full', 'storage', 'Storage 2U', 'Generic', 'Storage Shelf 2U', 2, TRUE),
-        ('ups', 'full', 'ups', 'UPS 2U', 'Generic', 'UPS 2U', 2, TRUE),
-        ('pdu', 'vertical-pdu', 'pdu-vertical', 'Vertical PDU 31U', 'Generic', 'Vertical Rack PDU', 31, FALSE)
+        ('server', 'full', 'server', 'Server 1U', 'Generic', 'Rack Server 1U', 1, TRUE, FALSE),
+        ('server', 'full', 'server', 'Server 2U', 'Generic', 'Rack Server 2U', 2, TRUE, FALSE),
+        ('switch-router', 'full', 'switch', 'Switch/Router 1U', 'Generic', 'Network Device 1U', 1, FALSE, FALSE),
+        ('switch-router', 'full', 'switch', 'Switch/Router 2U', 'Generic', 'Network Device 2U', 2, TRUE, FALSE),
+        ('patch-panel', 'full', 'patch-panel', 'Patchpanel 1U', 'Generic', 'Patchpanel 1U', 1, FALSE, FALSE),
+        ('storage', 'full', 'storage', 'Storage 2U', 'Generic', 'Storage Shelf 2U', 2, TRUE, FALSE),
+        ('ups', 'full', 'ups', 'UPS 2U', 'Generic', 'UPS 2U', 2, TRUE, FALSE),
+        ('pdu', 'vertical-pdu', 'pdu-vertical', 'Vertical PDU 31U', 'Generic', 'Vertical Rack PDU', 31, FALSE, FALSE)
       ON CONFLICT (name, manufacturer, model) DO NOTHING
     `
   );
