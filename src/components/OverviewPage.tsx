@@ -1,5 +1,5 @@
-import { useState } from "react";
-import type { AuditCreateInput, AuditSummary } from "../../shared/types";
+import { useMemo, useState } from "react";
+import type { AuditCreateInput, AuditStatus, AuditSummary } from "../../shared/types";
 import { formatAuditDateTime, getAuditStatusLabel } from "../../shared/audits";
 
 interface OverviewPageProps {
@@ -7,11 +7,40 @@ interface OverviewPageProps {
   searchValue: string;
   createForm: AuditCreateInput;
   saving: boolean;
-  templateCount: number;
   onSearchChange(next: string): void;
   onOpenAudit(auditId: number): void;
   onCreateFormChange(next: AuditCreateInput): void;
   onCreateAudit(): Promise<void>;
+}
+
+type OverviewStatusFilter = "all" | AuditStatus;
+
+function StatusIcon({ status }: { status: AuditStatus }) {
+  if (status === "completed") {
+    return (
+      <svg fill="none" height="15" viewBox="0 0 16 16" width="15" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4.5 7V5.75A3.5 3.5 0 0 1 8 2.25A3.5 3.5 0 0 1 11.5 5.75V7" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
+        <rect height="6.5" rx="1.7" stroke="currentColor" strokeWidth="1.4" width="9" x="3.5" y="7" />
+      </svg>
+    );
+  }
+
+  if (status === "in-progress") {
+    return (
+      <svg fill="none" height="15" viewBox="0 0 16 16" width="15" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.4" />
+        <path d="M8 4.8V8L10.3 9.7" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg fill="none" height="15" viewBox="0 0 16 16" width="15" xmlns="http://www.w3.org/2000/svg">
+      <path d="M8 3V13" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
+      <path d="M3 8H13" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
+      <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  );
 }
 
 export function OverviewPage({
@@ -19,15 +48,33 @@ export function OverviewPage({
   searchValue,
   createForm,
   saving,
-  templateCount,
   onSearchChange,
   onOpenAudit,
   onCreateFormChange,
   onCreateAudit
 }: OverviewPageProps) {
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<OverviewStatusFilter>("all");
   const query = searchValue.trim().toLowerCase();
-  const visibleAudits = audits.filter((audit) => {
+  const sortedAudits = useMemo(
+    () => [...audits].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()),
+    [audits]
+  );
+  const createdCount = audits.filter((audit) => audit.status === "created").length;
+  const inProgressCount = audits.filter((audit) => audit.status === "in-progress").length;
+  const completedCount = audits.filter((audit) => audit.status === "completed").length;
+  const totalAudits = audits.length;
+  const totalSafe = totalAudits || 1;
+  const createdPercent = Math.round((createdCount / totalSafe) * 100);
+  const inProgressPercent = Math.round((inProgressCount / totalSafe) * 100);
+  const completedPercent = Math.max(0, 100 - createdPercent - inProgressPercent);
+
+  const visibleAudits = sortedAudits.filter((audit) => {
+    const matchesStatus = statusFilter === "all" || audit.status === statusFilter;
+    if (!matchesStatus) {
+      return false;
+    }
+
     if (!query) {
       return true;
     }
@@ -44,57 +91,113 @@ export function OverviewPage({
 
   return (
     <>
-      <main className="overview-grid">
-        <section className="panel overview-panel overview-panel-primary">
-          <p className="eyebrow">Start</p>
-          <h2>Audits</h2>
-          <div className="overview-stats-inline">
-            <div className="overview-stat-card">
-              <strong>{audits.length}</strong>
-              <span>saved audits</span>
-            </div>
-            <div className="overview-stat-card">
-              <strong>{templateCount}</strong>
-              <span>device templates</span>
+      <main className="overview-shell">
+        <section className="panel overview-hero-panel">
+          <div className="overview-hero-copy">
+            <p className="eyebrow">Start</p>
+            <h2>Audit Dashboard</h2>
+            <p className="hero-copy">Gesamt erstellte Audits, aktueller Fortschritt und direkter Zugriff auf die zuletzt angelegten Dokumentationen.</p>
+            <div className="overview-hero-stats">
+              <article className="overview-stat-card emphasis">
+                <span>Gesamt erstellt</span>
+                <strong>{totalAudits}</strong>
+              </article>
+              <article className="overview-stat-card status created">
+                <span>Erstellt</span>
+                <strong>{createdCount}</strong>
+              </article>
+              <article className="overview-stat-card status in-progress">
+                <span>In Arbeit</span>
+                <strong>{inProgressCount}</strong>
+              </article>
+              <article className="overview-stat-card status completed">
+                <span>Abgeschlossen</span>
+                <strong>{completedCount}</strong>
+              </article>
             </div>
           </div>
-          <div className="overview-actions">
-            <button className="primary-button" onClick={() => setCreateModalOpen(true)} type="button">
-              Create new Audit
+
+          <div className="overview-hero-side">
+            <div className="overview-status-graphic" aria-label="Audit status distribution">
+              <div className="overview-status-bar">
+                <span className="created" style={{ width: `${createdPercent}%` }} />
+                <span className="in-progress" style={{ width: `${inProgressPercent}%` }} />
+                <span className="completed" style={{ width: `${completedPercent}%` }} />
+              </div>
+              <div className="overview-status-legend">
+                <span className="created">{`${createdPercent}% erstellt`}</span>
+                <span className="in-progress">{`${inProgressPercent}% in Arbeit`}</span>
+                <span className="completed">{`${completedPercent}% abgeschlossen`}</span>
+              </div>
+            </div>
+
+            <button className="primary-button overview-cta-button" onClick={() => setCreateModalOpen(true)} type="button">
+              <span aria-hidden="true">
+                <svg fill="none" height="18" viewBox="0 0 18 18" width="18" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M9 3.5V14.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
+                  <path d="M3.5 9H14.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
+                </svg>
+              </span>
+              <span>Create new Audit</span>
             </button>
           </div>
         </section>
 
-        <section className="panel overview-panel">
-          <div className="panel-header">
+        <section className="panel overview-panel overview-recent-panel">
+          <div className="panel-header overview-panel-header">
             <div>
-              <p className="eyebrow">Audit Overview</p>
-              <h2>Existing audits</h2>
+              <p className="eyebrow">Recent Audits</p>
+              <h2>Latest documentation workspaces</h2>
             </div>
             <span className="muted">{visibleAudits.length} visible</span>
           </div>
 
-          <label className="search-field">
-            Search
-            <input value={searchValue} onChange={(event) => onSearchChange(event.target.value)} placeholder="Kunde, Sales Order, Site oder Room" />
-          </label>
+          <div className="overview-filter-bar">
+            <label className="search-field">
+              Search
+              <input value={searchValue} onChange={(event) => onSearchChange(event.target.value)} placeholder="Kunde, Sales Order, Site oder Room" />
+            </label>
+
+            <div className="overview-status-filters">
+              {[
+                { key: "all" as const, label: "Alle", count: audits.length },
+                { key: "created" as const, label: "Erstellt", count: createdCount },
+                { key: "in-progress" as const, label: "In Arbeit", count: inProgressCount },
+                { key: "completed" as const, label: "Abgeschlossen", count: completedCount }
+              ].map((filter) => (
+                <button
+                  key={filter.key}
+                  className={statusFilter === filter.key ? "overview-filter-chip selected" : "overview-filter-chip"}
+                  onClick={() => setStatusFilter(filter.key)}
+                  type="button"
+                >
+                  <span>{filter.label}</span>
+                  <strong>{filter.count}</strong>
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="overview-audit-list">
             {visibleAudits.length === 0 ? (
-              <div className="empty-state">No audits match the current search.</div>
+              <div className="empty-state">No audits match the current search or status filter.</div>
             ) : (
               visibleAudits.map((audit) => (
-                <article className="overview-audit-card" key={audit.id}>
-                  <div>
-                    <strong>{audit.name}</strong>
+                <article className={`overview-audit-card status-${audit.status}`} key={audit.id}>
+                  <div className="overview-audit-main">
+                    <div className="overview-audit-topline">
+                      <strong>{audit.name}</strong>
+                      <span className={`audit-status-badge ${audit.status}`}>
+                        <StatusIcon status={audit.status} />
+                        <span>{getAuditStatusLabel(audit.status)}</span>
+                      </span>
+                    </div>
                     <span>
                       {audit.siteName} / {audit.roomName}
                     </span>
                     <span>
-                      {audit.rackCount} rack{audit.rackCount === 1 ? "" : "s"}
+                      {audit.rackCount} rack{audit.rackCount === 1 ? "" : "s"} | {`Sales Order: ${audit.salesOrder ?? "-"}`}
                     </span>
-                    <span>{`Sales Order: ${audit.salesOrder ?? "-"}`}</span>
-                    <span>{`Status: ${getAuditStatusLabel(audit.status)}`}</span>
                     <span>{formatAuditDateTime(audit.createdAt)}</span>
                     <span>{audit.notes || "No notes yet."}</span>
                   </div>
@@ -115,7 +218,7 @@ export function OverviewPage({
               <div className="audit-edit-heading">
                 <p className="eyebrow">New Audit</p>
                 <h2>Create audit</h2>
-                <p className="audit-edit-copy">The first rack is created automatically as `0101` with `47U` and can be renamed later in the editor.</p>
+                <p className="audit-edit-copy">The first rack is created automatically as `0101` with `47U`, and every new audit starts in status `Erstellt`.</p>
               </div>
               <button className="ghost-button" onClick={() => setCreateModalOpen(false)} type="button">
                 Close
@@ -144,17 +247,6 @@ export function OverviewPage({
               <label>
                 Sales Order
                 <input value={createForm.salesOrder} onChange={(event) => onCreateFormChange({ ...createForm, salesOrder: event.target.value })} />
-              </label>
-              <label>
-                Status
-                <select
-                  value={createForm.status}
-                  onChange={(event) => onCreateFormChange({ ...createForm, status: event.target.value as AuditCreateInput["status"] })}
-                >
-                  <option value="created">Erstellt</option>
-                  <option value="in-progress">In Bearbeitung</option>
-                  <option value="completed">Abgeschlossen</option>
-                </select>
               </label>
               <label className="full-width">
                 Notes

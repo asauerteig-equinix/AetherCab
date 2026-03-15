@@ -874,6 +874,7 @@ export default function App() {
       setSaving(true);
       const audit = await api.createAudit({
         ...createAuditForm,
+        status: "created",
         initialRackName: "0101",
         initialRackUnits: 47
       });
@@ -1099,14 +1100,13 @@ export default function App() {
       {error ? <div className="error-banner">{error}</div> : null}
 
       {currentPath === "/" ? (
-      <OverviewPage
-        audits={audits}
-        searchValue={auditSearch}
-        createForm={createAuditForm}
-        saving={saving}
-        templateCount={templates.length}
-        onSearchChange={setAuditSearch}
-        onOpenAudit={openAudit}
+        <OverviewPage
+          audits={audits}
+          searchValue={auditSearch}
+          createForm={createAuditForm}
+          saving={saving}
+          onSearchChange={setAuditSearch}
+          onOpenAudit={openAudit}
           onCreateFormChange={setCreateAuditForm}
           onCreateAudit={() => {
             void handleCreateAudit();
