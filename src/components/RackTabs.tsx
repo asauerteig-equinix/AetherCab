@@ -7,6 +7,7 @@ interface RackTabsProps {
   rackForm: RackUpdateInput;
   newRackForm: RackCreateInput;
   saving: boolean;
+  readOnly: boolean;
   onSelectRack(rackId: number): void;
   onRackFormChange(next: RackUpdateInput): void;
   onSaveRack(): Promise<void>;
@@ -17,7 +18,10 @@ interface RackTabsProps {
 
 const defaultRackCreateForm: RackCreateInput = {
   rackName: "",
-  totalUnits: 47
+  totalUnits: 47,
+  widthMm: 600,
+  depthMm: 1000,
+  heightMm: 2200
 };
 
 export function RackTabs({
@@ -26,6 +30,7 @@ export function RackTabs({
   rackForm,
   newRackForm,
   saving,
+  readOnly,
   onSelectRack,
   onRackFormChange,
   onSaveRack,
@@ -34,7 +39,16 @@ export function RackTabs({
   onDeleteRack
 }: RackTabsProps) {
   const [editorMode, setEditorMode] = useState<"create" | "edit" | null>(null);
+  const [deleteRackOpen, setDeleteRackOpen] = useState(false);
+  const [deleteRackNameInput, setDeleteRackNameInput] = useState("");
+  const [deleteRackConfirmed, setDeleteRackConfirmed] = useState(false);
   const activeRack = audit?.racks.find((rack) => rack.id === activeRackId) ?? null;
+
+  function resetDeleteRackState() {
+    setDeleteRackOpen(false);
+    setDeleteRackNameInput("");
+    setDeleteRackConfirmed(false);
+  }
 
   function resetEditForm() {
     if (!activeRack) {
@@ -43,20 +57,30 @@ export function RackTabs({
 
     onRackFormChange({
       rackName: activeRack.name,
-      totalUnits: activeRack.totalUnits
+      totalUnits: activeRack.totalUnits,
+      widthMm: activeRack.widthMm,
+      depthMm: activeRack.depthMm,
+      heightMm: activeRack.heightMm
     });
   }
 
   function openCreateModal() {
+    if (readOnly) {
+      return;
+    }
+
     onNewRackFormChange({
       rackName: "",
-      totalUnits: activeRack?.totalUnits ?? defaultRackCreateForm.totalUnits
+      totalUnits: activeRack?.totalUnits ?? defaultRackCreateForm.totalUnits,
+      widthMm: activeRack?.widthMm ?? defaultRackCreateForm.widthMm,
+      depthMm: activeRack?.depthMm ?? defaultRackCreateForm.depthMm,
+      heightMm: activeRack?.heightMm ?? defaultRackCreateForm.heightMm
     });
     setEditorMode("create");
   }
 
   function openEditModal() {
-    if (!activeRack) {
+    if (!activeRack || readOnly) {
       return;
     }
 
@@ -74,6 +98,11 @@ export function RackTabs({
     setEditorMode(null);
   }
 
+  async function handleRackDelete() {
+    await onDeleteRack();
+    resetDeleteRackState();
+  }
+
   if (!audit) {
     return null;
   }
@@ -87,18 +116,16 @@ export function RackTabs({
             <h2>{audit.racks.length === 1 ? "Single rack" : `${audit.racks.length} racks`}</h2>
           </div>
           <div className="rack-tabs-actions">
-            <button className="ghost-button" onClick={openCreateModal} type="button">
+            <button className="ghost-button" disabled={readOnly} onClick={openCreateModal} type="button">
               Add rack
             </button>
-            <button className="ghost-button" disabled={!activeRack} onClick={openEditModal} type="button">
+            <button className="ghost-button" disabled={!activeRack || readOnly} onClick={openEditModal} type="button">
               Edit rack
             </button>
             <button
               className="ghost-button danger"
-              disabled={!activeRack || audit.racks.length <= 1 || saving}
-              onClick={() => {
-                void onDeleteRack();
-              }}
+              disabled={!activeRack || audit.racks.length <= 1 || saving || readOnly}
+              onClick={() => setDeleteRackOpen(true)}
               type="button"
             >
               Delete rack
@@ -115,7 +142,7 @@ export function RackTabs({
               type="button"
             >
               <strong>{rack.name}</strong>
-              <span>{rack.totalUnits}U</span>
+              <span>{`${rack.totalUnits}U | ${rack.widthMm} x ${rack.depthMm} x ${rack.heightMm} mm`}</span>
             </button>
           ))}
         </div>
@@ -124,19 +151,22 @@ export function RackTabs({
       {editorMode ? (
         <div
           className="audit-edit-modal-backdrop"
-          onClick={() => {
-            if (saving) {
-              return;
-            }
+              onClick={() => {
+                if (saving) {
+                  return;
+                }
 
-            if (editorMode === "edit") {
-              resetEditForm();
-            } else {
-              onNewRackFormChange({
-                rackName: "",
-                totalUnits: activeRack?.totalUnits ?? defaultRackCreateForm.totalUnits
-              });
-            }
+                if (editorMode === "edit") {
+                  resetEditForm();
+                } else {
+                  onNewRackFormChange({
+                    rackName: "",
+                    totalUnits: activeRack?.totalUnits ?? defaultRackCreateForm.totalUnits,
+                    widthMm: activeRack?.widthMm ?? defaultRackCreateForm.widthMm,
+                    depthMm: activeRack?.depthMm ?? defaultRackCreateForm.depthMm,
+                    heightMm: activeRack?.heightMm ?? defaultRackCreateForm.heightMm
+                  });
+                }
 
             setEditorMode(null);
           }}
@@ -167,7 +197,10 @@ export function RackTabs({
                   } else {
                     onNewRackFormChange({
                       rackName: "",
-                      totalUnits: activeRack?.totalUnits ?? defaultRackCreateForm.totalUnits
+                      totalUnits: activeRack?.totalUnits ?? defaultRackCreateForm.totalUnits,
+                      widthMm: activeRack?.widthMm ?? defaultRackCreateForm.widthMm,
+                      depthMm: activeRack?.depthMm ?? defaultRackCreateForm.depthMm,
+                      heightMm: activeRack?.heightMm ?? defaultRackCreateForm.heightMm
                     });
                   }
                   setEditorMode(null);
@@ -189,17 +222,49 @@ export function RackTabs({
                 <label className="audit-edit-field plain">
                   <span>Rack Name</span>
                   <input
+                    disabled={readOnly}
                     value={newRackForm.rackName}
                     onChange={(event) => onNewRackFormChange({ ...newRackForm, rackName: event.target.value })}
                   />
                 </label>
                 <label className="audit-edit-field plain">
-                  <span>Rack Height</span>
+                  <span>Rack Units</span>
                   <input
+                    disabled={readOnly}
                     min={1}
                     type="number"
                     value={newRackForm.totalUnits}
                     onChange={(event) => onNewRackFormChange({ ...newRackForm, totalUnits: Number(event.target.value) })}
+                  />
+                </label>
+                <label className="audit-edit-field plain">
+                  <span>Width (mm)</span>
+                  <input
+                    disabled={readOnly}
+                    min={1}
+                    type="number"
+                    value={newRackForm.widthMm}
+                    onChange={(event) => onNewRackFormChange({ ...newRackForm, widthMm: Number(event.target.value) })}
+                  />
+                </label>
+                <label className="audit-edit-field plain">
+                  <span>Depth (mm)</span>
+                  <input
+                    disabled={readOnly}
+                    min={1}
+                    type="number"
+                    value={newRackForm.depthMm}
+                    onChange={(event) => onNewRackFormChange({ ...newRackForm, depthMm: Number(event.target.value) })}
+                  />
+                </label>
+                <label className="audit-edit-field plain">
+                  <span>Height (mm)</span>
+                  <input
+                    disabled={readOnly}
+                    min={1}
+                    type="number"
+                    value={newRackForm.heightMm}
+                    onChange={(event) => onNewRackFormChange({ ...newRackForm, heightMm: Number(event.target.value) })}
                   />
                 </label>
 
@@ -210,7 +275,10 @@ export function RackTabs({
                     onClick={() => {
                       onNewRackFormChange({
                         rackName: "",
-                        totalUnits: activeRack?.totalUnits ?? defaultRackCreateForm.totalUnits
+                        totalUnits: activeRack?.totalUnits ?? defaultRackCreateForm.totalUnits,
+                        widthMm: activeRack?.widthMm ?? defaultRackCreateForm.widthMm,
+                        depthMm: activeRack?.depthMm ?? defaultRackCreateForm.depthMm,
+                        heightMm: activeRack?.heightMm ?? defaultRackCreateForm.heightMm
                       });
                       setEditorMode(null);
                     }}
@@ -233,19 +301,54 @@ export function RackTabs({
               >
                 <label className="audit-edit-field plain">
                   <span>Rack Name</span>
-                  <input value={rackForm.rackName} onChange={(event) => onRackFormChange({ ...rackForm, rackName: event.target.value })} />
+                  <input
+                    disabled={readOnly}
+                    value={rackForm.rackName}
+                    onChange={(event) => onRackFormChange({ ...rackForm, rackName: event.target.value })}
+                  />
                 </label>
                 <label className="audit-edit-field plain">
-                  <span>Rack Height</span>
+                  <span>Rack Units</span>
                   <input
+                    disabled={readOnly}
                     min={1}
                     type="number"
                     value={rackForm.totalUnits}
                     onChange={(event) => onRackFormChange({ ...rackForm, totalUnits: Number(event.target.value) })}
                   />
                 </label>
+                <label className="audit-edit-field plain">
+                  <span>Width (mm)</span>
+                  <input
+                    disabled={readOnly}
+                    min={1}
+                    type="number"
+                    value={rackForm.widthMm}
+                    onChange={(event) => onRackFormChange({ ...rackForm, widthMm: Number(event.target.value) })}
+                  />
+                </label>
+                <label className="audit-edit-field plain">
+                  <span>Depth (mm)</span>
+                  <input
+                    disabled={readOnly}
+                    min={1}
+                    type="number"
+                    value={rackForm.depthMm}
+                    onChange={(event) => onRackFormChange({ ...rackForm, depthMm: Number(event.target.value) })}
+                  />
+                </label>
+                <label className="audit-edit-field plain">
+                  <span>Height (mm)</span>
+                  <input
+                    disabled={readOnly}
+                    min={1}
+                    type="number"
+                    value={rackForm.heightMm}
+                    onChange={(event) => onRackFormChange({ ...rackForm, heightMm: Number(event.target.value) })}
+                  />
+                </label>
                 <p className="rack-edit-note full-width">
-                  Rack height can only be reduced when no placed device would exceed the new height.
+                  Rack units can only be reduced when no placed device would exceed the new height in U.
                 </p>
 
                 <div className="audit-edit-actions full-width">
@@ -266,6 +369,66 @@ export function RackTabs({
                 </div>
               </form>
             )}
+          </section>
+        </div>
+      ) : null}
+
+      {deleteRackOpen && activeRack ? (
+        <div
+          className="audit-edit-modal-backdrop"
+          onClick={() => {
+            if (!saving) {
+              resetDeleteRackState();
+            }
+          }}
+          role="presentation"
+        >
+          <section
+            aria-modal="true"
+            className="panel rack-edit-modal"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className="audit-edit-topbar">
+              <div className="audit-edit-heading">
+                <p className="eyebrow">Delete Rack</p>
+                <h2>{activeRack.name}</h2>
+                <p className="audit-edit-copy">This permanently removes the rack and every device inside it. This action cannot be undone.</p>
+              </div>
+              <button className="ghost-button" disabled={saving} onClick={resetDeleteRackState} type="button">
+                Close
+              </button>
+            </div>
+
+            <div className="audit-delete-section">
+              <div className="audit-delete-copy">
+                <strong>Delete rack permanently</strong>
+                <p>{`Rack "${activeRack.name}" will be removed from audit "${audit.name}" together with all placed and staged devices.`}</p>
+              </div>
+              <label className="audit-edit-field plain full-width">
+                <span>Type Rack Name to confirm</span>
+                <input value={deleteRackNameInput} onChange={(event) => setDeleteRackNameInput(event.target.value)} />
+              </label>
+              <label className="audit-delete-checkbox">
+                <input checked={deleteRackConfirmed} type="checkbox" onChange={(event) => setDeleteRackConfirmed(event.target.checked)} />
+                <span>I understand that this deletion cannot be reversed.</span>
+              </label>
+              <div className="audit-edit-actions">
+                <button className="ghost-button" disabled={saving} onClick={resetDeleteRackState} type="button">
+                  Cancel
+                </button>
+                <button
+                  className="ghost-button danger"
+                  disabled={saving || deleteRackNameInput.trim() !== activeRack.name || !deleteRackConfirmed}
+                  onClick={() => {
+                    void handleRackDelete();
+                  }}
+                  type="button"
+                >
+                  Delete rack permanently
+                </button>
+              </div>
+            </div>
           </section>
         </div>
       ) : null}

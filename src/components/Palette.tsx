@@ -5,6 +5,7 @@ import { getDeviceIconUrl } from "../deviceIcons";
 interface PaletteProps {
   templates: DeviceTemplate[];
   collapsed: boolean;
+  disabled?: boolean;
 }
 
 function formatTemplateType(templateType: string): string {
@@ -14,7 +15,7 @@ function formatTemplateType(templateType: string): string {
     .join("/");
 }
 
-export function Palette({ templates, collapsed }: PaletteProps) {
+export function Palette({ templates, collapsed, disabled = false }: PaletteProps) {
   const templatesByType = useMemo(
     () =>
       templates.reduce<Record<string, DeviceTemplate[]>>((groups, template) => {
@@ -52,7 +53,7 @@ export function Palette({ templates, collapsed }: PaletteProps) {
           <p className="eyebrow">Templates</p>
           <h2>Device Templates</h2>
         </div>
-        <span className="muted">Drag into the audit</span>
+        <span className="muted">{disabled ? "Completed audit is read-only" : "Drag into the audit"}</span>
       </div>
       <div className={collapsed ? "template-list compact hidden" : "template-list compact"}>
         {Object.entries(templatesByType).map(([templateType, group]) => (
@@ -66,8 +67,12 @@ export function Palette({ templates, collapsed }: PaletteProps) {
                 <article
                   className="template-card compact"
                   key={template.id}
-                  draggable
+                  draggable={!disabled}
                   onDragStart={(event) => {
+                    if (disabled) {
+                      event.preventDefault();
+                      return;
+                    }
                     event.dataTransfer.setData("application/x-aethercab-template", JSON.stringify(template));
                   }}
                 >

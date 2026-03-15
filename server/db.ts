@@ -61,6 +61,9 @@ export async function initializeDatabase(): Promise<void> {
       room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       total_units INTEGER NOT NULL,
+      width_mm INTEGER NOT NULL DEFAULT 600,
+      depth_mm INTEGER NOT NULL DEFAULT 1000,
+      height_mm INTEGER NOT NULL DEFAULT 2200,
       notes TEXT,
       UNIQUE(audit_id, name)
     );
@@ -144,6 +147,21 @@ export async function initializeDatabase(): Promise<void> {
   await pool.query(`
     ALTER TABLE racks
     ADD COLUMN IF NOT EXISTS audit_id INTEGER
+  `);
+
+  await pool.query(`
+    ALTER TABLE racks
+    ADD COLUMN IF NOT EXISTS width_mm INTEGER NOT NULL DEFAULT 600
+  `);
+
+  await pool.query(`
+    ALTER TABLE racks
+    ADD COLUMN IF NOT EXISTS depth_mm INTEGER NOT NULL DEFAULT 1000
+  `);
+
+  await pool.query(`
+    ALTER TABLE racks
+    ADD COLUMN IF NOT EXISTS height_mm INTEGER NOT NULL DEFAULT 2200
   `);
 
   await pool.query(`
@@ -372,6 +390,24 @@ export async function initializeDatabase(): Promise<void> {
     WHERE racks.audit_id = audits.id
   `);
 
+  await pool.query(`
+    UPDATE racks
+    SET width_mm = 600
+    WHERE width_mm IS NULL OR width_mm < 1
+  `);
+
+  await pool.query(`
+    UPDATE racks
+    SET depth_mm = 1000
+    WHERE depth_mm IS NULL OR depth_mm < 1
+  `);
+
+  await pool.query(`
+    UPDATE racks
+    SET height_mm = 2200
+    WHERE height_mm IS NULL OR height_mm < 1
+  `);
+
   await seedDatabase();
 }
 
@@ -442,8 +478,8 @@ async function seedDatabase(): Promise<void> {
   const auditId = auditResult.rows[0].id;
 
   const rackResult = await pool.query<{ id: number }>(
-    "INSERT INTO racks (audit_id, room_id, name, total_units, notes) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-    [auditId, roomId, "Rack A1", 47, null]
+    "INSERT INTO racks (audit_id, room_id, name, total_units, width_mm, depth_mm, height_mm, notes) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
+    [auditId, roomId, "Rack A1", 47, 600, 1000, 2200, null]
   );
   const rackId = rackResult.rows[0].id;
 

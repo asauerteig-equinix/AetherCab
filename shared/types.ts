@@ -51,6 +51,9 @@ export interface RackSummary {
   auditName: string;
   name: string;
   totalUnits: number;
+  widthMm: number;
+  depthMm: number;
+  heightMm: number;
 }
 
 export interface DeviceType {
@@ -157,6 +160,9 @@ export interface AuditCreateInput {
 export interface RackCreateInput {
   rackName: string;
   totalUnits: number;
+  widthMm: number;
+  depthMm: number;
+  heightMm: number;
 }
 
 export interface AuditUpdateInput {
@@ -171,6 +177,9 @@ export interface AuditUpdateInput {
 export interface RackUpdateInput {
   rackName: string;
   totalUnits: number;
+  widthMm: number;
+  depthMm: number;
+  heightMm: number;
 }
 
 export interface FeedbackInput {

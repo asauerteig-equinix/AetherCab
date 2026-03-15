@@ -21,6 +21,7 @@ interface RackCanvasProps {
   rack: RackDetail;
   activeRackView: RackViewMode;
   selectedDeviceId: number | null;
+  readOnly?: boolean;
   onSelectDevice(deviceId: number): void;
   onRackFaceChange(nextFace: RackViewMode): void;
   onTemplateDrop(targetRackFace: RackFace, unit: number, mountPosition: RackMountPosition, templatePayload: string): void;
@@ -50,6 +51,7 @@ interface RackFacePaneProps {
   rack: RackDetail;
   rackFace: RackFace;
   selectedDeviceId: number | null;
+  readOnly: boolean;
   previewPlacement: PreviewPlacement | null;
   draggingDevice: DraggingDeviceState | null;
   pduGuide: PduGuideState | null;
@@ -237,6 +239,7 @@ function RackFacePane({
   rack,
   rackFace,
   selectedDeviceId,
+  readOnly,
   previewPlacement,
   draggingDevice,
   pduGuide,
@@ -409,7 +412,7 @@ function RackFacePane({
                 }
                 data-origin-face={isMirroredFromOppositeFace ? device.rackFace : undefined}
                 style={getDeviceStyle(rack, device, rackWidth, facePduLanePositions)}
-                draggable
+                draggable={!readOnly}
                 onDragStart={(event) => onDeviceDragStart(rackFace, device, startUnit, endUnit, event)}
                 onDragEnd={onDeviceDragEnd}
                 onClick={() => onSelectDevice(device.id)}
@@ -449,6 +452,7 @@ export function RackCanvas({
   rack,
   activeRackView,
   selectedDeviceId,
+  readOnly = false,
   onSelectDevice,
   onRackFaceChange,
   onTemplateDrop,
@@ -475,6 +479,10 @@ export function RackCanvas({
   }
 
   function handleDragOver(rackFace: RackFace, rackWidth: number, event: DragEvent<HTMLDivElement>) {
+    if (readOnly) {
+      return;
+    }
+
     event.preventDefault();
     const hoveredUnit = getUnitFromPointer(event);
     const templatePayload = event.dataTransfer.getData("application/x-aethercab-template");
@@ -606,6 +614,10 @@ export function RackCanvas({
   }
 
   function handleDrop(rackFace: RackFace, rackWidth: number, event: DragEvent<HTMLDivElement>) {
+    if (readOnly) {
+      return;
+    }
+
     event.preventDefault();
     const hoveredUnit = getUnitFromPointer(event);
     const templatePayload = event.dataTransfer.getData("application/x-aethercab-template");
@@ -656,6 +668,10 @@ export function RackCanvas({
   }
 
   function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+    if (readOnly) {
+      return;
+    }
+
     const rackBounds = event.currentTarget.getBoundingClientRect();
     const isOutsideRack =
       event.clientX < rackBounds.left ||
@@ -675,6 +691,11 @@ export function RackCanvas({
     endUnit: number,
     event: DragEvent<HTMLButtonElement>
   ) {
+    if (readOnly) {
+      event.preventDefault();
+      return;
+    }
+
     const deviceBounds = event.currentTarget.getBoundingClientRect();
     const pointerOffsetY = clamp(event.clientY - deviceBounds.top, 0, deviceBounds.height - 1);
     const offsetUnitsFromTop = clamp(Math.floor(pointerOffsetY / slotHeight), 0, device.heightU - 1);
@@ -756,6 +777,7 @@ export function RackCanvas({
             rack={rack}
             rackFace={rackFace}
             selectedDeviceId={selectedDeviceId}
+            readOnly={readOnly}
             previewPlacement={previewPlacement}
             draggingDevice={draggingDevice}
             pduGuide={pduGuide}

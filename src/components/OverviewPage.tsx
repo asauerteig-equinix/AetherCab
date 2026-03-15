@@ -83,6 +83,7 @@ export function OverviewPage({
       value.toLowerCase().includes(query)
     );
   });
+  const recentAudits = visibleAudits.slice(0, 5);
 
   async function handleCreateAudit() {
     await onCreateAudit();
@@ -149,7 +150,7 @@ export function OverviewPage({
               <p className="eyebrow">Recent Audits</p>
               <h2>Latest documentation workspaces</h2>
             </div>
-            <span className="muted">{visibleAudits.length} visible</span>
+            <span className="muted">{`${recentAudits.length} of ${visibleAudits.length} shown`}</span>
           </div>
 
           <div className="overview-filter-bar">
@@ -179,10 +180,10 @@ export function OverviewPage({
           </div>
 
           <div className="overview-audit-list">
-            {visibleAudits.length === 0 ? (
+            {recentAudits.length === 0 ? (
               <div className="empty-state">No audits match the current search or status filter.</div>
             ) : (
-              visibleAudits.map((audit) => (
+              recentAudits.map((audit) => (
                 <article className={`overview-audit-card status-${audit.status}`} key={audit.id}>
                   <div className="overview-audit-main">
                     <div className="overview-audit-topline">
@@ -218,7 +219,7 @@ export function OverviewPage({
               <div className="audit-edit-heading">
                 <p className="eyebrow">New Audit</p>
                 <h2>Create audit</h2>
-                <p className="audit-edit-copy">The first rack is created automatically as `0101` with `47U`, and every new audit starts in status `Created`.</p>
+                <p className="audit-edit-copy">The first rack is created automatically as `0101` with `47U` and rack dimensions `600 x 1000 x 2200 mm`. Every new audit starts in status `Created`.</p>
               </div>
               <button className="ghost-button" onClick={() => setCreateModalOpen(false)} type="button">
                 Close

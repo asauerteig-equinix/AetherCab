@@ -1,6 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { createHash, timingSafeEqual } from "node:crypto";
 import type {
   AuditCreateInput,
   AuditUpdateInput,
@@ -15,6 +16,7 @@ import { initializeDatabase } from "./db.js";
 import { buildExcelExport, buildPdfExport } from "./exporters.js";
 import { sendFeedbackEmail } from "./feedback.js";
 import {
+  cloneAudit,
   createAudit,
   createDeviceType,
   createRackInAudit,
@@ -31,6 +33,7 @@ import {
   listAudits,
   listDeviceTypes,
   listDeviceTemplates,
+  reopenAudit,
   updateAudit,
   updateDeviceType,
   updateDeviceTemplate,
@@ -39,6 +42,70 @@ import {
 } from "./repository.js";
 
 type AsyncRoute = (request: Request, response: Response, next: NextFunction) => Promise<void>;
+
+const adminCookieName = "aethercab_admin_session";
+
+function getAdminAccessKey(): string {
+  return process.env.ADMIN_ACCESS_KEY ?? "aethercab-admin";
+}
+
+function getAdminSessionToken(): string {
+  return createHash("sha256").update(getAdminAccessKey()).digest("hex");
+}
+
+function parseCookies(request: Request): Record<string, string> {
+  const cookieHeader = request.headers.cookie;
+  if (!cookieHeader) {
+    return {};
+  }
+
+  return cookieHeader.split(";").reduce<Record<string, string>>((cookies, entry) => {
+    const [rawKey, ...rawValue] = entry.trim().split("=");
+    if (!rawKey) {
+      return cookies;
+    }
+
+    cookies[rawKey] = decodeURIComponent(rawValue.join("="));
+    return cookies;
+  }, {});
+}
+
+function isAdminAuthenticated(request: Request): boolean {
+  const token = parseCookies(request)[adminCookieName];
+  if (!token) {
+    return false;
+  }
+
+  const expectedToken = getAdminSessionToken();
+  const tokenBuffer = Buffer.from(token);
+  const expectedBuffer = Buffer.from(expectedToken);
+
+  if (tokenBuffer.length !== expectedBuffer.length) {
+    return false;
+  }
+
+  return timingSafeEqual(tokenBuffer, expectedBuffer);
+}
+
+function setAdminCookie(response: Response): void {
+  response.setHeader(
+    "Set-Cookie",
+    `${adminCookieName}=${encodeURIComponent(getAdminSessionToken())}; Path=/; HttpOnly; SameSite=Lax; Max-Age=28800`
+  );
+}
+
+function clearAdminCookie(response: Response): void {
+  response.setHeader("Set-Cookie", `${adminCookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
+}
+
+function requireAdmin(request: Request, response: Response, next: NextFunction): void {
+  if (!isAdminAuthenticated(request)) {
+    response.status(403).json({ error: "Admin access required." });
+    return;
+  }
+
+  next();
+}
 
 function asyncRoute(handler: AsyncRoute) {
   return (request: Request, response: Response, next: NextFunction) => {
@@ -53,6 +120,30 @@ async function bootstrap(): Promise<void> {
   const clientDistPath = resolve(process.cwd(), "dist", "client");
 
   app.use(express.json());
+
+  app.get("/api/admin/session", (request, response) => {
+    response.json({ authenticated: isAdminAuthenticated(request) });
+  });
+
+  app.post(
+    "/api/admin/session",
+    (request, response) => {
+      const body = request.body as { accessKey?: unknown };
+      const accessKey = typeof body.accessKey === "string" ? body.accessKey : "";
+      if (accessKey !== getAdminAccessKey()) {
+        response.status(401).json({ error: "Invalid admin access key." });
+        return;
+      }
+
+      setAdminCookie(response);
+      response.status(204).send();
+    }
+  );
+
+  app.delete("/api/admin/session", (_request, response) => {
+    clearAdminCookie(response);
+    response.status(204).send();
+  });
 
   app.get("/api/health", (_request, response) => {
     response.json({ status: "ok" });
@@ -97,6 +188,13 @@ async function bootstrap(): Promise<void> {
     "/api/audits/:auditId",
     asyncRoute(async (request, response) => {
       response.json(await updateAudit(Number(request.params.auditId), request.body as AuditUpdateInput));
+    })
+  );
+
+  app.post(
+    "/api/audits/:auditId/clone",
+    asyncRoute(async (request, response) => {
+      response.status(201).json(await cloneAudit(Number(request.params.auditId)));
     })
   );
 
@@ -152,6 +250,7 @@ async function bootstrap(): Promise<void> {
 
   app.post(
     "/api/device-types",
+    requireAdmin,
     asyncRoute(async (request, response) => {
       response.status(201).json(await createDeviceType(request.body as DeviceTypeInput));
     })
@@ -159,6 +258,7 @@ async function bootstrap(): Promise<void> {
 
   app.put(
     "/api/device-types/:deviceTypeId",
+    requireAdmin,
     asyncRoute(async (request, response) => {
       response.json(await updateDeviceType(Number(request.params.deviceTypeId), request.body as DeviceTypeInput));
     })
@@ -166,6 +266,7 @@ async function bootstrap(): Promise<void> {
 
   app.delete(
     "/api/device-types/:deviceTypeId",
+    requireAdmin,
     asyncRoute(async (request, response) => {
       await deleteDeviceType(Number(request.params.deviceTypeId));
       response.status(204).send();
@@ -181,6 +282,7 @@ async function bootstrap(): Promise<void> {
 
   app.post(
     "/api/device-templates",
+    requireAdmin,
     asyncRoute(async (request, response) => {
       response.status(201).json(await createDeviceTemplate(request.body as DeviceTemplateInput));
     })
@@ -188,6 +290,7 @@ async function bootstrap(): Promise<void> {
 
   app.put(
     "/api/device-templates/:templateId",
+    requireAdmin,
     asyncRoute(async (request, response) => {
       response.json(await updateDeviceTemplate(Number(request.params.templateId), request.body as DeviceTemplateInput));
     })
@@ -195,9 +298,18 @@ async function bootstrap(): Promise<void> {
 
   app.delete(
     "/api/device-templates/:templateId",
+    requireAdmin,
     asyncRoute(async (request, response) => {
       await deleteDeviceTemplate(Number(request.params.templateId));
       response.status(204).send();
+    })
+  );
+
+  app.post(
+    "/api/admin/audits/:auditId/reopen",
+    requireAdmin,
+    asyncRoute(async (request, response) => {
+      response.json(await reopenAudit(Number(request.params.auditId)));
     })
   );
 
@@ -275,10 +387,14 @@ async function bootstrap(): Promise<void> {
     const statusCode =
       lowerMessage.includes("not found")
         ? 404
+        : lowerMessage.includes("admin access")
+          ? 403
         : lowerMessage.includes("overlap") ||
             lowerMessage.includes("required") ||
             lowerMessage.includes("at least") ||
-            lowerMessage.includes("cannot")
+            lowerMessage.includes("cannot") ||
+            lowerMessage.includes("read-only") ||
+            lowerMessage.includes("greater than 0")
           ? 400
           : 500;
 

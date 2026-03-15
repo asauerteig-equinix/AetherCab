@@ -27,6 +27,7 @@ import type {
   RackUpdateInput
 } from "../shared/types.js";
 import { pool } from "./db.js";
+import type { PoolClient } from "pg";
 
 interface AuditSummaryRow {
   id: number;
@@ -48,6 +49,9 @@ interface RackSummaryRow {
   audit_name: string;
   name: string;
   total_units: number;
+  width_mm: number;
+  depth_mm: number;
+  height_mm: number;
 }
 
 interface RackDetailRow extends RackSummaryRow {
@@ -125,7 +129,10 @@ function mapRackSummary(row: RackSummaryRow): RackSummary {
     auditId: row.audit_id,
     auditName: row.audit_name,
     name: row.name,
-    totalUnits: row.total_units
+    totalUnits: row.total_units,
+    widthMm: row.width_mm,
+    depthMm: row.depth_mm,
+    heightMm: row.height_mm
   };
 }
 
@@ -292,6 +299,9 @@ async function getRackBase(rackId: number): Promise<RackDetailRow | null> {
         racks.audit_id,
         racks.name,
         racks.total_units,
+        racks.width_mm,
+        racks.depth_mm,
+        racks.height_mm,
         audits.name AS audit_name,
         audits.sales_order,
         audits.status,
@@ -311,6 +321,149 @@ async function getRackBase(rackId: number): Promise<RackDetailRow | null> {
   );
 
   return result.rows[0] ?? null;
+}
+
+async function getAuditBase(auditId: number): Promise<AuditSummaryRow | null> {
+  const result = await pool.query<AuditSummaryRow>(
+    `
+      SELECT
+        audits.id,
+        audits.name,
+        audits.sales_order,
+        audits.status,
+        audits.created_at,
+        audits.notes,
+        rooms.id AS room_id,
+        rooms.name AS room_name,
+        sites.id AS site_id,
+        sites.name AS site_name,
+        COUNT(racks.id) AS rack_count
+      FROM audits
+      INNER JOIN rooms ON rooms.id = audits.room_id
+      INNER JOIN sites ON sites.id = rooms.site_id
+      LEFT JOIN racks ON racks.audit_id = audits.id
+      WHERE audits.id = $1
+      GROUP BY audits.id, rooms.id, sites.id
+    `,
+    [auditId]
+  );
+
+  return result.rows[0] ?? null;
+}
+
+async function getAuditStatus(auditId: number): Promise<AuditSummary["status"] | null> {
+  const result = await pool.query<{ status: AuditSummary["status"] }>("SELECT status FROM audits WHERE id = $1", [auditId]);
+  return result.rows[0]?.status ?? null;
+}
+
+async function getAuditIdForRack(rackId: number): Promise<number | null> {
+  const result = await pool.query<{ audit_id: number }>("SELECT audit_id FROM racks WHERE id = $1", [rackId]);
+  return result.rows[0]?.audit_id ?? null;
+}
+
+async function assertAuditEditable(auditId: number): Promise<void> {
+  const status = await getAuditStatus(auditId);
+  if (status === null) {
+    throw new Error("Audit not found.");
+  }
+
+  if (status === "completed") {
+    throw new Error("Completed audits are read-only. Create a new audit based on this audit to continue.");
+  }
+}
+
+async function duplicateAuditData(client: PoolClient, sourceAudit: AuditDetail, nextAuditId: number, roomId: number): Promise<void> {
+  const rackIdMap = new Map<number, number>();
+
+  for (const rack of sourceAudit.racks) {
+    const sourceRack = await getRack(rack.id);
+    if (!sourceRack) {
+      continue;
+    }
+
+    const rackResult = await client.query<{ id: number }>(
+      `
+        INSERT INTO racks (audit_id, room_id, name, total_units, width_mm, depth_mm, height_mm, notes)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)
+        RETURNING id
+      `,
+      [nextAuditId, roomId, sourceRack.name, sourceRack.totalUnits, sourceRack.widthMm, sourceRack.depthMm, sourceRack.heightMm]
+    );
+
+    rackIdMap.set(sourceRack.id, rackResult.rows[0].id);
+  }
+
+  for (const rack of sourceAudit.racks) {
+    const sourceRack = await getRack(rack.id);
+    const nextRackId = rackIdMap.get(rack.id);
+    if (!sourceRack || nextRackId === undefined) {
+      continue;
+    }
+
+    for (const device of sourceRack.devices) {
+      await client.query(
+        `
+          INSERT INTO rack_devices (
+            rack_id,
+            template_id,
+            placement_type,
+            rack_face,
+            mount_position,
+            blocks_both_faces,
+            allow_shared_depth,
+            start_unit,
+            height_u,
+            icon_key,
+            name,
+            manufacturer,
+            model,
+            serial_number,
+            hostname,
+            notes,
+            storage_location,
+            updated_at
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP)
+        `,
+        [
+          nextRackId,
+          device.templateId,
+          device.placementType,
+          device.rackFace,
+          device.mountPosition,
+          device.blocksBothFaces,
+          device.allowSharedDepth,
+          device.startUnit,
+          device.heightU,
+          device.iconKey,
+          device.name,
+          device.manufacturer,
+          device.model,
+          device.serialNumber,
+          device.hostname,
+          device.notes,
+          device.storageLocation
+        ]
+      );
+    }
+  }
+}
+
+async function getNextClonedAuditName(roomId: number, baseName: string): Promise<string> {
+  const candidateBase = `${baseName} Copy`;
+  const existing = await pool.query<{ name: string }>("SELECT name FROM audits WHERE room_id = $1", [roomId]);
+  const existingNames = new Set(existing.rows.map((row) => row.name));
+
+  if (!existingNames.has(candidateBase)) {
+    return candidateBase;
+  }
+
+  let suffix = 2;
+  while (existingNames.has(`${candidateBase} ${suffix}`)) {
+    suffix += 1;
+  }
+
+  return `${candidateBase} ${suffix}`;
 }
 
 async function deviceTypeExists(key: string): Promise<boolean> {
@@ -363,31 +516,7 @@ export async function listAudits(): Promise<AuditSummary[]> {
 }
 
 export async function getAudit(auditId: number): Promise<AuditDetail | null> {
-  const auditResult = await pool.query<AuditSummaryRow>(
-    `
-      SELECT
-        audits.id,
-        audits.name,
-        audits.sales_order,
-        audits.status,
-        audits.created_at,
-        audits.notes,
-        rooms.id AS room_id,
-        rooms.name AS room_name,
-        sites.id AS site_id,
-        sites.name AS site_name,
-        COUNT(racks.id) AS rack_count
-      FROM audits
-      INNER JOIN rooms ON rooms.id = audits.room_id
-      INNER JOIN sites ON sites.id = rooms.site_id
-      LEFT JOIN racks ON racks.audit_id = audits.id
-      WHERE audits.id = $1
-      GROUP BY audits.id, rooms.id, sites.id
-    `,
-    [auditId]
-  );
-
-  const auditRow = auditResult.rows[0];
+  const auditRow = await getAuditBase(auditId);
   if (!auditRow) {
     return null;
   }
@@ -399,7 +528,10 @@ export async function getAudit(auditId: number): Promise<AuditDetail | null> {
         racks.audit_id,
         audits.name AS audit_name,
         racks.name,
-        racks.total_units
+        racks.total_units,
+        racks.width_mm,
+        racks.depth_mm,
+        racks.height_mm
       FROM racks
       INNER JOIN audits ON audits.id = racks.audit_id
       WHERE racks.audit_id = $1
@@ -449,6 +581,9 @@ export async function getRack(rackId: number): Promise<RackDetail | null> {
     auditName: rackBase.audit_name,
     name: rackBase.name,
     totalUnits: rackBase.total_units,
+    widthMm: rackBase.width_mm,
+    depthMm: rackBase.depth_mm,
+    heightMm: rackBase.height_mm,
     devices: sortRackDevices(deviceResult.rows.map(mapRackDevice))
   };
 }
@@ -483,10 +618,10 @@ export async function createAudit(input: AuditCreateInput): Promise<AuditDetail>
 
   await pool.query(
     `
-      INSERT INTO racks (audit_id, room_id, name, total_units, notes)
-      VALUES ($1, $2, $3, $4, NULL)
+      INSERT INTO racks (audit_id, room_id, name, total_units, width_mm, depth_mm, height_mm, notes)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)
     `,
-    [auditId, roomId, initialRackName, input.initialRackUnits]
+    [auditId, roomId, initialRackName, input.initialRackUnits, 600, 1000, 2200]
   );
 
   const audit = await getAudit(auditId);
@@ -512,6 +647,10 @@ export async function updateAudit(auditId: number, input: AuditUpdateInput): Pro
     throw new Error("Audit not found.");
   }
 
+  if (existingAudit.status === "completed") {
+    throw new Error("Completed audits are read-only. Create a new audit based on this audit to continue.");
+  }
+
   const siteId = await getOrCreateSiteId(siteName);
   const roomId = await getOrCreateRoomId(siteId, roomName);
 
@@ -535,6 +674,7 @@ export async function updateAudit(auditId: number, input: AuditUpdateInput): Pro
 }
 
 export async function deleteAudit(auditId: number): Promise<void> {
+  await assertAuditEditable(auditId);
   const result = await pool.query<{ id: number }>("DELETE FROM audits WHERE id = $1 RETURNING id", [auditId]);
 
   if (result.rows.length === 0) {
@@ -543,6 +683,7 @@ export async function deleteAudit(auditId: number): Promise<void> {
 }
 
 export async function createRackInAudit(auditId: number, input: RackCreateInput): Promise<RackDetail> {
+  await assertAuditEditable(auditId);
   const audit = await getAudit(auditId);
   if (!audit) {
     throw new Error("Audit not found.");
@@ -557,13 +698,17 @@ export async function createRackInAudit(auditId: number, input: RackCreateInput)
     throw new Error("Rack must have at least 1U.");
   }
 
+  if (input.widthMm < 1 || input.depthMm < 1 || input.heightMm < 1) {
+    throw new Error("Rack dimensions must be greater than 0 mm.");
+  }
+
   const result = await pool.query<{ id: number }>(
     `
-      INSERT INTO racks (audit_id, room_id, name, total_units, notes)
-      VALUES ($1, $2, $3, $4, NULL)
+      INSERT INTO racks (audit_id, room_id, name, total_units, width_mm, depth_mm, height_mm, notes)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)
       RETURNING id
     `,
-    [auditId, audit.roomId, rackName, input.totalUnits]
+    [auditId, audit.roomId, rackName, input.totalUnits, input.widthMm, input.depthMm, input.heightMm]
   );
 
   const rack = await getRack(result.rows[0].id);
@@ -575,6 +720,12 @@ export async function createRackInAudit(auditId: number, input: RackCreateInput)
 }
 
 export async function updateRack(rackId: number, input: RackUpdateInput): Promise<RackDetail> {
+  const auditId = await getAuditIdForRack(rackId);
+  if (auditId === null) {
+    throw new Error("Rack not found.");
+  }
+
+  await assertAuditEditable(auditId);
   const rackName = input.rackName.trim();
   if (!rackName) {
     throw new Error("Rack name is required.");
@@ -582,6 +733,10 @@ export async function updateRack(rackId: number, input: RackUpdateInput): Promis
 
   if (input.totalUnits < 1) {
     throw new Error("Rack must have at least 1U.");
+  }
+
+  if (input.widthMm < 1 || input.depthMm < 1 || input.heightMm < 1) {
+    throw new Error("Rack dimensions must be greater than 0 mm.");
   }
 
   const existingRack = await getRack(rackId);
@@ -604,10 +759,10 @@ export async function updateRack(rackId: number, input: RackUpdateInput): Promis
   await pool.query(
     `
       UPDATE racks
-      SET name = $1, total_units = $2
-      WHERE id = $3
+      SET name = $1, total_units = $2, width_mm = $3, depth_mm = $4, height_mm = $5
+      WHERE id = $6
     `,
-    [rackName, input.totalUnits, rackId]
+    [rackName, input.totalUnits, input.widthMm, input.depthMm, input.heightMm, rackId]
   );
 
   const updatedRack = await getRack(rackId);
@@ -619,11 +774,12 @@ export async function updateRack(rackId: number, input: RackUpdateInput): Promis
 }
 
 export async function deleteRack(rackId: number): Promise<void> {
-  const auditResult = await pool.query<{ audit_id: number }>("SELECT audit_id FROM racks WHERE id = $1", [rackId]);
-  const auditId = auditResult.rows[0]?.audit_id;
+  const auditId = await getAuditIdForRack(rackId);
   if (!auditId) {
     throw new Error("Rack not found.");
   }
+
+  await assertAuditEditable(auditId);
 
   const rackCountResult = await pool.query<{ count: string }>("SELECT COUNT(*) AS count FROM racks WHERE audit_id = $1", [auditId]);
   if (Number(rackCountResult.rows[0]?.count ?? 0) <= 1) {
@@ -835,6 +991,12 @@ export async function deleteDeviceTemplate(templateId: number): Promise<void> {
 }
 
 export async function createRackDevice(rackId: number, input: RackDeviceInput): Promise<RackDevice> {
+  const auditId = await getAuditIdForRack(rackId);
+  if (auditId === null) {
+    throw new Error("Rack not found.");
+  }
+
+  await assertAuditEditable(auditId);
   const normalized = normalizeDeviceInput(input);
   await validateRackDevice(rackId, normalized);
 
@@ -887,6 +1049,12 @@ export async function createRackDevice(rackId: number, input: RackDeviceInput): 
 }
 
 export async function updateRackDevice(rackId: number, deviceId: number, input: RackDeviceInput): Promise<RackDevice> {
+  const auditId = await getAuditIdForRack(rackId);
+  if (auditId === null) {
+    throw new Error("Rack not found.");
+  }
+
+  await assertAuditEditable(auditId);
   const existingResult = await pool.query<RackDeviceRow>(
     "SELECT * FROM rack_devices WHERE id = $1 AND rack_id = $2",
     [deviceId, rackId]
@@ -1026,8 +1194,79 @@ export async function updateRackDevice(rackId: number, deviceId: number, input: 
 }
 
 export async function deleteRackDevice(rackId: number, deviceId: number): Promise<void> {
+  const auditId = await getAuditIdForRack(rackId);
+  if (auditId === null) {
+    throw new Error("Rack not found.");
+  }
+
+  await assertAuditEditable(auditId);
   const result = await pool.query("DELETE FROM rack_devices WHERE id = $1 AND rack_id = $2", [deviceId, rackId]);
   if ((result.rowCount ?? 0) === 0) {
     throw new Error("Rack device not found.");
   }
+}
+
+export async function cloneAudit(auditId: number): Promise<AuditDetail> {
+  const sourceAudit = await getAudit(auditId);
+  if (!sourceAudit) {
+    throw new Error("Audit not found.");
+  }
+
+  const roomId = sourceAudit.roomId;
+  const nextAuditName = await getNextClonedAuditName(roomId, sourceAudit.name);
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const auditResult = await client.query<{ id: number }>(
+      `
+        INSERT INTO audits (room_id, name, sales_order, status, notes)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING id
+      `,
+      [
+        roomId,
+        nextAuditName,
+        sourceAudit.salesOrder,
+        "created",
+        sourceAudit.notes ? `Based on ${sourceAudit.name}. ${sourceAudit.notes}` : `Based on ${sourceAudit.name}.`
+      ]
+    );
+
+    const nextAuditId = auditResult.rows[0].id;
+    await duplicateAuditData(client, sourceAudit, nextAuditId, roomId);
+    await client.query("COMMIT");
+
+    const clonedAudit = await getAudit(nextAuditId);
+    if (!clonedAudit) {
+      throw new Error("Failed to load cloned audit.");
+    }
+
+    return clonedAudit;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function reopenAudit(auditId: number): Promise<AuditDetail> {
+  const audit = await getAuditBase(auditId);
+  if (!audit) {
+    throw new Error("Audit not found.");
+  }
+
+  if (audit.status !== "completed") {
+    throw new Error("Only completed audits can be reopened.");
+  }
+
+  await pool.query("UPDATE audits SET status = 'in-progress' WHERE id = $1", [auditId]);
+  const reopenedAudit = await getAudit(auditId);
+  if (!reopenedAudit) {
+    throw new Error("Failed to load reopened audit.");
+  }
+
+  return reopenedAudit;
 }

@@ -299,7 +299,7 @@ a {
 .admin-stack {
   display: grid;
   gap: 18px;
-  width: min(1040px, 100%);
+  width: min(920px, 100%);
   margin: 22px auto 0;
 }
 
@@ -503,7 +503,7 @@ a {
 
 .admin-template-list {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .admin-template-groups {
@@ -602,7 +602,7 @@ a {
   justify-content: space-between;
   align-items: start;
   gap: 16px;
-  padding: 16px;
+  padding: 12px 14px;
   border: 1px solid var(--line-soft);
   border-radius: 12px;
   background: rgba(188, 175, 159, 0.04);
@@ -624,7 +624,7 @@ a {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid var(--line-soft);
   border-radius: 12px;
   background: rgba(188, 175, 159, 0.04);
@@ -663,6 +663,7 @@ a {
 
 .admin-template-card span {
   color: var(--text-secondary);
+  font-size: 0.82rem;
 }
 
 .overview-audit-card strong {
@@ -677,6 +678,10 @@ a {
 
 .admin-create-panel {
   padding-bottom: 18px;
+}
+
+.admin-inline-toggle {
+  width: fit-content;
 }
 
 .admin-create-body {
@@ -883,6 +888,10 @@ a {
   background:
     linear-gradient(180deg, rgba(120, 144, 166, 0.08), rgba(255, 255, 255, 0.98) 32%),
     rgba(248, 250, 252, 0.98);
+}
+
+.template-edit-modal {
+  width: min(860px, 100%);
 }
 
 .feedback-modal {
@@ -1944,6 +1953,15 @@ textarea {
   border-radius: 18px;
   background: rgba(112, 34, 22, 0.34);
   color: #ffd6cb;
+}
+
+.info-banner {
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid rgba(79, 111, 134, 0.2);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--text-secondary);
 }
 
 @media (max-width: 1180px) {

@@ -7,17 +7,21 @@ interface StagingAreaProps {
   devices: RackDevice[];
   selectedDeviceId: number | null;
   saving: boolean;
+  disabled?: boolean;
   onSelectDevice(deviceId: number): void;
   onStageDevice(deviceId: number): void;
 }
 
-export function StagingArea({ devices, selectedDeviceId, saving, onSelectDevice, onStageDevice }: StagingAreaProps) {
+export function StagingArea({ devices, selectedDeviceId, saving, disabled = false, onSelectDevice, onStageDevice }: StagingAreaProps) {
   const [dragActive, setDragActive] = useState(false);
   const isCompact = devices.length === 0 && !dragActive;
 
   function handleDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     setDragActive(false);
+    if (disabled) {
+      return;
+    }
     const deviceId = Number(event.dataTransfer.getData("application/x-aethercab-device"));
     if (!Number.isNaN(deviceId)) {
       onStageDevice(deviceId);
@@ -56,7 +60,13 @@ export function StagingArea({ devices, selectedDeviceId, saving, onSelectDevice,
         onDrop={handleDrop}
       >
         <strong>Drop device here</strong>
-        <span>{isCompact ? "Park devices here temporarily." : "Drag devices into the temporary tray to park them without losing their data."}</span>
+        <span>
+          {disabled
+            ? "Completed audits are read-only."
+            : isCompact
+              ? "Park devices here temporarily."
+              : "Drag devices into the temporary tray to park them without losing their data."}
+        </span>
       </div>
 
       <div className={isCompact ? "spare-list hidden" : "spare-list"}>
@@ -67,10 +77,14 @@ export function StagingArea({ devices, selectedDeviceId, saving, onSelectDevice,
             <article
               data-device-selection="true"
               className={device.id === selectedDeviceId ? "spare-card selected" : "spare-card"}
-              draggable
+              draggable={!disabled}
               key={device.id}
               onClick={() => onSelectDevice(device.id)}
               onDragStart={(event) => {
+                if (disabled) {
+                  event.preventDefault();
+                  return;
+                }
                 event.dataTransfer.setData("application/x-aethercab-device", String(device.id));
                 event.dataTransfer.effectAllowed = "move";
               }}

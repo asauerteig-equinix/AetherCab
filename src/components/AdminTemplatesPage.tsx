@@ -1,9 +1,10 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { getDefaultIconKeyForTemplateType, getDeviceIconUrl } from "../deviceIcons";
-import type { DeviceType, DeviceTypeInput, DeviceTemplate, DeviceTemplateInput } from "../../shared/types";
+import type { AuditSummary, DeviceType, DeviceTypeInput, DeviceTemplate, DeviceTemplateInput } from "../../shared/types";
 import { DeviceIconPicker } from "./DeviceIconPicker";
 
 interface AdminTemplatesPageProps {
+  completedAudits: AuditSummary[];
   deviceTypes: DeviceType[];
   templates: DeviceTemplate[];
   deviceTypeForm: DeviceTypeInput;
@@ -17,6 +18,7 @@ interface AdminTemplatesPageProps {
   onDeleteDeviceType(deviceTypeId: number): void;
   onUpdateTemplate(templateId: number, next: DeviceTemplateInput): void;
   onDeleteTemplate(templateId: number): void;
+  onReopenAudit(auditId: number): void;
 }
 
 type AdminCreateMode = "template" | "device-type";
@@ -79,6 +81,7 @@ function getTemplatePlacementLabel(template: DeviceTemplate): string {
 }
 
 export function AdminTemplatesPage({
+  completedAudits,
   deviceTypes,
   templates,
   deviceTypeForm,
@@ -91,12 +94,18 @@ export function AdminTemplatesPage({
   onUpdateDeviceType,
   onDeleteDeviceType,
   onUpdateTemplate,
-  onDeleteTemplate
+  onDeleteTemplate,
+  onReopenAudit
 }: AdminTemplatesPageProps) {
   const [createOpen, setCreateOpen] = useState(false);
   const [createMode, setCreateMode] = useState<AdminCreateMode>("template");
+  const [deviceTypesOpen, setDeviceTypesOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [completedAuditsOpen, setCompletedAuditsOpen] = useState(false);
+  const [showCreateIcons, setShowCreateIcons] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
   const [editingForm, setEditingForm] = useState<DeviceTemplateInput | null>(null);
+  const [showEditIcons, setShowEditIcons] = useState(false);
   const [editingDeviceTypeId, setEditingDeviceTypeId] = useState<number | null>(null);
   const [editingDeviceTypeForm, setEditingDeviceTypeForm] = useState<DeviceTypeInput | null>(null);
 
@@ -195,7 +204,10 @@ export function AdminTemplatesPage({
                   </label>
                   <label className="full-width">
                     Icon
-                    <DeviceIconPicker value={form.iconKey} onChange={(next) => onFormChange({ ...form, iconKey: next })} />
+                    <button className="ghost-button admin-inline-toggle" onClick={() => setShowCreateIcons((current) => !current)} type="button">
+                      {showCreateIcons ? "Hide icons" : "Choose icon"}
+                    </button>
+                    {showCreateIcons ? <DeviceIconPicker value={form.iconKey} onChange={(next) => onFormChange({ ...form, iconKey: next })} /> : null}
                   </label>
                   <label>
                     Template name
@@ -295,39 +307,43 @@ export function AdminTemplatesPage({
               <p className="eyebrow">Device Types</p>
               <h2>Available types</h2>
             </div>
-            <span className="muted">{deviceTypes.length} types</span>
+            <button className="ghost-button" onClick={() => setDeviceTypesOpen((current) => !current)} type="button">
+              {deviceTypesOpen ? "Collapse" : `Show ${deviceTypes.length}`}
+            </button>
           </div>
 
-          <div className="admin-device-type-list">
-            {deviceTypes.map((deviceType) => {
-              const templateCount = templates.filter((template) => template.templateType === deviceType.key).length;
+          {deviceTypesOpen ? (
+            <div className="admin-device-type-list">
+              {deviceTypes.map((deviceType) => {
+                const templateCount = templates.filter((template) => template.templateType === deviceType.key).length;
 
-              return (
-                <article className="admin-device-type-card" key={deviceType.id}>
-                  <div>
-                    <strong>{deviceType.label}</strong>
-                    <span>{deviceType.key}</span>
-                    <span>{`${templateCount} template${templateCount === 1 ? "" : "s"}`}</span>
-                  </div>
-                  <div className="template-actions compact">
-                    <button
-                      className="ghost-button"
-                      onClick={() => {
-                        setEditingDeviceTypeId(deviceType.id);
-                        setEditingDeviceTypeForm(toDeviceTypeForm(deviceType));
-                      }}
-                      type="button"
-                    >
-                      Edit
-                    </button>
-                    <button className="ghost-button" disabled={saving} onClick={() => onDeleteDeviceType(deviceType.id)} type="button">
-                      Delete
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+                return (
+                  <article className="admin-device-type-card" key={deviceType.id}>
+                    <div>
+                      <strong>{deviceType.label}</strong>
+                      <span>{deviceType.key}</span>
+                      <span>{`${templateCount} template${templateCount === 1 ? "" : "s"}`}</span>
+                    </div>
+                    <div className="template-actions compact">
+                      <button
+                        className="ghost-button"
+                        onClick={() => {
+                          setEditingDeviceTypeId(deviceType.id);
+                          setEditingDeviceTypeForm(toDeviceTypeForm(deviceType));
+                        }}
+                        type="button"
+                      >
+                        Edit
+                      </button>
+                      <button className="ghost-button" disabled={saving} onClick={() => onDeleteDeviceType(deviceType.id)} type="button">
+                        Delete
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          ) : null}
         </section>
 
         <section className="panel overview-panel admin-templates-panel centered">
@@ -336,10 +352,13 @@ export function AdminTemplatesPage({
               <p className="eyebrow">Templates</p>
               <h2>Current templates</h2>
             </div>
-            <span className="muted">{templates.length} templates</span>
+            <button className="ghost-button" onClick={() => setTemplatesOpen((current) => !current)} type="button">
+              {templatesOpen ? "Collapse" : `Show ${templates.length}`}
+            </button>
           </div>
 
-          <div className="admin-template-groups">
+          {templatesOpen ? (
+            <div className="admin-template-groups">
             {templatesByType.map(({ deviceType, templates: groupedTemplates }) =>
               groupedTemplates.length > 0 ? (
                 <section className="admin-template-group" key={deviceType.id}>
@@ -363,6 +382,7 @@ export function AdminTemplatesPage({
                             onClick={() => {
                               setEditingTemplateId(template.id);
                               setEditingForm(toTemplateForm(template));
+                              setShowEditIcons(false);
                             }}
                             type="button"
                           >
@@ -400,6 +420,7 @@ export function AdminTemplatesPage({
                           onClick={() => {
                             setEditingTemplateId(template.id);
                             setEditingForm(toTemplateForm(template));
+                            setShowEditIcons(false);
                           }}
                           type="button"
                         >
@@ -414,7 +435,43 @@ export function AdminTemplatesPage({
                 </div>
               </section>
             ) : null}
+            </div>
+          ) : null}
+        </section>
+
+        <section className="panel admin-device-types-panel">
+          <div className="panel-header compact">
+            <div>
+              <p className="eyebrow">Completed Audits</p>
+              <h2>Admin reopen actions</h2>
+            </div>
+            <button className="ghost-button" onClick={() => setCompletedAuditsOpen((current) => !current)} type="button">
+              {completedAuditsOpen ? "Collapse" : `Show ${completedAudits.length}`}
+            </button>
           </div>
+
+          {completedAuditsOpen ? (
+            <div className="admin-device-type-list">
+              {completedAudits.length === 0 ? (
+                <div className="empty-state">No completed audits are available right now.</div>
+              ) : (
+                completedAudits.map((audit) => (
+                  <article className="admin-device-type-card" key={audit.id}>
+                    <div>
+                      <strong>{audit.name}</strong>
+                      <span>{`${audit.siteName} / ${audit.roomName}`}</span>
+                      <span>{`SO ${audit.salesOrder ?? "-"}`}</span>
+                    </div>
+                    <div className="template-actions compact">
+                      <button className="ghost-button" disabled={saving} onClick={() => onReopenAudit(audit.id)} type="button">
+                        Set to In Progress
+                      </button>
+                    </div>
+                  </article>
+                ))
+              )}
+            </div>
+          ) : null}
         </section>
       </main>
 
@@ -427,7 +484,7 @@ export function AdminTemplatesPage({
           }}
           role="presentation"
         >
-          <section className="panel audit-edit-modal" onClick={(event) => event.stopPropagation()} role="dialog">
+          <section className="panel audit-edit-modal template-edit-modal" onClick={(event) => event.stopPropagation()} role="dialog">
             <div className="audit-edit-topbar">
               <div className="audit-edit-heading">
                 <p className="eyebrow">Edit Template</p>
@@ -491,7 +548,10 @@ export function AdminTemplatesPage({
               </label>
               <label className="full-width">
                 Icon
-                <DeviceIconPicker value={editingForm.iconKey} onChange={(next) => setEditingForm({ ...editingForm, iconKey: next })} />
+                <button className="ghost-button admin-inline-toggle" onClick={() => setShowEditIcons((current) => !current)} type="button">
+                  {showEditIcons ? "Hide icons" : "Choose icon"}
+                </button>
+                {showEditIcons ? <DeviceIconPicker value={editingForm.iconKey} onChange={(next) => setEditingForm({ ...editingForm, iconKey: next })} /> : null}
               </label>
               <label>
                 Template name

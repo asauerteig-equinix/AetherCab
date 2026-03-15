@@ -84,12 +84,18 @@ const initialAuditUpdateForm: AuditUpdateInput = {
 
 const initialRackCreateForm: RackCreateInput = {
   rackName: "",
-  totalUnits: 47
+  totalUnits: 47,
+  widthMm: 600,
+  depthMm: 1000,
+  heightMm: 2200
 };
 
 const initialRackUpdateForm: RackUpdateInput = {
   rackName: "",
-  totalUnits: 47
+  totalUnits: 47,
+  widthMm: 600,
+  depthMm: 1000,
+  heightMm: 2200
 };
 
 const initialTemplateForm: DeviceTemplateInput = {
@@ -130,7 +136,10 @@ function toAuditUpdateForm(audit: AuditDetail): AuditUpdateInput {
 function toRackUpdateForm(rack: RackDetail): RackUpdateInput {
   return {
     rackName: rack.name,
-    totalUnits: rack.totalUnits
+    totalUnits: rack.totalUnits,
+    widthMm: rack.widthMm,
+    depthMm: rack.depthMm,
+    heightMm: rack.heightMm
   };
 }
 
@@ -187,6 +196,10 @@ export default function App() {
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [feedbackForm, setFeedbackForm] = useState<FeedbackInput>(initialFeedbackForm);
   const [sendingFeedback, setSendingFeedback] = useState(false);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [checkingAdminSession, setCheckingAdminSession] = useState(true);
+  const [adminAccessKey, setAdminAccessKey] = useState("");
+  const [authenticatingAdmin, setAuthenticatingAdmin] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -210,6 +223,10 @@ export default function App() {
       }
     })();
   }, [initialLocationState.auditId]);
+
+  useEffect(() => {
+    void refreshAdminSession();
+  }, []);
 
   useEffect(() => {
     function handlePopState() {
@@ -405,6 +422,18 @@ export default function App() {
     setDeviceTypes(await api.listDeviceTypes());
   }
 
+  async function refreshAdminSession() {
+    try {
+      setCheckingAdminSession(true);
+      const session = await api.getAdminSession();
+      setIsAdminAuthenticated(session.authenticated);
+    } catch {
+      setIsAdminAuthenticated(false);
+    } finally {
+      setCheckingAdminSession(false);
+    }
+  }
+
   async function refreshAuditList(selectAuditId?: number | null) {
     const auditList = await api.listAudits();
     setAudits(auditList);
@@ -460,7 +489,13 @@ export default function App() {
       const detail = await api.getRack(rackId);
       setRackDetail(detail);
       setRackForm(toRackUpdateForm(detail));
-      setNewRackForm((current) => ({ ...current, totalUnits: current.totalUnits || detail.totalUnits }));
+      setNewRackForm((current) => ({
+        ...current,
+        totalUnits: current.totalUnits || detail.totalUnits,
+        widthMm: current.widthMm || detail.widthMm,
+        depthMm: current.depthMm || detail.depthMm,
+        heightMm: current.heightMm || detail.heightMm
+      }));
       setSelectedDeviceId((current) => (current && detail.devices.some((device) => device.id === current) ? current : null));
       setError(null);
     } catch (loadError) {
@@ -470,9 +505,10 @@ export default function App() {
 
   const selectedDevice = rackDetail?.devices.find((device) => device.id === selectedDeviceId) ?? null;
   const stagedDevices = rackDetail?.devices.filter((device) => device.placementType === "spare") ?? [];
+  const isCompletedAudit = auditDetail?.status === "completed";
 
   async function handleTemplateDrop(targetFace: RackFace, unit: number, mountPosition: RackMountPosition, templatePayload: string) {
-    if (activeRackId === null || rackDetail === null) {
+    if (activeRackId === null || rackDetail === null || isCompletedAudit) {
       return;
     }
 
@@ -523,7 +559,7 @@ export default function App() {
   }
 
   async function handleDeviceMove(device: RackDevice, nextStartUnit: number, nextMountPosition: RackMountPosition, targetFace: RackFace) {
-    if (activeRackId === null) {
+    if (activeRackId === null || isCompletedAudit) {
       return;
     }
 
@@ -568,7 +604,7 @@ export default function App() {
   }
 
   async function handleInspectorChange(next: RackDeviceInput) {
-    if (activeRackId === null || selectedDevice === null) {
+    if (activeRackId === null || selectedDevice === null || isCompletedAudit) {
       return;
     }
 
@@ -597,7 +633,7 @@ export default function App() {
   }
 
   async function moveDeviceToStagingArea(device: RackDevice) {
-    if (activeRackId === null) {
+    if (activeRackId === null || isCompletedAudit) {
       return;
     }
 
@@ -624,7 +660,7 @@ export default function App() {
   }
 
   async function handleMoveDeviceToTray() {
-    if (activeRackId === null || selectedDevice === null) {
+    if (activeRackId === null || selectedDevice === null || isCompletedAudit) {
       return;
     }
 
@@ -646,7 +682,7 @@ export default function App() {
   }
 
   async function handleDeleteDevice() {
-    if (activeRackId === null || selectedDevice === null) {
+    if (activeRackId === null || selectedDevice === null || isCompletedAudit) {
       return;
     }
 
@@ -668,7 +704,7 @@ export default function App() {
   }
 
   async function handleUndoDelete() {
-    if (!recentlyDeletedDevice) {
+    if (!recentlyDeletedDevice || isCompletedAudit) {
       return;
     }
 
@@ -748,7 +784,7 @@ export default function App() {
   }
 
   async function handleStageDevice(deviceId: number) {
-    if (activeRackId === null || rackDetail === null) {
+    if (activeRackId === null || rackDetail === null || isCompletedAudit) {
       return;
     }
 
@@ -772,7 +808,7 @@ export default function App() {
   }
 
   async function handleAuditUpdate() {
-    if (activeAuditId === null) {
+    if (activeAuditId === null || isCompletedAudit) {
       return;
     }
 
@@ -792,7 +828,7 @@ export default function App() {
   }
 
   async function handleDeleteAudit() {
-    if (activeAuditId === null || auditDetail === null) {
+    if (activeAuditId === null || auditDetail === null || isCompletedAudit) {
       return;
     }
 
@@ -818,7 +854,7 @@ export default function App() {
   }
 
   async function handleRackUpdate() {
-    if (activeRackId === null) {
+    if (activeRackId === null || isCompletedAudit) {
       return;
     }
 
@@ -839,17 +875,12 @@ export default function App() {
   }
 
   async function handleDeleteRack() {
-    if (!auditDetail || activeRackId === null) {
+    if (!auditDetail || activeRackId === null || isCompletedAudit) {
       return;
     }
 
     const currentRack = auditDetail.racks.find((rack) => rack.id === activeRackId);
     if (!currentRack || auditDetail.racks.length <= 1) {
-      return;
-    }
-
-    const shouldDelete = window.confirm(`Delete rack "${currentRack.name}" from audit "${auditDetail.name}"?`);
-    if (!shouldDelete) {
       return;
     }
 
@@ -896,14 +927,20 @@ export default function App() {
   }
 
   async function handleCreateRack() {
-    if (activeAuditId === null) {
+    if (activeAuditId === null || isCompletedAudit) {
       return;
     }
 
     try {
       setSaving(true);
       const rack = await api.createRack(activeAuditId, newRackForm);
-      setNewRackForm({ ...initialRackCreateForm, totalUnits: rack.totalUnits });
+      setNewRackForm({
+        ...initialRackCreateForm,
+        totalUnits: rack.totalUnits,
+        widthMm: rack.widthMm,
+        depthMm: rack.depthMm,
+        heightMm: rack.heightMm
+      });
       await refreshActiveAudit(rack.id);
       await refreshAuditList(activeAuditId);
       setMessage(`${rack.name} was added to ${auditDetail?.name ?? "the audit"}.`);
@@ -917,6 +954,10 @@ export default function App() {
 
   async function handleCreateTemplate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!isAdminAuthenticated) {
+      return;
+    }
 
     try {
       setSaving(true);
@@ -933,6 +974,10 @@ export default function App() {
   }
 
   async function handleCreateDeviceType() {
+    if (!isAdminAuthenticated) {
+      return;
+    }
+
     try {
       setSaving(true);
       const deviceType = await api.createDeviceType(deviceTypeForm);
@@ -971,6 +1016,10 @@ export default function App() {
   }
 
   async function handleUpdateTemplate(templateId: number, next: DeviceTemplateInput) {
+    if (!isAdminAuthenticated) {
+      return;
+    }
+
     try {
       setSaving(true);
       const updatedTemplate = await api.updateTemplate(templateId, next);
@@ -985,6 +1034,10 @@ export default function App() {
   }
 
   async function handleUpdateDeviceType(deviceTypeId: number, next: DeviceTypeInput) {
+    if (!isAdminAuthenticated) {
+      return;
+    }
+
     try {
       setSaving(true);
       const updatedType = await api.updateDeviceType(deviceTypeId, next);
@@ -999,6 +1052,10 @@ export default function App() {
   }
 
   async function handleDeleteDeviceType(deviceTypeId: number) {
+    if (!isAdminAuthenticated) {
+      return;
+    }
+
     try {
       setSaving(true);
       await api.deleteDeviceType(deviceTypeId);
@@ -1013,6 +1070,10 @@ export default function App() {
   }
 
   async function handleDeleteTemplate(templateId: number) {
+    if (!isAdminAuthenticated) {
+      return;
+    }
+
     try {
       setSaving(true);
       await api.deleteTemplate(templateId);
@@ -1023,6 +1084,86 @@ export default function App() {
       setError(deleteError instanceof Error ? deleteError.message : "Template could not be deleted.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleCloneAudit() {
+    if (activeAuditId === null || auditDetail === null) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const clonedAudit = await api.cloneAudit(activeAuditId);
+      setAuditDetail(clonedAudit);
+      setAuditForm(toAuditUpdateForm(clonedAudit));
+      setActiveAuditId(clonedAudit.id);
+      setActiveRackId(clonedAudit.racks[0]?.id ?? null);
+      setActiveRackView("both");
+      await refreshAuditList(clonedAudit.id);
+      setMessage(`${clonedAudit.name} was created from ${auditDetail.name}.`);
+      setError(null);
+      navigate("/audits", { auditId: clonedAudit.id, rackId: clonedAudit.racks[0]?.id ?? null, rackView: "both" });
+    } catch (cloneError) {
+      setError(cloneError instanceof Error ? cloneError.message : "Audit could not be cloned.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleReopenAudit(auditId = activeAuditId) {
+    if (auditId === null || !isAdminAuthenticated) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const reopenedAudit = await api.reopenAudit(auditId);
+      if (activeAuditId === auditId) {
+        setAuditDetail(reopenedAudit);
+        setAuditForm(toAuditUpdateForm(reopenedAudit));
+      }
+      await refreshAuditList(activeAuditId ?? undefined);
+      setMessage(`${reopenedAudit.name} was set back to In Progress.`);
+      setError(null);
+    } catch (reopenError) {
+      setError(reopenError instanceof Error ? reopenError.message : "Audit could not be reopened.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAdminLogin() {
+    if (!adminAccessKey.trim()) {
+      setError("Enter the admin access key.");
+      return;
+    }
+
+    try {
+      setAuthenticatingAdmin(true);
+      await api.createAdminSession(adminAccessKey.trim());
+      await refreshAdminSession();
+      setAdminAccessKey("");
+      setError(null);
+      setMessage("Admin access granted.");
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : "Admin login failed.");
+    } finally {
+      setAuthenticatingAdmin(false);
+    }
+  }
+
+  async function handleAdminLogout() {
+    try {
+      await api.deleteAdminSession();
+      setIsAdminAuthenticated(false);
+      setError(null);
+      setMessage("Admin access closed.");
+      if (currentPath === "/admin") {
+        navigate("/");
+      }
+    } catch (logoutError) {
+      setError(logoutError instanceof Error ? logoutError.message : "Admin logout failed.");
     }
   }
 
@@ -1053,6 +1194,11 @@ export default function App() {
           <span>Customer Audit Documentation</span>
         </div>
         <div className="app-nav-spacer">
+          {isAdminAuthenticated ? (
+            <button className="nav-link" onClick={() => void handleAdminLogout()} type="button">
+              Admin Logout
+            </button>
+          ) : null}
           <button className="nav-link nav-feedback-button" onClick={() => setFeedbackModalOpen(true)} type="button">
             <span className="feedback-button-icon">
               <FeedbackNavIcon />
@@ -1079,14 +1225,16 @@ export default function App() {
             audit={auditDetail}
             form={auditForm}
             saving={saving}
+            isAdmin={isAdminAuthenticated}
             onFormChange={setAuditForm}
             onSave={handleAuditUpdate}
+            onCloneAudit={handleCloneAudit}
+            onReopenAudit={handleReopenAudit}
             onDeleteAudit={() => {
               void handleDeleteAudit();
             }}
           />
           <div className="hero-actions">
-            <span className="status-pill">{saving ? "Saving database changes" : message}</span>
             {auditDetail ? (
               <div className="export-actions">
                 <a href={api.excelExportUrl(auditDetail.id)}>Export Excel</a>
@@ -1098,6 +1246,7 @@ export default function App() {
       ) : null}
 
       {error ? <div className="error-banner">{error}</div> : null}
+      {!error && message ? <div className="info-banner">{message}</div> : null}
 
       {currentPath === "/" ? (
         <OverviewPage
@@ -1113,33 +1262,81 @@ export default function App() {
           }}
         />
       ) : currentPath === "/admin" ? (
-        <AdminTemplatesPage
-          deviceTypes={deviceTypes}
-          templates={templates}
-          deviceTypeForm={deviceTypeForm}
-          form={templateForm}
-          saving={saving}
-          onDeviceTypeFormChange={setDeviceTypeForm}
-          onFormChange={setTemplateForm}
-          onCreateDeviceType={() => {
-            void handleCreateDeviceType();
-          }}
-          onCreateTemplate={(event) => {
-            void handleCreateTemplate(event);
-          }}
-          onUpdateDeviceType={(deviceTypeId, next) => {
-            void handleUpdateDeviceType(deviceTypeId, next);
-          }}
-          onDeleteDeviceType={(deviceTypeId) => {
-            void handleDeleteDeviceType(deviceTypeId);
-          }}
-          onUpdateTemplate={(templateId, next) => {
-            void handleUpdateTemplate(templateId, next);
-          }}
-          onDeleteTemplate={(templateId) => {
-            void handleDeleteTemplate(templateId);
-          }}
-        />
+        checkingAdminSession ? (
+          <main className="overview-shell">
+            <section className="panel empty-state-panel">
+              <p className="eyebrow">Admin</p>
+              <h2>Checking access</h2>
+              <p>Please wait while the admin session is verified.</p>
+            </section>
+          </main>
+        ) : isAdminAuthenticated ? (
+          <AdminTemplatesPage
+            completedAudits={audits.filter((audit) => audit.status === "completed")}
+            deviceTypes={deviceTypes}
+            templates={templates}
+            deviceTypeForm={deviceTypeForm}
+            form={templateForm}
+            saving={saving}
+            onDeviceTypeFormChange={setDeviceTypeForm}
+            onFormChange={setTemplateForm}
+            onCreateDeviceType={() => {
+              void handleCreateDeviceType();
+            }}
+            onCreateTemplate={(event) => {
+              void handleCreateTemplate(event);
+            }}
+            onUpdateDeviceType={(deviceTypeId, next) => {
+              void handleUpdateDeviceType(deviceTypeId, next);
+            }}
+            onDeleteDeviceType={(deviceTypeId) => {
+              void handleDeleteDeviceType(deviceTypeId);
+            }}
+            onUpdateTemplate={(templateId, next) => {
+              void handleUpdateTemplate(templateId, next);
+            }}
+            onDeleteTemplate={(templateId) => {
+              void handleDeleteTemplate(templateId);
+            }}
+            onReopenAudit={(auditId) => {
+              void handleReopenAudit(auditId);
+            }}
+          />
+        ) : (
+          <main className="overview-shell">
+            <section className="panel audit-edit-modal">
+              <div className="audit-edit-topbar">
+                <div className="audit-edit-heading">
+                  <p className="eyebrow">Admin</p>
+                  <h2>Protected area</h2>
+                  <p className="audit-edit-copy">Enter the admin access key to manage templates, device types and completed audits.</p>
+                </div>
+              </div>
+              <form
+                className="audit-edit-grid clean"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleAdminLogin();
+                }}
+              >
+                <label className="audit-edit-field plain full-width">
+                  <span>Admin Access Key</span>
+                  <input
+                    type="password"
+                    value={adminAccessKey}
+                    onChange={(event) => setAdminAccessKey(event.target.value)}
+                    placeholder="Enter access key"
+                  />
+                </label>
+                <div className="audit-edit-actions full-width">
+                  <button className="primary-button" disabled={authenticatingAdmin} type="submit">
+                    {authenticatingAdmin ? "Checking..." : "Unlock Admin"}
+                  </button>
+                </div>
+              </form>
+            </section>
+          </main>
+        )
       ) : (
         <main className="workspace-grid">
           <div className="editor-column">
@@ -1149,6 +1346,7 @@ export default function App() {
               rackForm={rackForm}
               newRackForm={newRackForm}
               saving={saving}
+              readOnly={isCompletedAudit}
               onSelectRack={selectRack}
               onRackFormChange={setRackForm}
               onSaveRack={handleRackUpdate}
@@ -1162,6 +1360,7 @@ export default function App() {
                 rack={rackDetail}
                 activeRackView={activeRackView}
                 selectedDeviceId={selectedDeviceId}
+                readOnly={isCompletedAudit}
                 onSelectDevice={setSelectedDeviceId}
                 onRackFaceChange={setActiveRackView}
                 onTemplateDrop={(targetRackFace, unit, mountPosition, templatePayload) => {
@@ -1181,11 +1380,12 @@ export default function App() {
           </div>
 
           <div className="side-column">
-            <Palette collapsed={selectedDeviceId !== null} templates={templates} />
+            <Palette collapsed={selectedDeviceId !== null} disabled={isCompletedAudit} templates={templates} />
             <StagingArea
               devices={stagedDevices}
               selectedDeviceId={selectedDeviceId}
               saving={saving}
+              disabled={isCompletedAudit}
               onSelectDevice={setSelectedDeviceId}
               onStageDevice={(deviceId) => {
                 void handleStageDevice(deviceId);
@@ -1194,6 +1394,7 @@ export default function App() {
             <Inspector
               device={selectedDevice}
               recentlyDeletedDeviceName={recentlyDeletedDevice?.device.name ?? null}
+              readOnly={isCompletedAudit}
               onChange={(next) => {
                 void handleInspectorChange(next);
               }}

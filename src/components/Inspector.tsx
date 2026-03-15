@@ -7,6 +7,7 @@ type InspectorMountStyle = "full" | "vertical";
 interface InspectorProps {
   device: RackDevice | null;
   recentlyDeletedDeviceName: string | null;
+  readOnly?: boolean;
   onChange(next: RackDeviceInput): void;
   onMoveToTray(): void;
   onDelete(): void;
@@ -75,7 +76,7 @@ function hasDraftChanges(left: RackDeviceInput, right: RackDeviceInput): boolean
   );
 }
 
-export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveToTray, onDelete, onUndoDelete, saving }: InspectorProps) {
+export function Inspector({ device, recentlyDeletedDeviceName, readOnly = false, onChange, onMoveToTray, onDelete, onUndoDelete, saving }: InspectorProps) {
   const [draft, setDraft] = useState<RackDeviceInput | null>(() => (device ? toDeviceInput(device) : null));
 
   useEffect(() => {
@@ -88,7 +89,7 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
         <div className="panel-header">
           <div>
             <p className="eyebrow">Inspector</p>
-            <h2>Quick edit</h2>
+            <h2>{readOnly ? "Details" : "Quick edit"}</h2>
           </div>
           <span className="muted">No device selected</span>
         </div>
@@ -108,6 +109,10 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
 
   function commitDraft(nextDraft: RackDeviceInput = draft) {
     if (!hasDraftChanges(nextDraft, persistedDevice)) {
+      return;
+    }
+
+    if (readOnly) {
       return;
     }
 
@@ -133,6 +138,7 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
           <p className="eyebrow">Inspector</p>
           <h2>{device.hostname ?? device.name}</h2>
         </div>
+        {readOnly ? <span className="muted">Read-only</span> : null}
       </div>
       {recentlyDeletedDeviceName ? (
         <div className="inspector-undo-card">
@@ -144,7 +150,7 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
       ) : null}
       <div className={device.placementType === "rack" ? "inspector-actions split top" : "inspector-actions top"}>
         {device.placementType === "rack" ? (
-          <button className="ghost-button inspector-action-button" disabled={saving} onClick={onMoveToTray} type="button">
+          <button className="ghost-button inspector-action-button" disabled={saving || readOnly} onClick={onMoveToTray} type="button">
             <span aria-hidden="true" className="inspector-action-icon">
               <svg fill="none" height="14" viewBox="0 0 16 14" width="16" xmlns="http://www.w3.org/2000/svg">
                 <path d="M1 7H11" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
@@ -155,7 +161,7 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
             <span>Move to Tray</span>
           </button>
         ) : null}
-        <button className="ghost-button danger inspector-action-button" disabled={saving} onClick={onDelete} type="button">
+        <button className="ghost-button danger inspector-action-button" disabled={saving || readOnly} onClick={onDelete} type="button">
           Delete
         </button>
       </div>
@@ -164,6 +170,7 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
         <label className="full-width">
           Hostname
           <input
+            disabled={readOnly}
             value={draft.hostname ?? draft.name}
             onChange={(event) => {
               const nextValue = event.target.value;
@@ -179,6 +186,7 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
         <label className="full-width">
           Serial number
           <input
+            disabled={readOnly}
             value={draft.serialNumber ?? ""}
             onBlur={() => commitDraft()}
             onChange={updateInput("serialNumber", (event) => normalizeValue(event.target.value))}
@@ -186,17 +194,17 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
         </label>
         <label>
           Manufacturer
-          <input value={draft.manufacturer} onBlur={() => commitDraft()} onChange={updateInput("manufacturer")} />
+          <input disabled={readOnly} value={draft.manufacturer} onBlur={() => commitDraft()} onChange={updateInput("manufacturer")} />
         </label>
         <label>
           Model
-          <input value={draft.model} onBlur={() => commitDraft()} onChange={updateInput("model")} />
+          <input disabled={readOnly} value={draft.model} onBlur={() => commitDraft()} onChange={updateInput("model")} />
         </label>
         <label>
           Mount style
           <select
             value={getInspectorMountStyle(draft.mountPosition)}
-            disabled={device.placementType === "spare"}
+            disabled={readOnly || device.placementType === "spare"}
             onChange={(event) => {
               const nextMountStyle = event.target.value as InspectorMountStyle;
 
@@ -219,7 +227,7 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
           Blocks front and rear
           <input
             checked={draft.blocksBothFaces}
-            disabled={device.placementType === "spare" || isVerticalPduMountPosition(draft.mountPosition)}
+            disabled={readOnly || device.placementType === "spare" || isVerticalPduMountPosition(draft.mountPosition)}
             type="checkbox"
             onChange={(event) => {
               setDraft({
@@ -236,7 +244,7 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
           Allow shared depth shelf placement
           <input
             checked={draft.allowSharedDepth}
-            disabled={isVerticalPduMountPosition(draft.mountPosition) || draft.blocksBothFaces}
+            disabled={readOnly || isVerticalPduMountPosition(draft.mountPosition) || draft.blocksBothFaces}
             type="checkbox"
             onChange={(event) => {
               setDraft({
@@ -251,6 +259,7 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
         <label>
           Height U
           <input
+            disabled={readOnly}
             min={1}
             type="number"
             value={draft.heightU}
@@ -261,6 +270,7 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
         <label className="full-width">
           Notes
           <textarea
+            disabled={readOnly}
             rows={4}
             value={draft.notes ?? ""}
             onBlur={() => commitDraft()}
@@ -275,7 +285,7 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
       {device.placementType === "spare" ? (
         <p className="muted">This device is only parked temporarily and will not appear in exports.</p>
       ) : null}
-      <p className="muted">{saving ? "Saving changes..." : "Changes are written directly to the database."}</p>
+      <p className="muted">{readOnly ? "Completed audits can only be viewed." : saving ? "Saving changes..." : "Changes are written directly to the database."}</p>
     </section>
   );
 }

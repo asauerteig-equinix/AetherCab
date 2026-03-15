@@ -37,6 +37,20 @@ async function request<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  getAdminSession(): Promise<{ authenticated: boolean }> {
+    return request("/api/admin/session");
+  },
+  createAdminSession(accessKey: string): Promise<void> {
+    return request("/api/admin/session", {
+      method: "POST",
+      body: JSON.stringify({ accessKey })
+    });
+  },
+  deleteAdminSession(): Promise<void> {
+    return request("/api/admin/session", {
+      method: "DELETE"
+    });
+  },
   listAudits(): Promise<AuditSummary[]> {
     return request("/api/audits");
   },
@@ -53,6 +67,11 @@ export const api = {
     return request(`/api/audits/${auditId}`, {
       method: "PUT",
       body: JSON.stringify(payload)
+    });
+  },
+  cloneAudit(auditId: number): Promise<AuditDetail> {
+    return request(`/api/audits/${auditId}/clone`, {
+      method: "POST"
     });
   },
   deleteAudit(auditId: number): Promise<void> {
@@ -118,6 +137,11 @@ export const api = {
   deleteTemplate(templateId: number): Promise<void> {
     return request(`/api/device-templates/${templateId}`, {
       method: "DELETE"
+    });
+  },
+  reopenAudit(auditId: number): Promise<AuditDetail> {
+    return request(`/api/admin/audits/${auditId}/reopen`, {
+      method: "POST"
     });
   },
   createDevice(rackId: number, payload: RackDeviceInput): Promise<RackDevice> {

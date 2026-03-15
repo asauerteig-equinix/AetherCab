@@ -636,7 +636,7 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, audit: AuditExportDetai
     });
     worksheet.mergeCells(`A${rackRow.number}:P${rackRow.number}`);
     const rackCell = worksheet.getCell(`A${rackRow.number}`);
-    rackCell.value = `Rack: ${rack.name} (${rack.totalUnits}U) | SO: ${audit.salesOrder ?? "-"} | ${getAuditStatusLabel(audit.status)}`;
+    rackCell.value = `Rack: ${rack.name} (${rack.totalUnits}U | ${rack.widthMm}x${rack.depthMm}x${rack.heightMm} mm) | SO: ${audit.salesOrder ?? "-"} | ${getAuditStatusLabel(audit.status)}`;
     rackCell.font = { name: "Bahnschrift", size: 10, bold: true, color: { argb: excelPalette.accentStrong } };
     rackCell.alignment = { vertical: "middle", horizontal: "left" };
     rackCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: excelPalette.panelBackground } };
@@ -734,7 +734,7 @@ function buildRackViewSheet(workbook: ExcelJS.Workbook, audit: AuditExportDetail
   styleExcelTitle(worksheet.getCell("A1"), `${appBrandName} Rack View`);
 
   worksheet.mergeCells("A2:R2");
-  worksheet.getCell("A2").value = `${audit.siteName} | ${audit.roomName} | ${audit.name} | SO: ${audit.salesOrder ?? "-"} | ${getAuditStatusLabel(audit.status)} | ${formatAuditDateTime(audit.createdAt)} | ${rack.name} | ${rack.totalUnits}U`;
+  worksheet.getCell("A2").value = `${audit.siteName} | ${audit.roomName} | ${audit.name} | SO: ${audit.salesOrder ?? "-"} | ${getAuditStatusLabel(audit.status)} | ${formatAuditDateTime(audit.createdAt)} | ${rack.name} | ${rack.totalUnits}U | ${rack.widthMm}x${rack.depthMm}x${rack.heightMm} mm`;
   styleExcelMeta(worksheet.getCell("A2"));
 
   worksheet.mergeCells("A3:R3");
@@ -792,7 +792,8 @@ function drawPdfHeader(pdf: PdfDocument, audit: AuditExportDetail, title: string
         getAuditStatusLabel(audit.status),
         formatAuditDateTime(audit.createdAt),
         rack.name,
-        `${rack.totalUnits}U`
+        `${rack.totalUnits}U`,
+        `${rack.widthMm}x${rack.depthMm}x${rack.heightMm} mm`
       ]
     : [
         audit.siteName,
