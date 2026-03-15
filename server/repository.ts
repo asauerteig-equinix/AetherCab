@@ -1,4 +1,13 @@
-import { findOverlaps, getMountPositionFace, sortRackDevices, validateRackPlacement } from "../shared/rack.js";
+import {
+  canPlaceRackDeviceAtStartUnit,
+  findClosestAvailableStartUnit,
+  findOverlaps,
+  getEndUnit,
+  getMountPositionFace,
+  sortRackDevices,
+  validateRackPlacement
+} from "../shared/rack.js";
+import { getDefaultIconKeyForTemplateType, normalizeDeviceIconKey } from "../shared/deviceIcons.js";
 import type {
   AuditCreateInput,
   AuditDetail,
@@ -47,12 +56,14 @@ interface RackDetailRow extends RackSummaryRow {
 interface RackDeviceRow {
   id: number;
   rack_id: number;
+  template_id: number | null;
   placement_type: "rack" | "spare";
   rack_face: RackFace | null;
   mount_position: RackDevice["mountPosition"];
   blocks_both_faces: boolean;
   start_unit: number | null;
   height_u: number;
+  icon_key: RackDevice["iconKey"];
   name: string;
   manufacturer: string;
   model: string;
@@ -68,6 +79,7 @@ interface DeviceTemplateRow {
   id: number;
   template_type: string;
   mount_style: DeviceTemplate["mountStyle"];
+  icon_key: DeviceTemplate["iconKey"];
   name: string;
   manufacturer: string;
   model: string;
@@ -102,12 +114,14 @@ function mapRackDevice(row: RackDeviceRow): RackDevice {
   return {
     id: row.id,
     rackId: row.rack_id,
+    templateId: row.template_id,
     placementType: row.placement_type,
     rackFace: row.rack_face,
     mountPosition: row.mount_position,
     blocksBothFaces: row.blocks_both_faces,
     startUnit: row.start_unit,
     heightU: row.height_u,
+    iconKey: row.icon_key,
     name: row.name,
     manufacturer: row.manufacturer,
     model: row.model,
@@ -122,12 +136,14 @@ function mapRackDevice(row: RackDeviceRow): RackDevice {
 
 function normalizeDeviceInput(input: RackDeviceInput): RackDeviceInput {
   const normalized: RackDeviceInput = {
+    templateId: input.templateId ?? null,
     placementType: input.placementType,
     rackFace: input.rackFace,
     mountPosition: input.mountPosition,
     blocksBothFaces: input.blocksBothFaces,
     startUnit: input.startUnit,
     heightU: input.heightU,
+    iconKey: input.iconKey ?? null,
     name: input.name.trim(),
     manufacturer: input.manufacturer.trim(),
     model: input.model.trim(),
@@ -140,9 +156,6 @@ function normalizeDeviceInput(input: RackDeviceInput): RackDeviceInput {
   if (normalized.placementType === "spare") {
     return {
       ...normalized,
-      rackFace: null,
-      mountPosition: "full",
-      blocksBothFaces: false,
       startUnit: null
     };
   }
@@ -164,9 +177,11 @@ function normalizeDeviceInput(input: RackDeviceInput): RackDeviceInput {
 }
 
 function normalizeTemplateInput(input: DeviceTemplateInput): DeviceTemplateInput {
+  const templateType = input.templateType.trim().toLowerCase();
   const normalized: DeviceTemplateInput = {
-    templateType: input.templateType.trim().toLowerCase(),
+    templateType,
     mountStyle: input.mountStyle,
+    iconKey: normalizeDeviceIconKey(input.iconKey, getDefaultIconKeyForTemplateType(templateType)),
     name: input.name.trim(),
     manufacturer: input.manufacturer.trim(),
     model: input.model.trim(),
@@ -542,7 +557,7 @@ export async function deleteRack(rackId: number): Promise<void> {
 
 export async function listDeviceTemplates(): Promise<DeviceTemplate[]> {
   const result = await pool.query<DeviceTemplateRow>(`
-    SELECT id, template_type, mount_style, name, manufacturer, model, default_height_u, blocks_both_faces
+    SELECT id, template_type, mount_style, icon_key, name, manufacturer, model, default_height_u, blocks_both_faces
     FROM device_templates
     ORDER BY template_type, default_height_u, name
   `);
@@ -551,6 +566,7 @@ export async function listDeviceTemplates(): Promise<DeviceTemplate[]> {
     id: row.id,
     templateType: row.template_type,
     mountStyle: row.mount_style,
+    iconKey: row.icon_key,
     name: row.name,
     manufacturer: row.manufacturer,
     model: row.model,
@@ -564,13 +580,14 @@ export async function createDeviceTemplate(input: DeviceTemplateInput): Promise<
 
   const result = await pool.query<DeviceTemplateRow>(
     `
-      INSERT INTO device_templates (template_type, mount_style, name, manufacturer, model, default_height_u, blocks_both_faces)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING id, template_type, mount_style, name, manufacturer, model, default_height_u, blocks_both_faces
+      INSERT INTO device_templates (template_type, mount_style, icon_key, name, manufacturer, model, default_height_u, blocks_both_faces)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING id, template_type, mount_style, icon_key, name, manufacturer, model, default_height_u, blocks_both_faces
     `,
     [
       normalized.templateType,
       normalized.mountStyle,
+      normalized.iconKey,
       normalized.name,
       normalized.manufacturer,
       normalized.model,
@@ -584,6 +601,58 @@ export async function createDeviceTemplate(input: DeviceTemplateInput): Promise<
     id: row.id,
     templateType: row.template_type,
     mountStyle: row.mount_style,
+    iconKey: row.icon_key,
+    name: row.name,
+    manufacturer: row.manufacturer,
+    model: row.model,
+    defaultHeightU: row.default_height_u,
+    blocksBothFaces: row.blocks_both_faces
+  };
+}
+
+export async function updateDeviceTemplate(templateId: number, input: DeviceTemplateInput): Promise<DeviceTemplate> {
+  const normalized = normalizeTemplateInput(input);
+
+  const result = await pool.query<DeviceTemplateRow>(
+    `
+      UPDATE device_templates
+      SET
+        template_type = $1,
+        mount_style = $2,
+        icon_key = $3,
+        name = $4,
+        manufacturer = $5,
+        model = $6,
+        default_height_u = $7,
+        blocks_both_faces = $8
+      WHERE id = $9
+      RETURNING id, template_type, mount_style, icon_key, name, manufacturer, model, default_height_u, blocks_both_faces
+    `,
+    [
+      normalized.templateType,
+      normalized.mountStyle,
+      normalized.iconKey,
+      normalized.name,
+      normalized.manufacturer,
+      normalized.model,
+      normalized.defaultHeightU,
+      normalized.blocksBothFaces,
+      templateId
+    ]
+  );
+
+  if (result.rows.length === 0) {
+    throw new Error("Device template not found.");
+  }
+
+  await pool.query("UPDATE rack_devices SET icon_key = $1 WHERE template_id = $2", [normalized.iconKey, templateId]);
+
+  const row = result.rows[0];
+  return {
+    id: row.id,
+    templateType: row.template_type,
+    mountStyle: row.mount_style,
+    iconKey: row.icon_key,
     name: row.name,
     manufacturer: row.manufacturer,
     model: row.model,
@@ -607,12 +676,14 @@ export async function createRackDevice(rackId: number, input: RackDeviceInput): 
     `
       INSERT INTO rack_devices (
         rack_id,
+        template_id,
         placement_type,
         rack_face,
         mount_position,
         blocks_both_faces,
         start_unit,
         height_u,
+        icon_key,
         name,
         manufacturer,
         model,
@@ -621,17 +692,19 @@ export async function createRackDevice(rackId: number, input: RackDeviceInput): 
         notes,
         storage_location,
         updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP)
       RETURNING *
     `,
     [
       rackId,
+      normalized.templateId ?? null,
       normalized.placementType,
       normalized.rackFace,
       normalized.mountPosition,
       normalized.blocksBothFaces,
       normalized.startUnit,
       normalized.heightU,
+      normalized.iconKey ?? null,
       normalized.name,
       normalized.manufacturer,
       normalized.model,
@@ -646,8 +719,8 @@ export async function createRackDevice(rackId: number, input: RackDeviceInput): 
 }
 
 export async function updateRackDevice(rackId: number, deviceId: number, input: RackDeviceInput): Promise<RackDevice> {
-  const existingResult = await pool.query<{ id: number }>(
-    "SELECT id FROM rack_devices WHERE id = $1 AND rack_id = $2",
+  const existingResult = await pool.query<RackDeviceRow>(
+    "SELECT * FROM rack_devices WHERE id = $1 AND rack_id = $2",
     [deviceId, rackId]
   );
 
@@ -655,44 +728,125 @@ export async function updateRackDevice(rackId: number, deviceId: number, input: 
     throw new Error("Rack device not found.");
   }
 
+  const existingDevice = mapRackDevice(existingResult.rows[0]);
+  const rack = await getRack(rackId);
+  if (!rack) {
+    throw new Error("Rack not found.");
+  }
+
   const normalized = normalizeDeviceInput(input);
-  await validateRackDevice(rackId, normalized, deviceId);
+  let resolvedInput = normalized;
+
+  if (normalized.placementType === "rack" && normalized.startUnit !== null && normalized.rackFace !== null) {
+    const preserveCurrentStart = canPlaceRackDeviceAtStartUnit(
+      normalized,
+      normalized.startUnit,
+      rack.totalUnits,
+      rack.devices,
+      deviceId
+    );
+
+    if (!preserveCurrentStart) {
+      const candidateStarts: number[] = [];
+
+      if (normalized.startUnit >= 1) {
+        candidateStarts.push(normalized.startUnit);
+      }
+
+      if (
+        existingDevice.placementType === "rack" &&
+        existingDevice.startUnit !== null &&
+        normalized.startUnit === existingDevice.startUnit &&
+        normalized.heightU !== existingDevice.heightU
+      ) {
+        const preservedEndStartUnit = getEndUnit(existingDevice.startUnit, existingDevice.heightU) - normalized.heightU + 1;
+        if (preservedEndStartUnit >= 1) {
+          candidateStarts.push(preservedEndStartUnit);
+        }
+      }
+
+      const firstValidStartUnit = [...new Set(candidateStarts)].find((startUnit) =>
+        canPlaceRackDeviceAtStartUnit(normalized, startUnit, rack.totalUnits, rack.devices, deviceId)
+      );
+
+      if (firstValidStartUnit !== undefined) {
+        resolvedInput = {
+          ...normalized,
+          startUnit: firstValidStartUnit
+        };
+      } else {
+        const referenceStartUnit =
+          existingDevice.placementType === "rack" &&
+          existingDevice.startUnit !== null &&
+          normalized.startUnit === existingDevice.startUnit
+            ? existingDevice.startUnit
+            : normalized.startUnit;
+        const referenceEndUnit =
+          existingDevice.placementType === "rack" &&
+          existingDevice.startUnit !== null &&
+          normalized.startUnit === existingDevice.startUnit
+            ? getEndUnit(existingDevice.startUnit, existingDevice.heightU)
+            : getEndUnit(normalized.startUnit, normalized.heightU);
+        const relocatedStartUnit = findClosestAvailableStartUnit(
+          normalized,
+          rack.totalUnits,
+          rack.devices,
+          referenceStartUnit,
+          referenceEndUnit,
+          deviceId
+        );
+
+        if (relocatedStartUnit !== null) {
+          resolvedInput = {
+            ...normalized,
+            startUnit: relocatedStartUnit
+          };
+        }
+      }
+    }
+  }
+
+  await validateRackDevice(rackId, resolvedInput, deviceId);
 
   const result = await pool.query<RackDeviceRow>(
     `
       UPDATE rack_devices
       SET
         placement_type = $1,
-        rack_face = $2,
-        mount_position = $3,
-        blocks_both_faces = $4,
-        start_unit = $5,
-        height_u = $6,
-        name = $7,
-        manufacturer = $8,
-        model = $9,
-        serial_number = $10,
-        hostname = $11,
-        notes = $12,
-        storage_location = $13,
+        template_id = $2,
+        rack_face = $3,
+        mount_position = $4,
+        blocks_both_faces = $5,
+        start_unit = $6,
+        height_u = $7,
+        icon_key = $8,
+        name = $9,
+        manufacturer = $10,
+        model = $11,
+        serial_number = $12,
+        hostname = $13,
+        notes = $14,
+        storage_location = $15,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $14 AND rack_id = $15
+      WHERE id = $16 AND rack_id = $17
       RETURNING *
     `,
     [
-      normalized.placementType,
-      normalized.rackFace,
-      normalized.mountPosition,
-      normalized.blocksBothFaces,
-      normalized.startUnit,
-      normalized.heightU,
-      normalized.name,
-      normalized.manufacturer,
-      normalized.model,
-      normalized.serialNumber ?? null,
-      normalized.hostname ?? null,
-      normalized.notes ?? null,
-      normalized.storageLocation ?? null,
+      resolvedInput.placementType,
+      resolvedInput.templateId ?? null,
+      resolvedInput.rackFace,
+      resolvedInput.mountPosition,
+      resolvedInput.blocksBothFaces,
+      resolvedInput.startUnit,
+      resolvedInput.heightU,
+      resolvedInput.iconKey ?? null,
+      resolvedInput.name,
+      resolvedInput.manufacturer,
+      resolvedInput.model,
+      resolvedInput.serialNumber ?? null,
+      resolvedInput.hostname ?? null,
+      resolvedInput.notes ?? null,
+      resolvedInput.storageLocation ?? null,
       deviceId,
       rackId
     ]

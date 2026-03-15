@@ -1,4 +1,6 @@
+import { useMemo, useState } from "react";
 import type { DeviceTemplate } from "../../shared/types";
+import { getDeviceIconUrl } from "../deviceIcons";
 
 interface PaletteProps {
   templates: DeviceTemplate[];
@@ -12,14 +14,26 @@ function formatTemplateType(templateType: string): string {
 }
 
 export function Palette({ templates }: PaletteProps) {
-  const templatesByType = templates.reduce<Record<string, DeviceTemplate[]>>((groups, template) => {
-    if (!groups[template.templateType]) {
-      groups[template.templateType] = [];
-    }
+  const templatesByType = useMemo(
+    () =>
+      templates.reduce<Record<string, DeviceTemplate[]>>((groups, template) => {
+        if (!groups[template.templateType]) {
+          groups[template.templateType] = [];
+        }
 
-    groups[template.templateType].push(template);
-    return groups;
-  }, {});
+        groups[template.templateType].push(template);
+        return groups;
+      }, {}),
+    [templates]
+  );
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  function toggleGroup(templateType: string) {
+    setCollapsedGroups((current) => ({
+      ...current,
+      [templateType]: !current[templateType]
+    }));
+  }
 
   return (
     <section className="panel">
@@ -33,8 +47,11 @@ export function Palette({ templates }: PaletteProps) {
       <div className="template-list compact">
         {Object.entries(templatesByType).map(([templateType, group]) => (
           <section className="template-group" key={templateType}>
-            <div className="template-group-title">{formatTemplateType(templateType)}</div>
-            <div className="template-group-list">
+            <button className="template-group-title" onClick={() => toggleGroup(templateType)} type="button">
+              <span>{formatTemplateType(templateType)}</span>
+              <strong>{collapsedGroups[templateType] ? "+" : "-"}</strong>
+            </button>
+            <div className={collapsedGroups[templateType] ? "template-group-list collapsed" : "template-group-list"}>
               {group.map((template) => (
                 <article
                   className="template-card compact"
@@ -44,6 +61,7 @@ export function Palette({ templates }: PaletteProps) {
                     event.dataTransfer.setData("application/x-aethercab-template", JSON.stringify(template));
                   }}
                 >
+                  <img alt="" aria-hidden="true" className="template-icon" src={getDeviceIconUrl(template.iconKey)} />
                   <div className="template-copy">
                     <strong>{template.name}</strong>
                     <p>

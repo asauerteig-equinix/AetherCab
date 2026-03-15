@@ -1,6 +1,6 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
-import { getAnchoredStartUnit, getMountPositionFace, getRackMountPositionLabel } from "../shared/rack";
+import { getAnchoredStartUnit, getMountPositionFace, getRackMountPositionLabel, sortRackDevices } from "../shared/rack";
 import type {
   AuditCreateInput,
   AuditDetail,
@@ -24,6 +24,7 @@ import { Palette } from "./components/Palette";
 import { RackCanvas } from "./components/RackCanvas";
 import { RackSwitcher } from "./components/RackSwitcher";
 import { RackTabs } from "./components/RackTabs";
+import { StagingArea } from "./components/StagingArea";
 
 const initialAuditCreateForm: AuditCreateInput = {
   siteName: "",
@@ -54,6 +55,7 @@ const initialRackUpdateForm: RackUpdateInput = {
 const initialTemplateForm: DeviceTemplateInput = {
   templateType: "server",
   mountStyle: "full",
+  iconKey: "server",
   name: "",
   manufacturer: "Generic",
   model: "",
@@ -85,12 +87,14 @@ function templateToRackDevice(
   mountPosition: RackMountPosition
 ): RackDeviceInput {
   return {
+    templateId: template.id,
     placementType,
     rackFace,
     mountPosition,
     blocksBothFaces: template.mountStyle === "vertical-pdu" ? false : template.blocksBothFaces,
     startUnit,
     heightU: template.defaultHeightU,
+    iconKey: template.iconKey,
     name: template.name,
     manufacturer: template.manufacturer,
     model: template.model,
@@ -291,8 +295,8 @@ export default function App() {
     }
   }
 
-  const selectedDevice =
-    rackDetail?.devices.find((device) => device.id === selectedDeviceId && device.placementType === "rack") ?? null;
+  const selectedDevice = rackDetail?.devices.find((device) => device.id === selectedDeviceId) ?? null;
+  const stagedDevices = rackDetail?.devices.filter((device) => device.placementType === "spare") ?? [];
 
   async function handleTemplateDrop(unit: number, mountPosition: RackMountPosition, templatePayload: string) {
     if (activeRackId === null || rackDetail === null) {
@@ -352,12 +356,14 @@ export default function App() {
     try {
       setSaving(true);
       await api.updateDevice(activeRackId, device.id, {
+        templateId: device.templateId,
         placementType: "rack",
-        rackFace: nextMountPosition === "full" ? device.rackFace : getMountPositionFace(nextMountPosition),
+        rackFace: nextMountPosition === "full" ? device.rackFace ?? activeRackFace : getMountPositionFace(nextMountPosition),
         mountPosition: nextMountPosition,
         blocksBothFaces: nextMountPosition === "full" ? device.blocksBothFaces : false,
         startUnit: nextStartUnit,
         heightU: device.heightU,
+        iconKey: device.iconKey,
         name: device.name,
         manufacturer: device.manufacturer,
         model: device.model,
@@ -395,15 +401,42 @@ export default function App() {
 
         return {
           ...current,
-          devices: current.devices.map((device) => (device.id === updatedDevice.id ? updatedDevice : device))
+          devices: sortRackDevices(current.devices.map((device) => (device.id === updatedDevice.id ? updatedDevice : device)))
         };
       });
+      if (next.startUnit !== updatedDevice.startUnit) {
+        setMessage(`${updatedDevice.name} was moved to ${updatedDevice.startUnit}U so the updated size fits in the rack.`);
+      }
       setError(null);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Changes could not be saved.");
     } finally {
       setSaving(false);
     }
+  }
+
+  async function moveDeviceToStagingArea(device: RackDevice) {
+    if (activeRackId === null) {
+      return;
+    }
+
+      await api.updateDevice(activeRackId, device.id, {
+        templateId: device.templateId,
+        placementType: "spare",
+        rackFace: device.rackFace,
+        mountPosition: device.mountPosition,
+        blocksBothFaces: device.blocksBothFaces,
+        startUnit: null,
+        heightU: device.heightU,
+        iconKey: device.iconKey,
+        name: device.name,
+      manufacturer: device.manufacturer,
+      model: device.model,
+      serialNumber: device.serialNumber,
+      hostname: device.hostname,
+      notes: device.notes,
+      storageLocation: "Staging area"
+    });
   }
 
   async function handleDeleteDevice() {
@@ -413,13 +446,43 @@ export default function App() {
 
     try {
       setSaving(true);
-      await api.deleteDevice(activeRackId, selectedDevice.id);
-      setSelectedDeviceId(null);
-      await loadRack(activeRackId);
-      setMessage(`${selectedDevice.name} was removed.`);
+      if (selectedDevice.placementType === "rack") {
+        await moveDeviceToStagingArea(selectedDevice);
+        await loadRack(activeRackId);
+        setMessage(`${selectedDevice.name} was moved to the staging area.`);
+      } else {
+        await api.deleteDevice(activeRackId, selectedDevice.id);
+        setSelectedDeviceId(null);
+        await loadRack(activeRackId);
+        setMessage(`${selectedDevice.name} was deleted.`);
+      }
       setError(null);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Item could not be removed.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleStageDevice(deviceId: number) {
+    if (activeRackId === null || rackDetail === null) {
+      return;
+    }
+
+    const device = rackDetail.devices.find((entry) => entry.id === deviceId);
+    if (!device || device.placementType !== "rack") {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      await moveDeviceToStagingArea(device);
+      setSelectedDeviceId(device.id);
+      await loadRack(activeRackId);
+      setMessage(`${device.name} was moved to the staging area.`);
+      setError(null);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Device could not be staged.");
     } finally {
       setSaving(false);
     }
@@ -554,6 +617,20 @@ export default function App() {
     }
   }
 
+  async function handleUpdateTemplate(templateId: number, next: DeviceTemplateInput) {
+    try {
+      setSaving(true);
+      const updatedTemplate = await api.updateTemplate(templateId, next);
+      await refreshTemplates();
+      setMessage(`${updatedTemplate.name} was updated.`);
+      setError(null);
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "Template could not be updated.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleDeleteTemplate(templateId: number) {
     try {
       setSaving(true);
@@ -638,6 +715,9 @@ export default function App() {
           onCreateTemplate={(event) => {
             void handleCreateTemplate(event);
           }}
+          onUpdateTemplate={(templateId, next) => {
+            void handleUpdateTemplate(templateId, next);
+          }}
           onDeleteTemplate={(templateId) => {
             void handleDeleteTemplate(templateId);
           }}
@@ -684,6 +764,15 @@ export default function App() {
 
           <div className="side-column">
             <Palette templates={templates} />
+            <StagingArea
+              devices={stagedDevices}
+              selectedDeviceId={selectedDeviceId}
+              saving={saving}
+              onSelectDevice={setSelectedDeviceId}
+              onStageDevice={(deviceId) => {
+                void handleStageDevice(deviceId);
+              }}
+            />
             <Inspector
               device={selectedDevice}
               onChange={(next) => {

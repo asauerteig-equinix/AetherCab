@@ -66,6 +66,7 @@ export async function initializeDatabase(): Promise<void> {
       id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
       template_type TEXT NOT NULL DEFAULT 'other',
       mount_style TEXT NOT NULL DEFAULT 'full' CHECK (mount_style IN ('full', 'vertical-pdu')),
+      icon_key TEXT NOT NULL DEFAULT 'generic-device',
       name TEXT NOT NULL,
       manufacturer TEXT NOT NULL,
       model TEXT NOT NULL,
@@ -77,12 +78,14 @@ export async function initializeDatabase(): Promise<void> {
     CREATE TABLE IF NOT EXISTS rack_devices (
       id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
       rack_id INTEGER NOT NULL REFERENCES racks(id) ON DELETE CASCADE,
+      template_id INTEGER REFERENCES device_templates(id) ON DELETE SET NULL,
       placement_type TEXT NOT NULL CHECK (placement_type IN ('rack', 'spare')),
       rack_face TEXT CHECK (rack_face IN ('front', 'rear')),
       mount_position TEXT NOT NULL DEFAULT 'full' CHECK (mount_position IN ('full', 'front-left-outer', 'front-left-inner', 'front-right-inner', 'front-right-outer', 'rear-left-outer', 'rear-left-inner', 'rear-right-inner', 'rear-right-outer')),
       blocks_both_faces BOOLEAN NOT NULL DEFAULT FALSE,
       start_unit INTEGER,
       height_u INTEGER NOT NULL,
+      icon_key TEXT,
       name TEXT NOT NULL,
       manufacturer TEXT NOT NULL,
       model TEXT NOT NULL,
@@ -128,7 +131,33 @@ export async function initializeDatabase(): Promise<void> {
 
   await pool.query(`
     ALTER TABLE device_templates
+    ADD COLUMN IF NOT EXISTS icon_key TEXT NOT NULL DEFAULT 'generic-device'
+  `);
+
+  await pool.query(`
+    ALTER TABLE device_templates
     ADD COLUMN IF NOT EXISTS blocks_both_faces BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+
+  await pool.query(`
+    ALTER TABLE rack_devices
+    ADD COLUMN IF NOT EXISTS template_id INTEGER
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE constraint_name = 'rack_devices_template_id_fkey'
+          AND table_name = 'rack_devices'
+      ) THEN
+        ALTER TABLE rack_devices
+        ADD CONSTRAINT rack_devices_template_id_fkey
+        FOREIGN KEY (template_id) REFERENCES device_templates(id) ON DELETE SET NULL;
+      END IF;
+    END $$;
   `);
 
   await pool.query(`
@@ -158,6 +187,11 @@ export async function initializeDatabase(): Promise<void> {
   `);
 
   await pool.query(`
+    ALTER TABLE rack_devices
+    ADD COLUMN IF NOT EXISTS icon_key TEXT
+  `);
+
+  await pool.query(`
     UPDATE rack_devices
     SET rack_face = 'front'
     WHERE placement_type = 'rack' AND rack_face IS NULL
@@ -170,9 +204,32 @@ export async function initializeDatabase(): Promise<void> {
   `);
 
   await pool.query(`
+    UPDATE device_templates
+    SET icon_key = CASE template_type
+      WHEN 'server' THEN 'server'
+      WHEN 'switch-router' THEN 'switch'
+      WHEN 'patch-panel' THEN 'patch-panel'
+      WHEN 'storage' THEN 'storage'
+      WHEN 'ups' THEN 'ups'
+      WHEN 'pdu' THEN 'pdu-vertical'
+      ELSE 'generic-device'
+    END
+    WHERE icon_key IS NULL OR icon_key = ''
+  `);
+
+  await pool.query(`
     UPDATE rack_devices
     SET mount_position = 'full'
     WHERE mount_position IS NULL
+  `);
+
+  await pool.query(`
+    UPDATE rack_devices
+    SET icon_key = CASE
+      WHEN mount_position <> 'full' THEN 'pdu-vertical'
+      ELSE 'generic-device'
+    END
+    WHERE icon_key IS NULL OR icon_key = ''
   `);
 
   await pool.query(`
@@ -225,16 +282,16 @@ export async function initializeDatabase(): Promise<void> {
 async function seedDatabase(): Promise<void> {
   await pool.query(
     `
-      INSERT INTO device_templates (template_type, mount_style, name, manufacturer, model, default_height_u, blocks_both_faces)
+      INSERT INTO device_templates (template_type, mount_style, icon_key, name, manufacturer, model, default_height_u, blocks_both_faces)
       VALUES
-        ('server', 'full', 'Server 1U', 'Generic', 'Rack Server 1U', 1, TRUE),
-        ('server', 'full', 'Server 2U', 'Generic', 'Rack Server 2U', 2, TRUE),
-        ('switch-router', 'full', 'Switch/Router 1U', 'Generic', 'Network Device 1U', 1, FALSE),
-        ('switch-router', 'full', 'Switch/Router 2U', 'Generic', 'Network Device 2U', 2, TRUE),
-        ('patch-panel', 'full', 'Patchpanel 1U', 'Generic', 'Patchpanel 1U', 1, FALSE),
-        ('storage', 'full', 'Storage 2U', 'Generic', 'Storage Shelf 2U', 2, TRUE),
-        ('ups', 'full', 'UPS 2U', 'Generic', 'UPS 2U', 2, TRUE),
-        ('pdu', 'vertical-pdu', 'Vertical PDU 31U', 'Generic', 'Vertical Rack PDU', 31, FALSE)
+        ('server', 'full', 'server', 'Server 1U', 'Generic', 'Rack Server 1U', 1, TRUE),
+        ('server', 'full', 'server', 'Server 2U', 'Generic', 'Rack Server 2U', 2, TRUE),
+        ('switch-router', 'full', 'switch', 'Switch/Router 1U', 'Generic', 'Network Device 1U', 1, FALSE),
+        ('switch-router', 'full', 'switch', 'Switch/Router 2U', 'Generic', 'Network Device 2U', 2, TRUE),
+        ('patch-panel', 'full', 'patch-panel', 'Patchpanel 1U', 'Generic', 'Patchpanel 1U', 1, FALSE),
+        ('storage', 'full', 'storage', 'Storage 2U', 'Generic', 'Storage Shelf 2U', 2, TRUE),
+        ('ups', 'full', 'ups', 'UPS 2U', 'Generic', 'UPS 2U', 2, TRUE),
+        ('pdu', 'vertical-pdu', 'pdu-vertical', 'Vertical PDU 31U', 'Generic', 'Vertical Rack PDU', 31, FALSE)
       ON CONFLICT (name, manufacturer, model) DO NOTHING
     `
   );
@@ -278,6 +335,7 @@ async function seedDatabase(): Promise<void> {
         blocks_both_faces,
         start_unit,
         height_u,
+        icon_key,
         name,
         manufacturer,
         model,
@@ -286,10 +344,10 @@ async function seedDatabase(): Promise<void> {
         notes,
         storage_location
       ) VALUES
-        ($1, 'rack', 'front', 'full', TRUE, 40, 2, 'Storage Shelf 01', 'Dell', 'EMC Unity Shelf', 'D-EMC-4401', 'unity-shelf-01', 'Primary storage shelf', NULL),
-        ($1, 'rack', 'rear', 'full', FALSE, 38, 1, 'Core Switch 01', 'Cisco', 'Catalyst 9300', 'C9300-01', 'core-sw-01', 'Top of rack core switch', NULL),
-        ($1, 'rack', 'rear', 'rear-left-outer', FALSE, 3, 31, 'PDU A', 'APC', 'Metered PDU', 'APC-PDU-A', NULL, 'Rear left vertical PDU', NULL),
-        ($1, 'spare', NULL, 'full', FALSE, NULL, 1, 'SFP Module Kit', 'Cisco', 'SFP-10G-SR', NULL, NULL, 'Loose spare transceivers', 'Accessory box')
+        ($1, 'rack', 'front', 'full', TRUE, 40, 2, 'storage', 'Storage Shelf 01', 'Dell', 'EMC Unity Shelf', 'D-EMC-4401', 'unity-shelf-01', 'Primary storage shelf', NULL),
+        ($1, 'rack', 'rear', 'full', FALSE, 38, 1, 'switch', 'Core Switch 01', 'Cisco', 'Catalyst 9300', 'C9300-01', 'core-sw-01', 'Top of rack core switch', NULL),
+        ($1, 'rack', 'rear', 'rear-left-outer', FALSE, 3, 31, 'pdu-vertical', 'PDU A', 'APC', 'Metered PDU', 'APC-PDU-A', NULL, 'Rear left vertical PDU', NULL),
+        ($1, 'spare', NULL, 'full', FALSE, NULL, 1, 'generic-device', 'SFP Module Kit', 'Cisco', 'SFP-10G-SR', NULL, NULL, 'Loose spare transceivers', 'Accessory box')
     `,
     [rackId]
   );

@@ -8,6 +8,7 @@ import {
   isVerticalPduMountPosition
 } from "../../shared/rack";
 import type { DeviceTemplate, RackDetail, RackDevice, RackFace, RackMountPosition } from "../../shared/types";
+import { getDeviceIconUrl } from "../deviceIcons";
 
 interface RackCanvasProps {
   rack: RackDetail;
@@ -179,6 +180,7 @@ export function RackCanvas({
   const [pduGuideVisible, setPduGuideVisible] = useState(false);
   const [pduGuideMountPosition, setPduGuideMountPosition] = useState<RackMountPosition | null>(null);
   const faceLabel = activeRackFace === "front" ? "Front" : "Rear";
+  const allDevices = rack.devices.filter((device) => device.placementType === "rack" || device.placementType === "spare");
   const placedDevices = rack.devices.filter(
     (device) =>
       device.placementType === "rack" &&
@@ -222,10 +224,11 @@ export function RackCanvas({
 
   function handleDragOver(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
-    event.dataTransfer.dropEffect = draggingDevice ? "move" : "copy";
     const hoveredUnit = getUnitFromPointer(event);
     const templatePayload = event.dataTransfer.getData("application/x-aethercab-template");
     const devicePayload = event.dataTransfer.getData("application/x-aethercab-device");
+
+    event.dataTransfer.dropEffect = devicePayload || draggingDevice ? "move" : "copy";
 
     if (templatePayload) {
       const template = JSON.parse(templatePayload) as DeviceTemplate;
@@ -255,7 +258,7 @@ export function RackCanvas({
     }
 
     if (devicePayload) {
-      const device = placedDevices.find((entry) => String(entry.id) === devicePayload);
+      const device = allDevices.find((entry) => String(entry.id) === devicePayload);
       if (!device) {
         resetDragGuides();
         return;
@@ -291,7 +294,7 @@ export function RackCanvas({
     }
 
     if (devicePayload) {
-      const device = placedDevices.find((entry) => String(entry.id) === devicePayload);
+      const device = allDevices.find((entry) => String(entry.id) === devicePayload);
       if (device) {
         const offsetUnitsFromTop = draggingDevice?.deviceId === device.id ? draggingDevice.offsetUnitsFromTop : device.heightU - 1;
         const nextStartUnit = clamp(hoveredUnit - (device.heightU - 1 - offsetUnitsFromTop), 1, rack.totalUnits - device.heightU + 1);
@@ -404,6 +407,7 @@ export function RackCanvas({
           {placedDevices.map((device) => {
             const startUnit = device.startUnit!;
             const endUnit = getEndUnit(startUnit, device.heightU);
+            const isMirroredFromOppositeFace = device.blocksBothFaces && device.rackFace !== null && device.rackFace !== activeRackFace;
             const detailLine = `${device.manufacturer} ${device.model}`;
             const positionLine = `${startUnit}U - ${endUnit}U`;
             const faceLine =
@@ -425,7 +429,16 @@ export function RackCanvas({
             return (
               <button
                 key={device.id}
-                className={device.id === selectedDeviceId ? "rack-device selected" : "rack-device"}
+                className={
+                  device.id === selectedDeviceId
+                    ? isMirroredFromOppositeFace
+                      ? "rack-device selected mirrored-face"
+                      : "rack-device selected"
+                    : isMirroredFromOppositeFace
+                      ? "rack-device mirrored-face"
+                      : "rack-device"
+                }
+                data-origin-face={isMirroredFromOppositeFace ? device.rackFace : undefined}
                 style={getDeviceStyle(rack, device, rackWidth, reservePduColumns)}
                 draggable
                 onDragStart={(event) => {
@@ -447,23 +460,26 @@ export function RackCanvas({
                 }}
                 onClick={() => onSelectDevice(device.id)}
                 type="button"
-                title={`${device.name} | ${detailLine} | ${positionLine} | ${faceLine}`}
+                title={`${device.name} | ${detailLine} | ${positionLine} | ${faceLine}${isMirroredFromOppositeFace ? ` | Mounted on ${device.rackFace}` : ""}`}
               >
-                <span className={contentClassName}>
-                  <strong>{device.name}</strong>
-                  {isVerticalPduMountPosition(device.mountPosition) ? (
-                    <>
+                <span className="rack-device-shell">
+                  <img alt="" aria-hidden="true" className="rack-device-icon" src={getDeviceIconUrl(device.iconKey)} />
+                  <span className={contentClassName}>
+                    <strong>{device.name}</strong>
+                    {isVerticalPduMountPosition(device.mountPosition) ? (
+                      <>
+                        <span>{detailLine}</span>
+                        <span>{positionLine}</span>
+                      </>
+                    ) : device.heightU === 1 ? (
                       <span>{detailLine}</span>
-                      <span>{positionLine}</span>
-                    </>
-                  ) : device.heightU === 1 ? (
-                    <span>{detailLine}</span>
-                  ) : (
-                    <>
-                      <span>{detailLine}</span>
-                      <span>{`${positionLine} | ${faceLine}`}</span>
-                    </>
-                  )}
+                    ) : (
+                      <>
+                        <span>{detailLine}</span>
+                        <span>{`${positionLine} | ${faceLine}`}</span>
+                      </>
+                    )}
+                  </span>
                 </span>
               </button>
             );

@@ -1,6 +1,24 @@
 export type PlacementType = "rack" | "spare";
 export type RackFace = "front" | "rear";
 export type TemplateMountStyle = "full" | "vertical-pdu";
+export type DeviceIconKey =
+  | "generic-device"
+  | "server"
+  | "switch"
+  | "router"
+  | "patch-panel"
+  | "pdu-vertical"
+  | "storage"
+  | "firewall"
+  | "ups"
+  | "modem"
+  | "access-point"
+  | "kvm"
+  | "blade-chassis"
+  | "load-balancer"
+  | "media-converter"
+  | "terminal-server"
+  | "nas";
 export type RackMountPosition =
   | "full"
   | "front-left-outer"
@@ -35,6 +53,7 @@ export interface DeviceTemplate {
   id: number;
   templateType: string;
   mountStyle: TemplateMountStyle;
+  iconKey: DeviceIconKey;
   name: string;
   manufacturer: string;
   model: string;
@@ -45,6 +64,7 @@ export interface DeviceTemplate {
 export interface DeviceTemplateInput {
   templateType: string;
   mountStyle: TemplateMountStyle;
+  iconKey: DeviceIconKey;
   name: string;
   manufacturer: string;
   model: string;
@@ -55,12 +75,14 @@ export interface DeviceTemplateInput {
 export interface RackDevice {
   id: number;
   rackId: number;
+  templateId: number | null;
   placementType: PlacementType;
   rackFace: RackFace | null;
   mountPosition: RackMountPosition;
   blocksBothFaces: boolean;
   startUnit: number | null;
   heightU: number;
+  iconKey: DeviceIconKey | null;
   name: string;
   manufacturer: string;
   model: string;
@@ -85,12 +107,14 @@ export interface AuditExportDetail extends AuditSummary {
 }
 
 export interface RackDeviceInput {
+  templateId?: number | null;
   placementType: PlacementType;
   rackFace: RackFace | null;
   mountPosition: RackMountPosition;
   blocksBothFaces: boolean;
   startUnit: number | null;
   heightU: number;
+  iconKey?: DeviceIconKey | null;
   name: string;
   manufacturer: string;
   model: string;

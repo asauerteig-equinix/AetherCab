@@ -15,12 +15,14 @@ function normalizeValue(value: string): string | null {
 
 function toDeviceInput(device: RackDevice): RackDeviceInput {
   return {
+    templateId: device.templateId,
     placementType: device.placementType,
     rackFace: device.rackFace,
     mountPosition: device.mountPosition,
     blocksBothFaces: device.blocksBothFaces,
     startUnit: device.startUnit,
     heightU: device.heightU,
+    iconKey: device.iconKey,
     name: device.name,
     manufacturer: device.manufacturer,
     model: device.model,
@@ -61,17 +63,27 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
       <div className="panel-header">
         <div>
           <p className="eyebrow">Inspector</p>
-          <h2>{device.name}</h2>
+          <h2>{device.hostname ?? device.name}</h2>
         </div>
         <button className="ghost-button" onClick={onDelete} type="button">
-          Remove
+          {device.placementType === "rack" ? "Move To Tray" : "Delete"}
         </button>
       </div>
 
       <div className="inspector-grid">
-        <label>
-          Name
-          <input value={device.name} onChange={updateInput("name")} />
+        <label className="full-width">
+          Hostname
+          <input
+            value={device.hostname ?? device.name}
+            onChange={(event) => {
+              const nextValue = event.target.value;
+              onChange({
+                ...draft,
+                name: nextValue,
+                hostname: normalizeValue(nextValue)
+              });
+            }}
+          />
         </label>
         <label>
           Manufacturer
@@ -95,15 +107,6 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
               </option>
             ))}
           </select>
-        </label>
-        <label>
-          Height U
-          <input
-            min={1}
-            type="number"
-            value={device.heightU}
-            onChange={updateInput("heightU", (event) => Number(event.target.value))}
-          />
         </label>
         <label>
           Rack face
@@ -131,6 +134,22 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
             }}
           />
         </label>
+        <label className="inspector-column-left">
+          Serial number
+          <input
+            value={device.serialNumber ?? ""}
+            onChange={updateInput("serialNumber", (event) => normalizeValue(event.target.value))}
+          />
+        </label>
+        <label className="inspector-column-left">
+          Height U
+          <input
+            min={1}
+            type="number"
+            value={device.heightU}
+            onChange={updateInput("heightU", (event) => Number(event.target.value))}
+          />
+        </label>
         <label>
           Start U
           <input
@@ -149,17 +168,6 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
             onChange={updateInput("storageLocation", (event) => normalizeValue(event.target.value))}
           />
         </label>
-        <label>
-          Hostname
-          <input value={device.hostname ?? ""} onChange={updateInput("hostname", (event) => normalizeValue(event.target.value))} />
-        </label>
-        <label>
-          Serial number
-          <input
-            value={device.serialNumber ?? ""}
-            onChange={updateInput("serialNumber", (event) => normalizeValue(event.target.value))}
-          />
-        </label>
         <label className="full-width">
           Notes
           <textarea rows={4} value={device.notes ?? ""} onChange={updateInput("notes", (event) => normalizeValue(event.target.value))} />
@@ -167,6 +175,9 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
       </div>
       {isVerticalPduMountPosition(device.mountPosition) ? (
         <p className="muted">Vertical PDUs are stored as rear-side lanes and do not block the main rack width.</p>
+      ) : null}
+      {device.placementType === "spare" ? (
+        <p className="muted">This device is only parked temporarily and will not appear in exports.</p>
       ) : null}
       <p className="muted">{saving ? "Saving changes..." : "Changes are written directly to the database."}</p>
     </section>

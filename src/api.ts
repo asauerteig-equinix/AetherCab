@@ -81,6 +81,12 @@ export const api = {
       body: JSON.stringify(payload)
     });
   },
+  updateTemplate(templateId: number, payload: DeviceTemplateInput): Promise<DeviceTemplate> {
+    return request(`/api/device-templates/${templateId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+  },
   deleteTemplate(templateId: number): Promise<void> {
     return request(`/api/device-templates/${templateId}`, {
       method: "DELETE"

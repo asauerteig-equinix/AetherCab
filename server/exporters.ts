@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { getEndUnit, getMountPositionFace, getRackMountPositionLabel, isVerticalPduMountPosition } from "../shared/rack.js";
-import type { AuditExportDetail, RackDetail, RackDevice, RackFace, RackMountPosition } from "../shared/types.js";
+import type { AuditExportDetail, DeviceIconKey, RackDetail, RackDevice, RackFace, RackMountPosition } from "../shared/types.js";
 
 type PdfDocument = InstanceType<typeof PDFDocument>;
 
@@ -40,6 +40,118 @@ const pdfPageOptions = {
   size: "A4",
   layout: "landscape"
 } as const;
+
+function drawPdfDeviceIcon(pdf: PdfDocument, iconKey: DeviceIconKey | null | undefined, x: number, y: number, size: number): void {
+  const key = iconKey ?? "generic-device";
+  const stroke = pdfPalette.accentStrong;
+  const fill = pdfPalette.accent;
+  const right = x + size;
+  const bottom = y + size;
+  const midX = x + size / 2;
+  const midY = y + size / 2;
+
+  pdf.save();
+  pdf.lineWidth(Math.max(0.9, size * 0.08)).strokeColor(stroke).fillColor(fill);
+
+  switch (key) {
+    case "server":
+      pdf.roundedRect(x + 1, y + 1, size - 2, size * 0.32, 2).stroke();
+      pdf.roundedRect(x + 1, y + size * 0.54, size - 2, size * 0.28, 2).stroke();
+      pdf.circle(x + size * 0.2, y + size * 0.18, size * 0.05).fill(fill);
+      pdf.circle(x + size * 0.2, y + size * 0.68, size * 0.05).fill(fill);
+      break;
+    case "switch":
+      pdf.roundedRect(x + 1, y + size * 0.18, size - 2, size * 0.52, 3).stroke();
+      for (let index = 0; index < 4; index += 1) {
+        pdf.rect(x + size * (0.18 + index * 0.15), y + size * 0.38, size * 0.1, size * 0.08).fill(fill);
+      }
+      break;
+    case "router":
+      pdf.roundedRect(x + size * 0.12, y + size * 0.34, size * 0.76, size * 0.32, 3).stroke();
+      pdf.moveTo(x + size * 0.28, y + size * 0.34).lineTo(x + size * 0.28, y + size * 0.14).stroke();
+      pdf.moveTo(x + size * 0.72, y + size * 0.34).lineTo(x + size * 0.72, y + size * 0.14).stroke();
+      pdf.moveTo(x + size * 0.34, y + size * 0.2).lineTo(midX, y + size * 0.12).lineTo(x + size * 0.66, y + size * 0.2).stroke();
+      break;
+    case "patch-panel":
+      pdf.roundedRect(x + 1, y + size * 0.26, size - 2, size * 0.42, 2).stroke();
+      for (let index = 0; index < 6; index += 1) {
+        pdf.circle(x + size * (0.18 + index * 0.12), midY, size * 0.04).fill(fill);
+      }
+      break;
+    case "pdu-vertical":
+      pdf.roundedRect(x + size * 0.38, y + 1, size * 0.24, size - 2, 3).stroke();
+      for (let index = 0; index < 4; index += 1) {
+        pdf.circle(midX, y + size * (0.22 + index * 0.16), size * 0.04).fill(fill);
+      }
+      break;
+    case "storage":
+    case "nas":
+      pdf.roundedRect(x + size * 0.16, y + 1, size * 0.68, size - 2, 3).stroke();
+      pdf.moveTo(x + size * 0.24, y + size * 0.3).lineTo(x + size * 0.76, y + size * 0.3).stroke();
+      pdf.moveTo(x + size * 0.24, y + size * 0.5).lineTo(x + size * 0.76, y + size * 0.5).stroke();
+      pdf.moveTo(x + size * 0.24, y + size * 0.7).lineTo(x + size * 0.76, y + size * 0.7).stroke();
+      break;
+    case "firewall":
+      pdf.roundedRect(x + 1, y + 1, size - 2, size - 2, 3).stroke();
+      pdf.moveTo(x + size * 0.33, y + 1).lineTo(x + size * 0.33, bottom - 1).stroke();
+      pdf.moveTo(x + size * 0.66, y + 1).lineTo(x + size * 0.66, bottom - 1).stroke();
+      pdf.moveTo(x + 1, y + size * 0.45).lineTo(right - 1, y + size * 0.45).stroke();
+      break;
+    case "ups":
+      pdf.roundedRect(x + size * 0.22, y + 1, size * 0.56, size - 2, 3).stroke();
+      pdf.moveTo(midX, y + size * 0.34).lineTo(x + size * 0.42, y + size * 0.56).lineTo(midX, y + size * 0.56).lineTo(x + size * 0.46, y + size * 0.78).stroke();
+      break;
+    case "modem":
+      pdf.roundedRect(x + 1, y + size * 0.34, size - 2, size * 0.28, 3).stroke();
+      pdf.moveTo(x + size * 0.28, y + size * 0.34).lineTo(x + size * 0.28, y + size * 0.16).stroke();
+      pdf.moveTo(x + size * 0.72, y + size * 0.34).lineTo(x + size * 0.72, y + size * 0.16).stroke();
+      break;
+    case "access-point":
+      pdf.moveTo(x + size * 0.36, y + size * 0.42).lineTo(midX, y + size * 0.3).lineTo(x + size * 0.64, y + size * 0.42).stroke();
+      pdf.moveTo(x + size * 0.22, y + size * 0.3).lineTo(midX, y + size * 0.14).lineTo(x + size * 0.78, y + size * 0.3).stroke();
+      pdf.roundedRect(x + size * 0.32, y + size * 0.62, size * 0.36, size * 0.14, 2).stroke();
+      break;
+    case "kvm":
+      pdf.roundedRect(x + 1, y + size * 0.2, size - 2, size * 0.3, 2).stroke();
+      pdf.moveTo(x + size * 0.28, y + size * 0.68).lineTo(x + size * 0.72, y + size * 0.68).stroke();
+      pdf.moveTo(x + size * 0.38, y + size * 0.68).lineTo(x + size * 0.38, bottom - 1).stroke();
+      pdf.moveTo(x + size * 0.62, y + size * 0.68).lineTo(x + size * 0.62, bottom - 1).stroke();
+      break;
+    case "blade-chassis":
+      pdf.roundedRect(x + size * 0.16, y + 1, size * 0.68, size - 2, 3).stroke();
+      pdf.rect(x + size * 0.24, y + size * 0.18, size * 0.18, size * 0.22).stroke();
+      pdf.rect(x + size * 0.58, y + size * 0.18, size * 0.18, size * 0.22).stroke();
+      pdf.rect(x + size * 0.24, y + size * 0.56, size * 0.18, size * 0.22).stroke();
+      pdf.rect(x + size * 0.58, y + size * 0.56, size * 0.18, size * 0.22).stroke();
+      break;
+    case "load-balancer":
+      pdf.moveTo(midX, y + size * 0.2).lineTo(midX, y + size * 0.62).stroke();
+      pdf.moveTo(midX, y + size * 0.2).lineTo(x + size * 0.26, y + size * 0.36).stroke();
+      pdf.moveTo(midX, y + size * 0.2).lineTo(x + size * 0.74, y + size * 0.36).stroke();
+      pdf.circle(midX, y + size * 0.2, size * 0.04).fill(fill);
+      pdf.circle(x + size * 0.26, y + size * 0.36, size * 0.04).fill(fill);
+      pdf.circle(x + size * 0.74, y + size * 0.36, size * 0.04).fill(fill);
+      break;
+    case "media-converter":
+      pdf.roundedRect(x + 1, y + size * 0.26, size - 2, size * 0.42, 2).stroke();
+      pdf.moveTo(x + size * 0.3, midY).lineTo(x + size * 0.7, midY).stroke();
+      pdf.moveTo(x + size * 0.58, midY - size * 0.1).lineTo(x + size * 0.7, midY).lineTo(x + size * 0.58, midY + size * 0.1).stroke();
+      break;
+    case "terminal-server":
+      pdf.roundedRect(x + 1, y + size * 0.22, size - 2, size * 0.46, 2).stroke();
+      pdf.moveTo(x + size * 0.24, y + size * 0.38).lineTo(x + size * 0.4, midY).lineTo(x + size * 0.24, y + size * 0.62).stroke();
+      pdf.moveTo(x + size * 0.46, y + size * 0.62).lineTo(x + size * 0.62, y + size * 0.62).stroke();
+      break;
+    default:
+      pdf.roundedRect(x + 1, y + size * 0.22, size - 2, size * 0.46, 3).stroke();
+      pdf.moveTo(x + size * 0.22, midY).lineTo(x + size * 0.78, midY).stroke();
+      pdf.circle(x + size * 0.24, y + size * 0.62, size * 0.04).fill(fill);
+      pdf.circle(x + size * 0.4, y + size * 0.62, size * 0.04).fill(fill);
+      break;
+  }
+
+  pdf.restore();
+}
 
 function installedDevices(rack: RackDetail): RackDevice[] {
   return rack.devices.filter((device) => device.placementType === "rack" && device.startUnit !== null);
@@ -592,8 +704,10 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
     const topY = y + (rack.totalUnits - endUnit) * unitHeight + 1;
     const height = Math.max(unitHeight * device.heightU - 2, unitHeight - 2);
     const frame = getPdfRackDeviceFrame(reservePduColumns, rackX, rackWidth, device.mountPosition);
-    const textX = frame.x + innerPadding;
-    const textWidth = frame.width - innerPadding * 2;
+    const iconSize = Math.min(14, Math.max(8, Math.min(height - 6, frame.width * 0.22)));
+    const showIcon = frame.width >= 24 && height >= 12 && !isVerticalPduMountPosition(device.mountPosition);
+    const textX = frame.x + innerPadding + (showIcon ? iconSize + 6 : 0);
+    const textWidth = frame.width - innerPadding * 2 - (showIcon ? iconSize + 6 : 0);
     const lines = deviceVisualLines(device);
     const fontSize = isVerticalPduMountPosition(device.mountPosition) ? 5.8 : device.heightU === 1 ? 6.2 : device.heightU === 2 ? 6.8 : 7.2;
     const lineHeight = fontSize + 1.5;
@@ -608,6 +722,10 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
       .strokeColor(pdfPalette.deviceBorder)
       .stroke();
     pdf.restore();
+
+    if (showIcon) {
+      drawPdfDeviceIcon(pdf, device.iconKey, frame.x + innerPadding, topY + Math.max(3, (height - iconSize) / 2), iconSize);
+    }
 
     lines.forEach((line, index) => {
       pdf.fillColor(index === 0 ? pdfPalette.textPrimary : pdfPalette.textSecondary).fontSize(fontSize).text(line, textX + 2, startTextY + index * lineHeight, {
@@ -644,13 +762,14 @@ function drawPdfInventoryTableHeader(pdf: PdfDocument): void {
   const x = 36;
   const y = pdf.y;
   const columns = [
-    { label: "Rack", width: 92 },
-    { label: "Pos", width: 56 },
-    { label: "Face", width: 52 },
-    { label: "Mount", width: 110 },
-    { label: "Name", width: 130 },
-    { label: "Model", width: 118 },
-    { label: "Details", width: 212 }
+    { label: "", width: 30 },
+    { label: "Rack", width: 78 },
+    { label: "Pos", width: 52 },
+    { label: "Face", width: 48 },
+    { label: "Mount", width: 100 },
+    { label: "Name", width: 124 },
+    { label: "Model", width: 108 },
+    { label: "Details", width: 190 }
   ] as const;
 
   let columnX = x;
@@ -689,20 +808,27 @@ function drawPdfInventoryRow(pdf: PdfDocument, rack: RackDetail, device: RackDev
     `${device.manufacturer} ${device.model}`.trim(),
     details
   ];
-  const columns = [92, 56, 52, 110, 130, 118, 212];
+  const columns = [30, 78, 52, 48, 100, 124, 108, 190];
 
   let columnX = x;
-  values.forEach((value, index) => {
-    const width = columns[index];
+  columns.forEach((columnWidth, index) => {
     pdf.save();
-    pdf.rect(columnX, y, width, 20).fill("#ffffff");
-    pdf.rect(columnX, y, width, 20).lineWidth(0.5).strokeColor(pdfPalette.slotLine).stroke();
+    pdf.rect(columnX, y, columnWidth, 20).fill("#ffffff");
+    pdf.rect(columnX, y, columnWidth, 20).lineWidth(0.5).strokeColor(pdfPalette.slotLine).stroke();
     pdf.restore();
-    pdf.fillColor(index < 5 ? pdfPalette.textPrimary : pdfPalette.textSecondary).fontSize(8.1).text(value, columnX + 4, y + 5, {
-      width: width - 8,
+
+    if (index === 0) {
+      drawPdfDeviceIcon(pdf, device.iconKey, columnX + 6, y + 3, 14);
+      columnX += columnWidth;
+      return;
+    }
+
+    const value = values[index - 1];
+    pdf.fillColor(index < 6 ? pdfPalette.textPrimary : pdfPalette.textSecondary).fontSize(8.1).text(value, columnX + 4, y + 5, {
+      width: columnWidth - 8,
       ellipsis: true
     });
-    columnX += width;
+    columnX += columnWidth;
   });
 
   pdf.y = y + 20;

@@ -189,6 +189,49 @@ export function findOverlaps(
   });
 }
 
+export function canPlaceRackDeviceAtStartUnit(
+  device: Pick<RackDeviceInput, "placementType" | "rackFace" | "mountPosition" | "blocksBothFaces" | "heightU">,
+  startUnit: number,
+  rackUnits: number,
+  existingDevices: RackDevice[],
+  currentDeviceId?: number
+): boolean {
+  const candidate = {
+    ...device,
+    startUnit
+  };
+
+  return validateRackPlacement(candidate, rackUnits).length === 0 && findOverlaps(candidate, existingDevices, currentDeviceId).length === 0;
+}
+
+export function findClosestAvailableStartUnit(
+  device: Pick<RackDeviceInput, "placementType" | "rackFace" | "mountPosition" | "blocksBothFaces" | "heightU">,
+  rackUnits: number,
+  existingDevices: RackDevice[],
+  referenceStartUnit: number,
+  referenceEndUnit: number,
+  currentDeviceId?: number
+): number | null {
+  let bestStartUnit: number | null = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (let startUnit = 1; startUnit <= rackUnits - device.heightU + 1; startUnit += 1) {
+    if (!canPlaceRackDeviceAtStartUnit(device, startUnit, rackUnits, existingDevices, currentDeviceId)) {
+      continue;
+    }
+
+    const endUnit = getEndUnit(startUnit, device.heightU);
+    const score = Math.abs(startUnit - referenceStartUnit) + Math.abs(endUnit - referenceEndUnit);
+
+    if (score < bestScore) {
+      bestScore = score;
+      bestStartUnit = startUnit;
+    }
+  }
+
+  return bestStartUnit;
+}
+
 export function sortRackDevices(devices: RackDevice[]): RackDevice[] {
   return [...devices].sort((left, right) => {
     if (left.placementType !== right.placementType) {

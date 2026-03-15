@@ -25,6 +25,7 @@ import {
   listAudits,
   listDeviceTemplates,
   updateAudit,
+  updateDeviceTemplate,
   updateRack,
   updateRackDevice
 } from "./repository.js";
@@ -129,6 +130,13 @@ async function bootstrap(): Promise<void> {
     "/api/device-templates",
     asyncRoute(async (request, response) => {
       response.status(201).json(await createDeviceTemplate(request.body as DeviceTemplateInput));
+    })
+  );
+
+  app.put(
+    "/api/device-templates/:templateId",
+    asyncRoute(async (request, response) => {
+      response.json(await updateDeviceTemplate(Number(request.params.templateId), request.body as DeviceTemplateInput));
     })
   );
 
