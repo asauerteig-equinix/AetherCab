@@ -7,7 +7,6 @@ interface RackSwitcherProps {
   saving: boolean;
   onFormChange(next: AuditUpdateInput): void;
   onSave(): Promise<void>;
-  onBackToOverview(): void;
 }
 
 function toAuditForm(audit: AuditDetail): AuditUpdateInput {
@@ -19,7 +18,7 @@ function toAuditForm(audit: AuditDetail): AuditUpdateInput {
   };
 }
 
-export function RackSwitcher({ audit, form, saving, onFormChange, onSave, onBackToOverview }: RackSwitcherProps) {
+export function RackSwitcher({ audit, form, saving, onFormChange, onSave }: RackSwitcherProps) {
   const [editorOpen, setEditorOpen] = useState(false);
 
   if (!audit) {
@@ -63,9 +62,6 @@ export function RackSwitcher({ audit, form, saving, onFormChange, onSave, onBack
             <p className="audit-summary-notes">{audit.notes || "No notes yet."}</p>
             <p className="audit-summary-hint">Double-click to edit audit details.</p>
           </div>
-          <button className="ghost-button" onClick={onBackToOverview} type="button">
-            Back to overview
-          </button>
         </div>
       </section>
 
@@ -90,7 +86,6 @@ export function RackSwitcher({ audit, form, saving, onFormChange, onSave, onBack
               <div className="audit-edit-heading">
                 <p className="eyebrow">Edit Audit</p>
                 <h2 id="audit-edit-title">{audit.name}</h2>
-                <p className="audit-edit-copy">Update the shared metadata for all racks in this audit.</p>
               </div>
               <button className="ghost-button" disabled={saving} onClick={handleCancel} type="button">
                 Close

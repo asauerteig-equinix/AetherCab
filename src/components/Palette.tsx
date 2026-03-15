@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { DeviceTemplate } from "../../shared/types";
 import { getDeviceIconUrl } from "../deviceIcons";
 
@@ -27,6 +27,15 @@ export function Palette({ templates }: PaletteProps) {
     [templates]
   );
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setCollapsedGroups(
+      Object.keys(templatesByType).reduce<Record<string, boolean>>((groups, templateType) => {
+        groups[templateType] = true;
+        return groups;
+      }, {})
+    );
+  }, [templatesByType]);
 
   function toggleGroup(templateType: string) {
     setCollapsedGroups((current) => ({
@@ -69,7 +78,7 @@ export function Palette({ templates }: PaletteProps) {
                     </p>
                     <p>
                       {template.mountStyle === "vertical-pdu"
-                        ? "Rear vertical PDU lane"
+                        ? "Vertical PDU lane"
                         : template.blocksBothFaces
                           ? "Front + Rear"
                           : "Single side"}
@@ -78,7 +87,7 @@ export function Palette({ templates }: PaletteProps) {
                   <div className="template-actions compact">
                     <span>
                       {template.mountStyle === "vertical-pdu"
-                        ? "Rear PDU"
+                        ? "Vertical PDU"
                         : template.blocksBothFaces
                           ? "Front + Rear"
                           : "Single side"}

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
 import {
+  canPlaceRackDeviceAtStartUnit,
   getAnchoredStartUnit,
   getEndUnit,
+  getMountPositionFace,
   getRackMountPositionLabel,
   getRackMountPositionShortLabel,
   getVerticalPduMountPositionsForFace,
@@ -24,6 +26,7 @@ interface PreviewPlacement {
   startUnit: number;
   endUnit: number;
   mountPosition: RackMountPosition;
+  isValid: boolean;
 }
 
 const slotHeight = 28;
@@ -164,6 +167,14 @@ function getDeviceStyle(
   };
 }
 
+function getPreviewRange(targetUnit: number, heightU: number, rackUnits: number): { startUnit: number; endUnit: number } {
+  const startUnit = clamp(targetUnit - heightU + 1, 1, rackUnits - heightU + 1);
+  return {
+    startUnit,
+    endUnit: getEndUnit(startUnit, heightU)
+  };
+}
+
 export function RackCanvas({
   rack,
   activeRackFace,
@@ -234,12 +245,18 @@ export function RackCanvas({
       const template = JSON.parse(templatePayload) as DeviceTemplate;
       const isPdu = template.mountStyle === "vertical-pdu";
       const mountPosition = isPdu ? getPduLaneFromPointer(event, rackWidth, activeRackFace) : "full";
+      const previewRange = getPreviewRange(hoveredUnit, template.defaultHeightU, rack.totalUnits);
 
       setPduGuideVisible(isPdu);
       setPduGuideMountPosition(isPdu && mountPosition !== "full" ? mountPosition : null);
 
       if (isPdu && mountPosition === "full") {
-        setPreviewPlacement(null);
+        setPreviewPlacement({
+          startUnit: previewRange.startUnit,
+          endUnit: previewRange.endUnit,
+          mountPosition,
+          isValid: false
+        });
         return;
       }
 
@@ -252,8 +269,29 @@ export function RackCanvas({
         isPdu ? false : template.blocksBothFaces,
         rack.devices
       );
+      const previewStartUnit = startUnit ?? previewRange.startUnit;
+      const previewRackFace = getMountPositionFace(mountPosition) ?? activeRackFace;
+      const isValid =
+        startUnit !== null &&
+        canPlaceRackDeviceAtStartUnit(
+          {
+            placementType: "rack",
+            rackFace: previewRackFace,
+            mountPosition,
+            blocksBothFaces: isPdu ? false : template.blocksBothFaces,
+            heightU: template.defaultHeightU
+          },
+          previewStartUnit,
+          rack.totalUnits,
+          rack.devices
+        );
 
-      setPreviewPlacement(startUnit === null ? null : { startUnit, endUnit: getEndUnit(startUnit, template.defaultHeightU), mountPosition });
+      setPreviewPlacement({
+        startUnit: previewStartUnit,
+        endUnit: getEndUnit(previewStartUnit, template.defaultHeightU),
+        mountPosition,
+        isValid
+      });
       return;
     }
 
@@ -269,10 +307,24 @@ export function RackCanvas({
       const startUnit = clamp(hoveredUnit - (device.heightU - 1 - offsetUnitsFromTop), 1, rack.totalUnits - device.heightU + 1);
       const hoveredMountPosition = isPdu ? getPduLaneFromPointer(event, rackWidth, activeRackFace) : "full";
       const mountPosition = isPdu && hoveredMountPosition === "full" ? device.mountPosition : hoveredMountPosition;
+      const previewRackFace = getMountPositionFace(mountPosition) ?? activeRackFace;
+      const isValid = canPlaceRackDeviceAtStartUnit(
+        {
+          placementType: "rack",
+          rackFace: previewRackFace,
+          mountPosition,
+          blocksBothFaces: isPdu ? false : device.blocksBothFaces,
+          heightU: device.heightU
+        },
+        startUnit,
+        rack.totalUnits,
+        rack.devices,
+        device.id
+      );
 
       setPduGuideVisible(isPdu);
       setPduGuideMountPosition(isPdu ? mountPosition : null);
-      setPreviewPlacement({ startUnit, endUnit: getEndUnit(startUnit, device.heightU), mountPosition });
+      setPreviewPlacement({ startUnit, endUnit: getEndUnit(startUnit, device.heightU), mountPosition, isValid });
       return;
     }
 
@@ -374,7 +426,13 @@ export function RackCanvas({
               {facePduLanePositions.map((mountPosition) => (
                 <div
                   key={mountPosition}
-                  className={pduGuideMountPosition === mountPosition ? "rack-pdu-lane active" : "rack-pdu-lane"}
+                  className={
+                    pduGuideMountPosition === mountPosition
+                      ? previewPlacement?.isValid === false
+                        ? "rack-pdu-lane active invalid"
+                        : "rack-pdu-lane active"
+                      : "rack-pdu-lane"
+                  }
                   style={{ ...getMountStyle(layout, mountPosition, true), height: rack.totalUnits * slotHeight - 2 }}
                 >
                   <span>{getRackMountPositionShortLabel(mountPosition)}</span>
@@ -390,8 +448,13 @@ export function RackCanvas({
               previewPlacement.mountPosition === "full" &&
               unit >= previewPlacement.startUnit &&
               unit <= previewPlacement.endUnit;
+            const slotClassName = isPreviewUnit
+              ? previewPlacement?.isValid
+                ? "rack-slot drop-target valid"
+                : "rack-slot drop-target invalid"
+              : "rack-slot";
             return (
-              <div className={isPreviewUnit ? "rack-slot drop-target" : "rack-slot"} key={unit}>
+              <div className={slotClassName} key={unit}>
                 <span className="slot-label">{unit}U</span>
               </div>
             );
@@ -399,7 +462,15 @@ export function RackCanvas({
 
           {previewPlacement ? (
             <div
-              className={previewPlacement.mountPosition === "full" ? "rack-preview" : "rack-preview pdu"}
+              className={
+                previewPlacement.mountPosition === "full"
+                  ? previewPlacement.isValid
+                    ? "rack-preview valid"
+                    : "rack-preview invalid"
+                  : previewPlacement.isValid
+                    ? "rack-preview pdu valid"
+                    : "rack-preview pdu invalid"
+              }
               style={getDeviceStyle(rack, previewPlacement, rackWidth, reservePduColumns)}
             />
           ) : null}
@@ -432,11 +503,19 @@ export function RackCanvas({
                 className={
                   device.id === selectedDeviceId
                     ? isMirroredFromOppositeFace
-                      ? "rack-device selected mirrored-face"
-                      : "rack-device selected"
+                      ? isVerticalPduMountPosition(device.mountPosition)
+                        ? "rack-device selected mirrored-face pdu-device"
+                        : "rack-device selected mirrored-face"
+                      : isVerticalPduMountPosition(device.mountPosition)
+                        ? "rack-device selected pdu-device"
+                        : "rack-device selected"
                     : isMirroredFromOppositeFace
-                      ? "rack-device mirrored-face"
-                      : "rack-device"
+                      ? isVerticalPduMountPosition(device.mountPosition)
+                        ? "rack-device mirrored-face pdu-device"
+                        : "rack-device mirrored-face"
+                      : isVerticalPduMountPosition(device.mountPosition)
+                        ? "rack-device pdu-device"
+                        : "rack-device"
                 }
                 data-origin-face={isMirroredFromOppositeFace ? device.rackFace : undefined}
                 style={getDeviceStyle(rack, device, rackWidth, reservePduColumns)}
@@ -452,7 +531,7 @@ export function RackCanvas({
                   setDraggingDevice({ deviceId: device.id, offsetUnitsFromTop });
                   setPduGuideVisible(isPdu);
                   setPduGuideMountPosition(isPdu ? device.mountPosition : null);
-                  setPreviewPlacement({ startUnit, endUnit, mountPosition: device.mountPosition });
+                  setPreviewPlacement({ startUnit, endUnit, mountPosition: device.mountPosition, isValid: true });
                 }}
                 onDragEnd={() => {
                   setDraggingDevice(null);

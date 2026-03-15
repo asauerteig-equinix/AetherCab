@@ -124,6 +124,7 @@ export default function App() {
   const [newRackForm, setNewRackForm] = useState<RackCreateInput>(initialRackCreateForm);
   const [rackForm, setRackForm] = useState<RackUpdateInput>(initialRackUpdateForm);
   const [templateForm, setTemplateForm] = useState<DeviceTemplateInput>(initialTemplateForm);
+  const [recentlyDeletedDevice, setRecentlyDeletedDevice] = useState<{ rackId: number; device: RackDevice } | null>(null);
 
   useEffect(() => {
     void loadInitialData();
@@ -355,10 +356,11 @@ export default function App() {
 
     try {
       setSaving(true);
+      const targetRackFace = nextMountPosition === "full" ? activeRackFace : getMountPositionFace(nextMountPosition);
       await api.updateDevice(activeRackId, device.id, {
         templateId: device.templateId,
         placementType: "rack",
-        rackFace: nextMountPosition === "full" ? device.rackFace ?? activeRackFace : getMountPositionFace(nextMountPosition),
+        rackFace: targetRackFace,
         mountPosition: nextMountPosition,
         blocksBothFaces: nextMountPosition === "full" ? device.blocksBothFaces : false,
         startUnit: nextStartUnit,
@@ -420,16 +422,18 @@ export default function App() {
       return;
     }
 
-      await api.updateDevice(activeRackId, device.id, {
-        templateId: device.templateId,
-        placementType: "spare",
-        rackFace: device.rackFace,
-        mountPosition: device.mountPosition,
-        blocksBothFaces: device.blocksBothFaces,
-        startUnit: null,
-        heightU: device.heightU,
-        iconKey: device.iconKey,
-        name: device.name,
+    setRecentlyDeletedDevice(null);
+
+    await api.updateDevice(activeRackId, device.id, {
+      templateId: device.templateId,
+      placementType: "spare",
+      rackFace: device.rackFace,
+      mountPosition: device.mountPosition,
+      blocksBothFaces: device.blocksBothFaces,
+      startUnit: null,
+      heightU: device.heightU,
+      iconKey: device.iconKey,
+      name: device.name,
       manufacturer: device.manufacturer,
       model: device.model,
       serialNumber: device.serialNumber,
@@ -439,26 +443,123 @@ export default function App() {
     });
   }
 
-  async function handleDeleteDevice() {
+  async function handleMoveDeviceToTray() {
     if (activeRackId === null || selectedDevice === null) {
+      return;
+    }
+
+    if (selectedDevice.placementType !== "rack") {
       return;
     }
 
     try {
       setSaving(true);
-      if (selectedDevice.placementType === "rack") {
-        await moveDeviceToStagingArea(selectedDevice);
-        await loadRack(activeRackId);
-        setMessage(`${selectedDevice.name} was moved to the staging area.`);
-      } else {
-        await api.deleteDevice(activeRackId, selectedDevice.id);
-        setSelectedDeviceId(null);
-        await loadRack(activeRackId);
-        setMessage(`${selectedDevice.name} was deleted.`);
-      }
+      await moveDeviceToStagingArea(selectedDevice);
+      await loadRack(activeRackId);
+      setMessage(`${selectedDevice.name} was moved to the staging area.`);
+      setError(null);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Device could not be moved to the tray.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteDevice() {
+    if (activeRackId === null || selectedDevice === null) {
+      return;
+    }
+
+    const deletedDevice = selectedDevice;
+
+    try {
+      setSaving(true);
+      await api.deleteDevice(activeRackId, deletedDevice.id);
+      setRecentlyDeletedDevice({ rackId: activeRackId, device: deletedDevice });
+      setSelectedDeviceId(null);
+      await loadRack(activeRackId);
+      setMessage(`${deletedDevice.name} was deleted.`);
       setError(null);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Item could not be removed.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleUndoDelete() {
+    if (!recentlyDeletedDevice) {
+      return;
+    }
+
+    const { rackId, device } = recentlyDeletedDevice;
+
+    try {
+      setSaving(true);
+      const restoredDevice = await api.createDevice(rackId, {
+        templateId: device.templateId,
+        placementType: device.placementType,
+        rackFace: device.rackFace,
+        mountPosition: device.mountPosition,
+        blocksBothFaces: device.blocksBothFaces,
+        startUnit: device.startUnit,
+        heightU: device.heightU,
+        iconKey: device.iconKey,
+        name: device.name,
+        manufacturer: device.manufacturer,
+        model: device.model,
+        serialNumber: device.serialNumber,
+        hostname: device.hostname,
+        notes: device.notes,
+        storageLocation: device.storageLocation
+      });
+
+      setRecentlyDeletedDevice(null);
+
+      if (activeRackId === rackId) {
+        await loadRack(rackId);
+        setSelectedDeviceId(restoredDevice.id);
+      }
+
+      setMessage(`${device.name} was restored.`);
+      setError(null);
+    } catch (restoreError) {
+      if (device.placementType === "rack") {
+        try {
+          const restoredToTray = await api.createDevice(rackId, {
+            templateId: device.templateId,
+            placementType: "spare",
+            rackFace: device.rackFace,
+            mountPosition: device.mountPosition,
+            blocksBothFaces: device.blocksBothFaces,
+            startUnit: null,
+            heightU: device.heightU,
+            iconKey: device.iconKey,
+            name: device.name,
+            manufacturer: device.manufacturer,
+            model: device.model,
+            serialNumber: device.serialNumber,
+            hostname: device.hostname,
+            notes: device.notes,
+            storageLocation: "Staging area"
+          });
+
+          setRecentlyDeletedDevice(null);
+
+          if (activeRackId === rackId) {
+            await loadRack(rackId);
+            setSelectedDeviceId(restoredToTray.id);
+          }
+
+          setMessage(`${device.name} was restored to the tray because the old rack position is no longer free.`);
+          setError(null);
+          return;
+        } catch {
+          // Fall through to the shared error state below.
+        }
+      }
+
+      setError(restoreError instanceof Error ? restoreError.message : "Deleted device could not be restored.");
     } finally {
       setSaving(false);
     }
@@ -648,37 +749,37 @@ export default function App() {
   return (
     <div className="app-shell">
       <nav className="app-nav">
-        <button className={currentPath === "/" ? "nav-link selected" : "nav-link"} onClick={() => navigate("/")} type="button">
-          Overview
-        </button>
-        <button
-          className={currentPath === "/audits" ? "nav-link selected" : "nav-link"}
-          onClick={() => navigate("/audits")}
-          type="button"
-        >
-          Audits
-        </button>
-        <button className={currentPath === "/admin" ? "nav-link selected" : "nav-link"} onClick={() => navigate("/admin")} type="button">
-          Admin
-        </button>
+        <div className="app-nav-links">
+          <button className={currentPath === "/" ? "nav-link selected" : "nav-link"} onClick={() => navigate("/")} type="button">
+            Overview
+          </button>
+          <button
+            className={currentPath === "/audits" ? "nav-link selected" : "nav-link"}
+            onClick={() => navigate("/audits")}
+            type="button"
+          >
+            Audits
+          </button>
+          <button
+            className={currentPath === "/admin" ? "nav-link selected" : "nav-link"}
+            onClick={() => navigate("/admin")}
+            type="button"
+          >
+            Admin
+          </button>
+        </div>
+        <div className="app-brand">AetherCab</div>
+        <div aria-hidden="true" className="app-nav-spacer" />
       </nav>
 
       {currentPath === "/audits" ? (
         <header className="hero audit-hero">
-          <div className="hero-primary">
-            <p className="hero-kicker">AetherCab</p>
-            <p className="hero-copy">
-              One audit can now document multiple racks. Keep the audit metadata compact at the top and switch racks directly
-              inside the editor.
-            </p>
-          </div>
           <RackSwitcher
             audit={auditDetail}
             form={auditForm}
             saving={saving}
             onFormChange={setAuditForm}
             onSave={handleAuditUpdate}
-            onBackToOverview={() => navigate("/")}
           />
           <div className="hero-actions">
             <span className="status-pill">{saving ? "Saving database changes" : message}</span>
@@ -693,6 +794,14 @@ export default function App() {
       ) : null}
 
       {error ? <div className="error-banner">{error}</div> : null}
+      {recentlyDeletedDevice ? (
+        <div className="undo-banner">
+          <span>{`${recentlyDeletedDevice.device.name} was deleted.`}</span>
+          <button className="ghost-button" disabled={saving} onClick={() => void handleUndoDelete()} type="button">
+            Undo delete
+          </button>
+        </div>
+      ) : null}
 
       {currentPath === "/" ? (
         <OverviewPage
@@ -777,6 +886,9 @@ export default function App() {
               device={selectedDevice}
               onChange={(next) => {
                 void handleInspectorChange(next);
+              }}
+              onMoveToTray={() => {
+                void handleMoveDeviceToTray();
               }}
               onDelete={() => {
                 void handleDeleteDevice();
