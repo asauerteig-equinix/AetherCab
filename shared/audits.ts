@@ -3,11 +3,11 @@ import type { AuditStatus } from "./types.js";
 export function getAuditStatusLabel(status: AuditStatus): string {
   switch (status) {
     case "in-progress":
-      return "In Bearbeitung";
+      return "In Progress";
     case "completed":
-      return "Abgeschlossen";
+      return "Completed";
     default:
-      return "Erstellt";
+      return "Created";
   }
 }
 

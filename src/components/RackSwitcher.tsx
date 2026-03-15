@@ -114,7 +114,7 @@ export function RackSwitcher({ audit, form, saving, onFormChange, onSave, onDele
 
             <div className="audit-edit-grid clean">
               <label className="audit-edit-field plain">
-                <span>Kundenname / Systemname</span>
+                <span>Customer / System Name</span>
                 <input value={form.auditName} onChange={(event) => onFormChange({ ...form, auditName: event.target.value })} />
               </label>
               <label className="audit-edit-field plain">
@@ -135,9 +135,9 @@ export function RackSwitcher({ audit, form, saving, onFormChange, onSave, onDele
                   value={form.status}
                   onChange={(event) => onFormChange({ ...form, status: event.target.value as AuditUpdateInput["status"] })}
                 >
-                  <option value="created">Erstellt</option>
-                  <option value="in-progress">In Bearbeitung</option>
-                  <option value="completed">Abgeschlossen</option>
+                  <option value="created">Created</option>
+                  <option value="in-progress">In Progress</option>
+                  <option value="completed">Completed</option>
                 </select>
               </label>
               <label className="audit-edit-field plain full-width">

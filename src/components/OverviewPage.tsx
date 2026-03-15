@@ -96,22 +96,22 @@ export function OverviewPage({
           <div className="overview-hero-copy">
             <p className="eyebrow">Start</p>
             <h2>Audit Dashboard</h2>
-            <p className="hero-copy">Gesamt erstellte Audits, aktueller Fortschritt und direkter Zugriff auf die zuletzt angelegten Dokumentationen.</p>
+            <p className="hero-copy">Track total audit volume, current progress, and get direct access to the latest documentation workspaces.</p>
             <div className="overview-hero-stats">
               <article className="overview-stat-card emphasis">
-                <span>Gesamt erstellt</span>
+                <span>Total created</span>
                 <strong>{totalAudits}</strong>
               </article>
               <article className="overview-stat-card status created">
-                <span>Erstellt</span>
+                <span>Created</span>
                 <strong>{createdCount}</strong>
               </article>
               <article className="overview-stat-card status in-progress">
-                <span>In Arbeit</span>
+                <span>In Progress</span>
                 <strong>{inProgressCount}</strong>
               </article>
               <article className="overview-stat-card status completed">
-                <span>Abgeschlossen</span>
+                <span>Completed</span>
                 <strong>{completedCount}</strong>
               </article>
             </div>
@@ -125,9 +125,9 @@ export function OverviewPage({
                 <span className="completed" style={{ width: `${completedPercent}%` }} />
               </div>
               <div className="overview-status-legend">
-                <span className="created">{`${createdPercent}% erstellt`}</span>
-                <span className="in-progress">{`${inProgressPercent}% in Arbeit`}</span>
-                <span className="completed">{`${completedPercent}% abgeschlossen`}</span>
+                <span className="created">{`${createdPercent}% created`}</span>
+                <span className="in-progress">{`${inProgressPercent}% in progress`}</span>
+                <span className="completed">{`${completedPercent}% completed`}</span>
               </div>
             </div>
 
@@ -155,15 +155,15 @@ export function OverviewPage({
           <div className="overview-filter-bar">
             <label className="search-field">
               Search
-              <input value={searchValue} onChange={(event) => onSearchChange(event.target.value)} placeholder="Kunde, Sales Order, Site oder Room" />
+              <input value={searchValue} onChange={(event) => onSearchChange(event.target.value)} placeholder="Customer, sales order, site, or room" />
             </label>
 
             <div className="overview-status-filters">
               {[
-                { key: "all" as const, label: "Alle", count: audits.length },
-                { key: "created" as const, label: "Erstellt", count: createdCount },
-                { key: "in-progress" as const, label: "In Arbeit", count: inProgressCount },
-                { key: "completed" as const, label: "Abgeschlossen", count: completedCount }
+                { key: "all" as const, label: "All", count: audits.length },
+                { key: "created" as const, label: "Created", count: createdCount },
+                { key: "in-progress" as const, label: "In Progress", count: inProgressCount },
+                { key: "completed" as const, label: "Completed", count: completedCount }
               ].map((filter) => (
                 <button
                   key={filter.key}
@@ -218,7 +218,7 @@ export function OverviewPage({
               <div className="audit-edit-heading">
                 <p className="eyebrow">New Audit</p>
                 <h2>Create audit</h2>
-                <p className="audit-edit-copy">The first rack is created automatically as `0101` with `47U`, and every new audit starts in status `Erstellt`.</p>
+                <p className="audit-edit-copy">The first rack is created automatically as `0101` with `47U`, and every new audit starts in status `Created`.</p>
               </div>
               <button className="ghost-button" onClick={() => setCreateModalOpen(false)} type="button">
                 Close
@@ -241,7 +241,7 @@ export function OverviewPage({
                 <input value={createForm.roomName} onChange={(event) => onCreateFormChange({ ...createForm, roomName: event.target.value })} />
               </label>
               <label>
-                Kundenname / Systemname
+                Customer / System Name
                 <input value={createForm.auditName} onChange={(event) => onCreateFormChange({ ...createForm, auditName: event.target.value })} />
               </label>
               <label>
