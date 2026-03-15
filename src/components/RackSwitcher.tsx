@@ -85,10 +85,11 @@ export function RackSwitcher({ rack, form, saving, onFormChange, onSave, onBackT
             onClick={(event) => event.stopPropagation()}
             role="dialog"
           >
-            <div className="panel-header">
-              <div>
+            <div className="audit-edit-topbar">
+              <div className="audit-edit-heading">
                 <p className="eyebrow">Edit Audit</p>
                 <h2 id="audit-edit-title">{rack.name}</h2>
+                <p className="audit-edit-copy">Update the audit metadata without leaving the rack editor.</p>
               </div>
               <button className="ghost-button" disabled={saving} onClick={handleCancel} type="button">
                 Close
@@ -96,29 +97,30 @@ export function RackSwitcher({ rack, form, saving, onFormChange, onSave, onBackT
             </div>
 
             <div className="audit-edit-grid">
-              <label>
-                Site
+              <label className="audit-edit-field">
+                <span>Site</span>
                 <input value={form.siteName} onChange={(event) => onFormChange({ ...form, siteName: event.target.value })} />
               </label>
-              <label>
-                Room
+              <label className="audit-edit-field">
+                <span>Room</span>
                 <input value={form.roomName} onChange={(event) => onFormChange({ ...form, roomName: event.target.value })} />
               </label>
-              <label>
-                Rack Name
+              <label className="audit-edit-field">
+                <span>Rack Name</span>
                 <input value={form.rackName} onChange={(event) => onFormChange({ ...form, rackName: event.target.value })} />
               </label>
-              <label>
-                Rack Height
+              <label className="audit-edit-field">
+                <span>Rack Height</span>
                 <input
                   min={1}
                   type="number"
                   value={form.totalUnits}
                   onChange={(event) => onFormChange({ ...form, totalUnits: Number(event.target.value) })}
                 />
+                <small>Can only be reduced if no placed devices would exceed the new height.</small>
               </label>
-              <label className="full-width">
-                Notes
+              <label className="audit-edit-field full-width">
+                <span>Notes</span>
                 <textarea rows={4} value={form.notes ?? ""} onChange={(event) => onFormChange({ ...form, notes: event.target.value })} />
               </label>
             </div>

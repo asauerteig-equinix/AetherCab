@@ -382,8 +382,13 @@ export function RackCanvas({
 
           {Array.from({ length: rack.totalUnits }, (_, index) => {
             const unit = rack.totalUnits - index;
+            const isPreviewUnit =
+              previewPlacement !== null &&
+              previewPlacement.mountPosition === "full" &&
+              unit >= previewPlacement.startUnit &&
+              unit <= previewPlacement.endUnit;
             return (
-              <div className="rack-slot" key={unit}>
+              <div className={isPreviewUnit ? "rack-slot drop-target" : "rack-slot"} key={unit}>
                 <span className="slot-label">{unit}U</span>
               </div>
             );

@@ -484,9 +484,36 @@ a {
 }
 
 .audit-edit-modal {
-  width: min(760px, 100%);
-  max-height: min(88vh, 760px);
+  width: min(680px, 100%);
+  max-height: min(86vh, 760px);
   overflow: auto;
+  padding: 18px;
+  background:
+    linear-gradient(180deg, rgba(120, 144, 166, 0.08), rgba(255, 255, 255, 0.98) 32%),
+    rgba(248, 250, 252, 0.98);
+}
+
+.audit-edit-topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 14px;
+}
+
+.audit-edit-heading {
+  display: grid;
+  gap: 3px;
+}
+
+.audit-edit-heading h2 {
+  margin: 0;
+}
+
+.audit-edit-copy {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
 }
 
 .audit-edit-grid {
@@ -495,11 +522,35 @@ a {
   gap: 12px;
 }
 
+.audit-edit-field {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.audit-edit-field span {
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.audit-edit-field small {
+  color: var(--text-quiet);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
 .audit-edit-actions {
   display: flex;
   justify-content: end;
   gap: 10px;
-  margin-top: 16px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
 }
 
 .template-card[draggable="true"],
@@ -757,6 +808,19 @@ textarea {
       rgba(127, 146, 163, 0.06) 48px,
       rgba(127, 146, 163, 0.06) 49px
     );
+}
+
+.rack-slot.drop-target {
+  background:
+    linear-gradient(90deg, rgba(79, 111, 134, 0.18), rgba(79, 111, 134, 0.08)),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 48px,
+      rgba(127, 146, 163, 0.08) 48px,
+      rgba(127, 146, 163, 0.08) 49px
+    );
+  box-shadow: inset 0 0 0 1px rgba(79, 111, 134, 0.16);
 }
 
 .slot-label {
