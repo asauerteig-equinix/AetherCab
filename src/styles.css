@@ -86,6 +86,12 @@ a {
   justify-content: end;
 }
 
+.nav-feedback-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .app-brand {
   display: grid;
   justify-items: center;
@@ -125,6 +131,12 @@ a {
   transform: translateY(-1px);
   border-color: var(--line-strong);
   background: var(--surface-soft-strong);
+}
+
+.feedback-button-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .hero {
@@ -561,6 +573,61 @@ a {
   background:
     linear-gradient(180deg, rgba(120, 144, 166, 0.08), rgba(255, 255, 255, 0.98) 32%),
     rgba(248, 250, 252, 0.98);
+}
+
+.feedback-modal {
+  width: min(620px, 100%);
+  max-height: min(84vh, 760px);
+  overflow: auto;
+  padding: 20px;
+  background:
+    linear-gradient(180deg, rgba(120, 144, 166, 0.08), rgba(255, 255, 255, 0.98) 32%),
+    rgba(248, 250, 252, 0.98);
+}
+
+.feedback-modal-topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
+  margin-bottom: 16px;
+}
+
+.feedback-modal-heading {
+  display: grid;
+  gap: 3px;
+}
+
+.feedback-modal-heading h2 {
+  margin: 0;
+}
+
+.feedback-modal-copy {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.feedback-text-field {
+  grid-column: 1 / -1;
+}
+
+.feedback-text-field textarea {
+  min-height: 180px;
+}
+
+.feedback-modal-actions {
+  display: flex;
+  justify-content: end;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.feedback-send-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .audit-edit-topbar {

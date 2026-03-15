@@ -847,7 +847,8 @@ function getPdfRackFaceLayoutForFace(
   const rightCalloutWidth = rightPduMountPositions.length > 0 ? calloutWidth : 0;
   const leftCalloutGap = leftCalloutWidth > 0 ? calloutGap : 0;
   const rightCalloutGap = rightCalloutWidth > 0 ? calloutGap : 0;
-  const rackX = x + labelWidth + leftCalloutWidth + leftCalloutGap;
+  const labelX = x + leftCalloutWidth + leftCalloutGap;
+  const rackX = labelX + labelWidth;
   const rackWidth = width - labelWidth - leftCalloutWidth - rightCalloutWidth - leftCalloutGap - rightCalloutGap;
   const sidePadding = 10;
   const pduLaneWidth = 18;
@@ -865,9 +866,9 @@ function getPdfRackFaceLayoutForFace(
   const fullWidth = rackWidth - sidePadding * 2 - leftPduWidth - rightPduWidth;
 
   return {
-    labelX: x,
+    labelX,
     labelWidth,
-    leftCalloutX: x + labelWidth,
+    leftCalloutX: x,
     calloutWidth,
     rackX,
     rackWidth,
@@ -993,6 +994,7 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
     const frame = getPdfRackDeviceFrame(layout, device.mountPosition);
     const iconSize = Math.min(14, Math.max(8, Math.min(height - 6, frame.width * 0.22)));
     const isPdu = isVerticalPduMountPosition(device.mountPosition);
+    const isMirroredFromOppositeFace = device.blocksBothFaces && device.rackFace !== null && device.rackFace !== face;
     const showIcon = frame.width >= 24 && height >= 12 && !isPdu;
     const textX = frame.x + innerPadding + (showIcon ? iconSize + 6 : 0);
     const textWidth = frame.width - innerPadding * 2 - (showIcon ? iconSize + 6 : 0);
@@ -1003,12 +1005,26 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
     const startTextY = isPdu || device.heightU > 1 ? topY + 4 : topY + Math.max(3, (height - textBlockHeight) / 2);
 
     pdf.save();
-    pdf.roundedRect(frame.x, topY, frame.width, height, isPdu ? 6 : 8).fill(pdfPalette.deviceFill);
+    pdf
+      .roundedRect(frame.x, topY, frame.width, height, isPdu ? 6 : 8)
+      .fill(isMirroredFromOppositeFace ? "#edf3f7" : pdfPalette.deviceFill);
     pdf
       .roundedRect(frame.x, topY, frame.width, height, isPdu ? 6 : 8)
       .lineWidth(0.8)
       .strokeColor(pdfPalette.deviceBorder)
       .stroke();
+
+    if (isMirroredFromOppositeFace) {
+      pdf.opacity(0.22);
+      for (let offset = -height; offset < frame.width + height; offset += 8) {
+        pdf
+          .moveTo(frame.x + offset, topY + height)
+          .lineTo(frame.x + offset + height, topY)
+          .lineWidth(0.55)
+          .strokeColor(pdfPalette.accentStrong)
+          .stroke();
+      }
+    }
     pdf.restore();
 
     if (showIcon) {

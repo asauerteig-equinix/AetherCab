@@ -8,6 +8,7 @@ import type {
   AuditUpdateInput,
   DeviceTemplate,
   DeviceTemplateInput,
+  FeedbackInput,
   RackCreateInput,
   RackDetail,
   RackDevice,
@@ -18,6 +19,7 @@ import type {
 } from "../shared/types";
 import { api } from "./api";
 import { AdminTemplatesPage } from "./components/AdminTemplatesPage";
+import { FeedbackModal, FeedbackNavIcon } from "./components/FeedbackModal";
 import { Inspector } from "./components/Inspector";
 import { OverviewPage } from "./components/OverviewPage";
 import { Palette } from "./components/Palette";
@@ -27,6 +29,36 @@ import { RackTabs } from "./components/RackTabs";
 import { StagingArea } from "./components/StagingArea";
 
 type RackViewMode = RackFace | "both";
+
+function isRackViewMode(value: string | null): value is RackViewMode {
+  return value === "front" || value === "rear" || value === "both";
+}
+
+function parseOptionalPositiveInteger(value: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function readWorkspaceStateFromLocation(): {
+  path: "/" | "/audits" | "/admin";
+  auditId: number | null;
+  rackId: number | null;
+  rackView: RackViewMode;
+} {
+  const path = window.location.pathname === "/audits" || window.location.pathname === "/admin" ? window.location.pathname : "/";
+  const searchParams = new URLSearchParams(window.location.search);
+
+  return {
+    path,
+    auditId: path === "/audits" ? parseOptionalPositiveInteger(searchParams.get("audit")) : null,
+    rackId: path === "/audits" ? parseOptionalPositiveInteger(searchParams.get("rack")) : null,
+    rackView: path === "/audits" && isRackViewMode(searchParams.get("view")) ? searchParams.get("view") : "both"
+  };
+}
 
 const initialAuditCreateForm: AuditCreateInput = {
   siteName: "",
@@ -67,6 +99,13 @@ const initialTemplateForm: DeviceTemplateInput = {
   model: "",
   defaultHeightU: 1,
   blocksBothFaces: false
+};
+
+const initialFeedbackForm: FeedbackInput = {
+  userName: "",
+  message: "",
+  contextPath: null,
+  auditName: null
 };
 
 function toAuditUpdateForm(audit: AuditDetail): AuditUpdateInput {
@@ -114,15 +153,16 @@ function templateToRackDevice(
 }
 
 export default function App() {
-  const [currentPath, setCurrentPath] = useState(() => window.location.pathname);
+  const initialLocationState = readWorkspaceStateFromLocation();
+  const [currentPath, setCurrentPath] = useState<"/" | "/audits" | "/admin">(initialLocationState.path);
   const [audits, setAudits] = useState<AuditSummary[]>([]);
-  const [activeAuditId, setActiveAuditId] = useState<number | null>(null);
+  const [activeAuditId, setActiveAuditId] = useState<number | null>(initialLocationState.auditId);
   const [auditDetail, setAuditDetail] = useState<AuditDetail | null>(null);
-  const [activeRackId, setActiveRackId] = useState<number | null>(null);
+  const [activeRackId, setActiveRackId] = useState<number | null>(initialLocationState.rackId);
   const [rackDetail, setRackDetail] = useState<RackDetail | null>(null);
   const [templates, setTemplates] = useState<DeviceTemplate[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
-  const [activeRackView, setActiveRackView] = useState<RackViewMode>("front");
+  const [activeRackView, setActiveRackView] = useState<RackViewMode>(initialLocationState.rackView);
   const [auditSearch, setAuditSearch] = useState("");
   const [message, setMessage] = useState("Loading workspace...");
   const [error, setError] = useState<string | null>(null);
@@ -133,14 +173,35 @@ export default function App() {
   const [rackForm, setRackForm] = useState<RackUpdateInput>(initialRackUpdateForm);
   const [templateForm, setTemplateForm] = useState<DeviceTemplateInput>(initialTemplateForm);
   const [recentlyDeletedDevice, setRecentlyDeletedDevice] = useState<{ rackId: number; device: RackDevice } | null>(null);
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [feedbackForm, setFeedbackForm] = useState<FeedbackInput>(initialFeedbackForm);
+  const [sendingFeedback, setSendingFeedback] = useState(false);
 
   useEffect(() => {
-    void loadInitialData();
-  }, []);
+    void (async () => {
+      try {
+        const [auditList, templateList] = await Promise.all([api.listAudits(), api.listTemplates()]);
+        setAudits(auditList);
+        setTemplates(templateList);
+        if (auditList.length === 0) {
+          setMessage("Create the first audit to start documenting racks.");
+        } else if (initialLocationState.auditId === null) {
+          setMessage("Open an audit from the overview to continue.");
+        }
+        setError(null);
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : "Initial data could not be loaded.");
+      }
+    })();
+  }, [initialLocationState.auditId]);
 
   useEffect(() => {
     function handlePopState() {
-      setCurrentPath(window.location.pathname);
+      const locationState = readWorkspaceStateFromLocation();
+      setCurrentPath(locationState.path);
+      setActiveAuditId(locationState.auditId);
+      setActiveRackId(locationState.rackId);
+      setActiveRackView(locationState.rackView);
     }
 
     window.addEventListener("popstate", handlePopState);
@@ -148,6 +209,38 @@ export default function App() {
       window.removeEventListener("popstate", handlePopState);
     };
   }, []);
+
+  useEffect(() => {
+    if (currentPath === "/audits") {
+      const searchParams = new URLSearchParams();
+      if (activeAuditId !== null) {
+        searchParams.set("audit", String(activeAuditId));
+      }
+      if (activeRackId !== null) {
+        searchParams.set("rack", String(activeRackId));
+      }
+      searchParams.set("view", activeRackView);
+
+      const nextUrl = `/audits${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+      const currentUrl = `${window.location.pathname}${window.location.search}`;
+      if (currentUrl !== nextUrl) {
+        window.history.replaceState({}, "", nextUrl);
+      }
+      return;
+    }
+
+    if (window.location.search) {
+      window.history.replaceState({}, "", currentPath);
+    }
+  }, [activeAuditId, activeRackId, activeRackView, currentPath]);
+
+  useEffect(() => {
+    setFeedbackForm((current) => ({
+      ...current,
+      contextPath: `${window.location.pathname}${window.location.search}`,
+      auditName: auditDetail?.name ?? null
+    }));
+  }, [activeAuditId, activeRackId, activeRackView, auditDetail?.name, currentPath]);
 
   useEffect(() => {
     if (activeAuditId !== null) {
@@ -238,41 +331,37 @@ export default function App() {
     };
   }, [selectedDeviceId]);
 
-  function navigate(path: "/" | "/audits" | "/admin") {
-    window.history.pushState({}, "", path);
+  function navigate(path: "/" | "/audits" | "/admin", options?: { auditId?: number | null; rackId?: number | null; rackView?: RackViewMode }) {
+    const searchParams = new URLSearchParams();
+    if (path === "/audits") {
+      if (options?.auditId !== null && options?.auditId !== undefined) {
+        searchParams.set("audit", String(options.auditId));
+      }
+      if (options?.rackId !== null && options?.rackId !== undefined) {
+        searchParams.set("rack", String(options.rackId));
+      }
+      searchParams.set("view", options?.rackView ?? activeRackView);
+    }
+
+    const nextUrl = `${path}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+    window.history.pushState({}, "", nextUrl);
     setCurrentPath(path);
   }
 
   function openAudit(auditId: number) {
     setRecentlyDeletedDevice(null);
     setSelectedDeviceId(null);
-    setActiveRackView("front");
+    setActiveRackView("both");
     setActiveRackId(null);
     setActiveAuditId(auditId);
-    navigate("/audits");
+    navigate("/audits", { auditId, rackView: "both" });
   }
 
   function selectRack(rackId: number) {
     setRecentlyDeletedDevice(null);
     setSelectedDeviceId(null);
-    setActiveRackView("front");
     setActiveRackId(rackId);
-  }
-
-  async function loadInitialData() {
-    try {
-      const [auditList, templateList] = await Promise.all([api.listAudits(), api.listTemplates()]);
-      setAudits(auditList);
-      setTemplates(templateList);
-      if (auditList.length > 0) {
-        setActiveAuditId((currentAuditId) => currentAuditId ?? auditList[0].id);
-      } else {
-        setMessage("Create the first audit to start documenting racks.");
-      }
-      setError(null);
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Initial data could not be loaded.");
-    }
+    navigate("/audits", { auditId: activeAuditId, rackId, rackView: activeRackView });
   }
 
   async function refreshTemplates() {
@@ -288,14 +377,7 @@ export default function App() {
       return;
     }
 
-    if (auditList.length === 0) {
-      setActiveAuditId(null);
-      return;
-    }
-
-    setActiveAuditId((currentAuditId) =>
-      currentAuditId !== null && auditList.some((audit) => audit.id === currentAuditId) ? currentAuditId : auditList[0].id
-    );
+    setActiveAuditId((currentAuditId) => (currentAuditId !== null && auditList.some((audit) => audit.id === currentAuditId) ? currentAuditId : null));
   }
 
   async function loadAudit(auditId: number) {
@@ -306,7 +388,17 @@ export default function App() {
       setMessage(`${detail.name} is open with ${detail.racks.length} rack${detail.racks.length === 1 ? "" : "s"}.`);
       setError(null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "Audit could not be loaded.");
+      const message = loadError instanceof Error ? loadError.message : "Audit could not be loaded.";
+      if (message === "Audit not found.") {
+        setActiveAuditId(null);
+        setActiveRackId(null);
+        setAuditDetail(null);
+        setRackDetail(null);
+        setCurrentPath("/");
+        window.history.replaceState({}, "", "/");
+        setMessage("Open an audit from the overview to continue.");
+      }
+      setError(message);
     }
   }
 
@@ -747,7 +839,8 @@ export default function App() {
       await refreshAuditList(audit.id);
       setMessage(`${audit.name} was created.`);
       setError(null);
-      navigate("/audits");
+      setActiveRackView("both");
+      navigate("/audits", { auditId: audit.id, rackId: audit.racks[0]?.id ?? null, rackView: "both" });
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Audit could not be created.");
     } finally {
@@ -789,6 +882,25 @@ export default function App() {
       setError(createError instanceof Error ? createError.message : "Template could not be created.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSendFeedback() {
+    try {
+      setSendingFeedback(true);
+      await api.sendFeedback(feedbackForm);
+      setFeedbackModalOpen(false);
+      setFeedbackForm({
+        ...initialFeedbackForm,
+        contextPath: `${window.location.pathname}${window.location.search}`,
+        auditName: auditDetail?.name ?? null
+      });
+      setMessage("Feedback was sent.");
+      setError(null);
+    } catch (sendError) {
+      setError(sendError instanceof Error ? sendError.message : "Feedback could not be sent.");
+    } finally {
+      setSendingFeedback(false);
     }
   }
 
@@ -846,8 +958,26 @@ export default function App() {
           <strong>Aether C.A.D</strong>
           <span>Customer Audit Documentation</span>
         </div>
-        <div aria-hidden="true" className="app-nav-spacer" />
+        <div className="app-nav-spacer">
+          <button className="nav-link nav-feedback-button" onClick={() => setFeedbackModalOpen(true)} type="button">
+            <span className="feedback-button-icon">
+              <FeedbackNavIcon />
+            </span>
+            <span>Feedback</span>
+          </button>
+        </div>
       </nav>
+
+      <FeedbackModal
+        draft={feedbackForm}
+        open={feedbackModalOpen}
+        sending={sendingFeedback}
+        onDraftChange={setFeedbackForm}
+        onClose={() => setFeedbackModalOpen(false)}
+        onSend={() => {
+          void handleSendFeedback();
+        }}
+      />
 
       {currentPath === "/audits" ? (
         <header className="hero audit-hero">

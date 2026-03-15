@@ -5,6 +5,7 @@ import type {
   AuditUpdateInput,
   DeviceTemplate,
   DeviceTemplateInput,
+  FeedbackInput,
   RackCreateInput,
   RackDetail,
   RackDevice,
@@ -119,5 +120,11 @@ export const api = {
   },
   pdfExportUrl(auditId: number): string {
     return `/api/audits/${auditId}/export.pdf`;
+  },
+  sendFeedback(payload: FeedbackInput): Promise<void> {
+    return request("/api/feedback", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
   }
 };

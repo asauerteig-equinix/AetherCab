@@ -5,12 +5,14 @@ import type {
   AuditCreateInput,
   AuditUpdateInput,
   DeviceTemplateInput,
+  FeedbackInput,
   RackCreateInput,
   RackDeviceInput,
   RackUpdateInput
 } from "../shared/types.js";
 import { initializeDatabase } from "./db.js";
 import { buildExcelExport, buildPdfExport } from "./exporters.js";
+import { sendFeedbackEmail } from "./feedback.js";
 import {
   createAudit,
   createRackInAudit,
@@ -50,6 +52,14 @@ async function bootstrap(): Promise<void> {
   app.get("/api/health", (_request, response) => {
     response.json({ status: "ok" });
   });
+
+  app.post(
+    "/api/feedback",
+    asyncRoute(async (request, response) => {
+      await sendFeedbackEmail(request.body as FeedbackInput);
+      response.status(204).send();
+    })
+  );
 
   app.get(
     "/api/audits",

@@ -157,3 +157,10 @@ export interface RackUpdateInput {
   rackName: string;
   totalUnits: number;
 }
+
+export interface FeedbackInput {
+  userName: string;
+  message: string;
+  contextPath?: string | null;
+  auditName?: string | null;
+}
