@@ -364,11 +364,11 @@ function getPdfCapacityFill(tone: RackFaceCapacityTone): string {
 }
 
 function capacityLabel(stats: RackFaceCapacityStats): string {
-  return `${faceLabel(stats.face)} free ${stats.freePercent}%`;
+  return `${faceLabel(stats.face)} occupied ${stats.usedPercent}% | free ${stats.freePercent}%`;
 }
 
-function capacityBarSegments(freePercent: number, segmentCount: number): number {
-  return Math.max(0, Math.min(segmentCount, Math.ceil((freePercent / 100) * segmentCount)));
+function capacityBarSegments(usedPercent: number, segmentCount: number): number {
+  return Math.max(0, Math.min(segmentCount, Math.ceil((usedPercent / 100) * segmentCount)));
 }
 
 function drawExcelCapacityBar(
@@ -389,7 +389,7 @@ function drawExcelCapacityBar(
   labelCell.border = createThinBorder(excelPalette.slotLine);
 
   const segmentCount = barEndColumn - barStartColumn + 1;
-  const filledSegments = capacityBarSegments(stats.freePercent, segmentCount);
+  const filledSegments = capacityBarSegments(stats.usedPercent, segmentCount);
   for (let columnIndex = barStartColumn; columnIndex <= barEndColumn; columnIndex += 1) {
     const cell = worksheet.getCell(rowIndex, columnIndex);
     cell.value = "";
@@ -716,11 +716,11 @@ function drawPdfPageBackground(pdf: PdfDocument): void {
 
 function drawPdfCapacityBar(pdf: PdfDocument, x: number, y: number, width: number, stats: RackFaceCapacityStats): void {
   const labelWidth = 84;
-  const valueWidth = 34;
+  const valueWidth = 82;
   const barGap = 10;
   const barWidth = Math.max(52, width - labelWidth - valueWidth - barGap * 2);
   const barHeight = 10;
-  const fillWidth = Math.max(0, Math.min(barWidth, Math.round((stats.freePercent / 100) * barWidth)));
+  const fillWidth = Math.max(0, Math.min(barWidth, Math.round((stats.usedPercent / 100) * barWidth)));
 
   pdf.fillColor(pdfPalette.textSecondary).fontSize(8.2).text(faceLabel(stats.face), x, y + 1, {
     width: labelWidth
@@ -733,7 +733,7 @@ function drawPdfCapacityBar(pdf: PdfDocument, x: number, y: number, width: numbe
   }
   pdf.restore();
 
-  pdf.fillColor(pdfPalette.textPrimary).fontSize(8.6).text(`${stats.freePercent}% free`, x + labelWidth + barGap + barWidth + barGap, y, {
+  pdf.fillColor(pdfPalette.textPrimary).fontSize(8.2).text(`${stats.usedPercent}% occ. | ${stats.freePercent}% free`, x + labelWidth + barGap + barWidth + barGap, y, {
     width: valueWidth,
     align: "right"
   });

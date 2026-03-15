@@ -4,9 +4,11 @@ import type { RackDevice, RackDeviceInput } from "../../shared/types";
 
 interface InspectorProps {
   device: RackDevice | null;
+  recentlyDeletedDeviceName: string | null;
   onChange(next: RackDeviceInput): void;
   onMoveToTray(): void;
   onDelete(): void;
+  onUndoDelete(): void;
   saving: boolean;
 }
 
@@ -54,7 +56,7 @@ function hasDraftChanges(left: RackDeviceInput, right: RackDeviceInput): boolean
   );
 }
 
-export function Inspector({ device, onChange, onMoveToTray, onDelete, saving }: InspectorProps) {
+export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveToTray, onDelete, onUndoDelete, saving }: InspectorProps) {
   const [draft, setDraft] = useState<RackDeviceInput | null>(() => (device ? toDeviceInput(device) : null));
 
   useEffect(() => {
@@ -66,6 +68,14 @@ export function Inspector({ device, onChange, onMoveToTray, onDelete, saving }: 
       <section className="panel inspector-panel empty">
         <p className="eyebrow">Inspector</p>
         <h2>Quick edit</h2>
+        {recentlyDeletedDeviceName ? (
+          <div className="inspector-undo-card">
+            <span>{`${recentlyDeletedDeviceName} was deleted.`}</span>
+            <button className="ghost-button" disabled={saving} onClick={onUndoDelete} type="button">
+              Undo delete
+            </button>
+          </div>
+        ) : null}
         <p>Select a device to edit its metadata.</p>
       </section>
     );
@@ -101,6 +111,14 @@ export function Inspector({ device, onChange, onMoveToTray, onDelete, saving }: 
           <h2>{device.hostname ?? device.name}</h2>
         </div>
       </div>
+      {recentlyDeletedDeviceName ? (
+        <div className="inspector-undo-card">
+          <span>{`${recentlyDeletedDeviceName} was deleted.`}</span>
+          <button className="ghost-button" disabled={saving} onClick={onUndoDelete} type="button">
+            Undo delete
+          </button>
+        </div>
+      ) : null}
       <div className={device.placementType === "rack" ? "inspector-actions split top" : "inspector-actions top"}>
         {device.placementType === "rack" ? (
           <button className="ghost-button inspector-action-button" disabled={saving} onClick={onMoveToTray} type="button">

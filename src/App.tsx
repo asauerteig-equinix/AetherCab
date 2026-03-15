@@ -26,6 +26,8 @@ import { RackSwitcher } from "./components/RackSwitcher";
 import { RackTabs } from "./components/RackTabs";
 import { StagingArea } from "./components/StagingArea";
 
+type RackViewMode = RackFace | "both";
+
 const initialAuditCreateForm: AuditCreateInput = {
   siteName: "",
   roomName: "",
@@ -120,7 +122,7 @@ export default function App() {
   const [rackDetail, setRackDetail] = useState<RackDetail | null>(null);
   const [templates, setTemplates] = useState<DeviceTemplate[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
-  const [activeRackFace, setActiveRackFace] = useState<RackFace>("front");
+  const [activeRackView, setActiveRackView] = useState<RackViewMode>("front");
   const [auditSearch, setAuditSearch] = useState("");
   const [message, setMessage] = useState("Loading workspace...");
   const [error, setError] = useState<string | null>(null);
@@ -196,12 +198,21 @@ export default function App() {
     }
 
     const isVisibleOnFace =
-      selectedDevice.blocksBothFaces || selectedDevice.rackFace === null || selectedDevice.rackFace === activeRackFace;
+      activeRackView === "both" ||
+      selectedDevice.blocksBothFaces ||
+      selectedDevice.rackFace === null ||
+      selectedDevice.rackFace === activeRackView;
 
     if (!isVisibleOnFace) {
       setSelectedDeviceId(null);
     }
-  }, [activeRackFace, rackDetail, selectedDeviceId]);
+  }, [activeRackView, rackDetail, selectedDeviceId]);
+
+  useEffect(() => {
+    if (selectedDeviceId !== null && recentlyDeletedDevice) {
+      setRecentlyDeletedDevice(null);
+    }
+  }, [recentlyDeletedDevice, selectedDeviceId]);
 
   function navigate(path: "/" | "/audits" | "/admin") {
     window.history.pushState({}, "", path);
@@ -209,16 +220,18 @@ export default function App() {
   }
 
   function openAudit(auditId: number) {
+    setRecentlyDeletedDevice(null);
     setSelectedDeviceId(null);
-    setActiveRackFace("front");
+    setActiveRackView("front");
     setActiveRackId(null);
     setActiveAuditId(auditId);
     navigate("/audits");
   }
 
   function selectRack(rackId: number) {
+    setRecentlyDeletedDevice(null);
     setSelectedDeviceId(null);
-    setActiveRackFace("front");
+    setActiveRackView("front");
     setActiveRackId(rackId);
   }
 
@@ -305,7 +318,7 @@ export default function App() {
   const selectedDevice = rackDetail?.devices.find((device) => device.id === selectedDeviceId) ?? null;
   const stagedDevices = rackDetail?.devices.filter((device) => device.placementType === "spare") ?? [];
 
-  async function handleTemplateDrop(unit: number, mountPosition: RackMountPosition, templatePayload: string) {
+  async function handleTemplateDrop(targetFace: RackFace, unit: number, mountPosition: RackMountPosition, templatePayload: string) {
     if (activeRackId === null || rackDetail === null) {
       return;
     }
@@ -313,8 +326,7 @@ export default function App() {
     try {
       const template = JSON.parse(templatePayload) as DeviceTemplate;
       const targetMountPosition = template.mountStyle === "vertical-pdu" ? mountPosition : "full";
-      const targetRackFace =
-        template.mountStyle === "vertical-pdu" ? (getMountPositionFace(targetMountPosition) ?? activeRackFace) : activeRackFace;
+      const resolvedRackFace = template.mountStyle === "vertical-pdu" ? (getMountPositionFace(targetMountPosition) ?? targetFace) : targetFace;
 
       if (template.mountStyle === "vertical-pdu" && mountPosition === "full") {
         setError("Vertical PDUs can only be dropped onto one of the visible PDU lanes.");
@@ -325,7 +337,7 @@ export default function App() {
         unit,
         template.defaultHeightU,
         rackDetail.totalUnits,
-        targetRackFace,
+        resolvedRackFace,
         targetMountPosition,
         template.mountStyle === "vertical-pdu" ? false : template.blocksBothFaces,
         rackDetail.devices
@@ -339,8 +351,9 @@ export default function App() {
       setSaving(true);
       await api.createDevice(
         activeRackId,
-        templateToRackDevice(template, anchoredStartUnit, "rack", targetRackFace, targetMountPosition)
+        templateToRackDevice(template, anchoredStartUnit, "rack", resolvedRackFace, targetMountPosition)
       );
+      setRecentlyDeletedDevice(null);
       await loadRack(activeRackId);
       setMessage(
         template.mountStyle === "vertical-pdu"
@@ -355,23 +368,23 @@ export default function App() {
     }
   }
 
-  async function handleDeviceMove(device: RackDevice, nextStartUnit: number, nextMountPosition: RackMountPosition) {
+  async function handleDeviceMove(device: RackDevice, nextStartUnit: number, nextMountPosition: RackMountPosition, targetFace: RackFace) {
     if (activeRackId === null) {
       return;
     }
 
     try {
       setSaving(true);
-      const targetRackFace =
+      const resolvedRackFace =
         nextMountPosition === "full"
           ? device.placementType === "spare"
-            ? activeRackFace
-            : device.rackFace ?? activeRackFace
+            ? targetFace
+            : device.rackFace ?? targetFace
           : getMountPositionFace(nextMountPosition);
       await api.updateDevice(activeRackId, device.id, {
         templateId: device.templateId,
         placementType: "rack",
-        rackFace: targetRackFace,
+        rackFace: resolvedRackFace,
         mountPosition: nextMountPosition,
         blocksBothFaces: nextMountPosition === "full" ? device.blocksBothFaces : false,
         startUnit: nextStartUnit,
@@ -837,14 +850,6 @@ export default function App() {
       ) : null}
 
       {error ? <div className="error-banner">{error}</div> : null}
-      {recentlyDeletedDevice ? (
-        <div className="undo-banner">
-          <span>{`${recentlyDeletedDevice.device.name} was deleted.`}</span>
-          <button className="ghost-button" disabled={saving} onClick={() => void handleUndoDelete()} type="button">
-            Undo delete
-          </button>
-        </div>
-      ) : null}
 
       {currentPath === "/" ? (
         <OverviewPage
@@ -894,15 +899,15 @@ export default function App() {
             {rackDetail ? (
               <RackCanvas
                 rack={rackDetail}
-                activeRackFace={activeRackFace}
+                activeRackView={activeRackView}
                 selectedDeviceId={selectedDeviceId}
                 onSelectDevice={setSelectedDeviceId}
-                onRackFaceChange={setActiveRackFace}
-                onTemplateDrop={(unit, mountPosition, templatePayload) => {
-                  void handleTemplateDrop(unit, mountPosition, templatePayload);
+                onRackFaceChange={setActiveRackView}
+                onTemplateDrop={(targetRackFace, unit, mountPosition, templatePayload) => {
+                  void handleTemplateDrop(targetRackFace, unit, mountPosition, templatePayload);
                 }}
-                onDeviceMove={(device, nextStartUnit, nextMountPosition) => {
-                  void handleDeviceMove(device, nextStartUnit, nextMountPosition);
+                onDeviceMove={(device, nextStartUnit, nextMountPosition, targetRackFace) => {
+                  void handleDeviceMove(device, nextStartUnit, nextMountPosition, targetRackFace);
                 }}
               />
             ) : (
@@ -927,6 +932,7 @@ export default function App() {
             />
             <Inspector
               device={selectedDevice}
+              recentlyDeletedDeviceName={recentlyDeletedDevice?.device.name ?? null}
               onChange={(next) => {
                 void handleInspectorChange(next);
               }}
@@ -935,6 +941,9 @@ export default function App() {
               }}
               onDelete={() => {
                 void handleDeleteDevice();
+              }}
+              onUndoDelete={() => {
+                void handleUndoDelete();
               }}
               saving={saving}
             />

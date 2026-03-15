@@ -13,21 +13,55 @@ import {
 import type { DeviceTemplate, RackDetail, RackDevice, RackFace, RackMountPosition } from "../../shared/types";
 import { getDeviceIconUrl } from "../deviceIcons";
 
+type RackViewMode = RackFace | "both";
+
 interface RackCanvasProps {
   rack: RackDetail;
-  activeRackFace: RackFace;
+  activeRackView: RackViewMode;
   selectedDeviceId: number | null;
   onSelectDevice(deviceId: number): void;
-  onRackFaceChange(nextFace: RackFace): void;
-  onTemplateDrop(unit: number, mountPosition: RackMountPosition, templatePayload: string): void;
-  onDeviceMove(device: RackDevice, nextStartUnit: number, nextMountPosition: RackMountPosition): void;
+  onRackFaceChange(nextFace: RackViewMode): void;
+  onTemplateDrop(targetRackFace: RackFace, unit: number, mountPosition: RackMountPosition, templatePayload: string): void;
+  onDeviceMove(device: RackDevice, nextStartUnit: number, nextMountPosition: RackMountPosition, targetRackFace: RackFace): void;
 }
 
 interface PreviewPlacement {
+  rackFace: RackFace;
   startUnit: number;
   endUnit: number;
   mountPosition: RackMountPosition;
   isValid: boolean;
+}
+
+interface DraggingDeviceState {
+  deviceId: number;
+  offsetUnitsFromTop: number;
+}
+
+interface PduGuideState {
+  rackFace: RackFace;
+  mountPosition: RackMountPosition | null;
+}
+
+interface RackFacePaneProps {
+  rack: RackDetail;
+  rackFace: RackFace;
+  selectedDeviceId: number | null;
+  previewPlacement: PreviewPlacement | null;
+  draggingDevice: DraggingDeviceState | null;
+  pduGuide: PduGuideState | null;
+  onSelectDevice(deviceId: number): void;
+  onDragOver(rackFace: RackFace, rackWidth: number, event: DragEvent<HTMLDivElement>): void;
+  onDrop(rackFace: RackFace, rackWidth: number, event: DragEvent<HTMLDivElement>): void;
+  onDragLeave(event: DragEvent<HTMLDivElement>): void;
+  onDeviceDragStart(
+    rackFace: RackFace,
+    device: RackDevice,
+    startUnit: number,
+    endUnit: number,
+    event: DragEvent<HTMLButtonElement>
+  ): void;
+  onDeviceDragEnd(): void;
 }
 
 const slotHeight = 28;
@@ -121,11 +155,7 @@ function getMountHitbox(
   return { startX: rackWidth - right - width, endX: rackWidth - right };
 }
 
-function getPduLaneFromPointer(
-  event: DragEvent<HTMLDivElement>,
-  rackWidth: number,
-  activeRackFace: RackFace
-): RackMountPosition {
+function getPduLaneFromPointer(event: DragEvent<HTMLDivElement>, rackWidth: number, rackFace: RackFace): RackMountPosition {
   const layout = getRackLayout(rackWidth, true);
   const rackBounds = event.currentTarget.getBoundingClientRect();
   const relativeX = clamp(event.clientX - rackBounds.left, 0, rackBounds.width - 1);
@@ -135,10 +165,7 @@ function getPduLaneFromPointer(
     return "full";
   }
 
-  return getVerticalPduMountPositionsForFace(activeRackFace).reduce<{
-    mountPosition: RackMountPosition;
-    distance: number;
-  }>(
+  return getVerticalPduMountPositionsForFace(rackFace).reduce<{ mountPosition: RackMountPosition; distance: number }>(
     (closest, mountPosition) => {
       const hitbox = getMountHitbox(rackBounds.width, layout, mountPosition, true);
       const center = (hitbox.startX + hitbox.endX) / 2;
@@ -150,7 +177,7 @@ function getPduLaneFromPointer(
 
       return closest;
     },
-    { mountPosition: getVerticalPduMountPositionsForFace(activeRackFace)[0], distance: Number.POSITIVE_INFINITY }
+    { mountPosition: getVerticalPduMountPositionsForFace(rackFace)[0], distance: Number.POSITIVE_INFINITY }
   ).mountPosition;
 }
 
@@ -180,32 +207,35 @@ function getPreviewRange(targetUnit: number, heightU: number, rackUnits: number)
   };
 }
 
-export function RackCanvas({
+function RackFacePane({
   rack,
-  activeRackFace,
+  rackFace,
   selectedDeviceId,
+  previewPlacement,
+  draggingDevice,
+  pduGuide,
   onSelectDevice,
-  onRackFaceChange,
-  onTemplateDrop,
-  onDeviceMove
-}: RackCanvasProps) {
+  onDragOver,
+  onDrop,
+  onDragLeave,
+  onDeviceDragStart,
+  onDeviceDragEnd
+}: RackFacePaneProps) {
   const rackUnitsRef = useRef<HTMLDivElement | null>(null);
   const [rackWidth, setRackWidth] = useState(480);
-  const [previewPlacement, setPreviewPlacement] = useState<PreviewPlacement | null>(null);
-  const [draggingDevice, setDraggingDevice] = useState<{ deviceId: number; offsetUnitsFromTop: number } | null>(null);
-  const [pduGuideVisible, setPduGuideVisible] = useState(false);
-  const [pduGuideMountPosition, setPduGuideMountPosition] = useState<RackMountPosition | null>(null);
-  const faceLabel = activeRackFace === "front" ? "Front" : "Rear";
-  const allDevices = rack.devices.filter((device) => device.placementType === "rack" || device.placementType === "spare");
+  const faceLabel = rackFace === "front" ? "Front" : "Rear";
   const placedDevices = rack.devices.filter(
     (device) =>
       device.placementType === "rack" &&
       device.startUnit !== null &&
-      (device.blocksBothFaces || device.rackFace === activeRackFace)
+      (device.blocksBothFaces || device.rackFace === rackFace)
   );
-  const facePduLanePositions = getVerticalPduMountPositionsForFace(activeRackFace);
-  const reservePduColumns = pduGuideVisible || placedDevices.some((device) => isVerticalPduMountPosition(device.mountPosition));
-  const capacitySummary = getRackCapacitySummary(rack.totalUnits, rack.devices);
+  const panePreviewPlacement = previewPlacement?.rackFace === rackFace ? previewPlacement : null;
+  const panePduGuideVisible = pduGuide?.rackFace === rackFace;
+  const facePduLanePositions = getVerticalPduMountPositionsForFace(rackFace);
+  const reservePduColumns =
+    panePduGuideVisible || placedDevices.some((device) => isVerticalPduMountPosition(device.mountPosition));
+  const layout = getRackLayout(rackWidth, reservePduColumns);
 
   useEffect(() => {
     const rackUnits = rackUnitsRef.current;
@@ -225,218 +255,19 @@ export function RackCanvas({
     return () => observer.disconnect();
   }, []);
 
-  function resetDragGuides() {
-    setPreviewPlacement(null);
-    setPduGuideVisible(false);
-    setPduGuideMountPosition(null);
-  }
-
-  function getUnitFromPointer(event: DragEvent<HTMLDivElement>): number {
-    const rackBounds = event.currentTarget.getBoundingClientRect();
-    const pointerY = clamp(event.clientY - rackBounds.top, 0, rackBounds.height - 1);
-    const slotIndexFromTop = clamp(Math.floor(pointerY / slotHeight), 0, rack.totalUnits - 1);
-
-    return rack.totalUnits - slotIndexFromTop;
-  }
-
-  function handleDragOver(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    const hoveredUnit = getUnitFromPointer(event);
-    const templatePayload = event.dataTransfer.getData("application/x-aethercab-template");
-    const devicePayload = event.dataTransfer.getData("application/x-aethercab-device");
-
-    event.dataTransfer.dropEffect = devicePayload || draggingDevice ? "move" : "copy";
-
-    if (templatePayload) {
-      const template = JSON.parse(templatePayload) as DeviceTemplate;
-      const isPdu = template.mountStyle === "vertical-pdu";
-      const mountPosition = isPdu ? getPduLaneFromPointer(event, rackWidth, activeRackFace) : "full";
-      const previewRange = getPreviewRange(hoveredUnit, template.defaultHeightU, rack.totalUnits);
-
-      setPduGuideVisible(isPdu);
-      setPduGuideMountPosition(isPdu && mountPosition !== "full" ? mountPosition : null);
-
-      if (isPdu && mountPosition === "full") {
-        setPreviewPlacement({
-          startUnit: previewRange.startUnit,
-          endUnit: previewRange.endUnit,
-          mountPosition,
-          isValid: false
-        });
-        return;
-      }
-
-      const startUnit = getAnchoredStartUnit(
-        hoveredUnit,
-        template.defaultHeightU,
-        rack.totalUnits,
-        isPdu ? activeRackFace : activeRackFace,
-        mountPosition,
-        isPdu ? false : template.blocksBothFaces,
-        rack.devices
-      );
-      const previewStartUnit = startUnit ?? previewRange.startUnit;
-      const previewRackFace = getMountPositionFace(mountPosition) ?? activeRackFace;
-      const isValid =
-        startUnit !== null &&
-        canPlaceRackDeviceAtStartUnit(
-          {
-            placementType: "rack",
-            rackFace: previewRackFace,
-            mountPosition,
-            blocksBothFaces: isPdu ? false : template.blocksBothFaces,
-            heightU: template.defaultHeightU
-          },
-          previewStartUnit,
-          rack.totalUnits,
-          rack.devices
-        );
-
-      setPreviewPlacement({
-        startUnit: previewStartUnit,
-        endUnit: getEndUnit(previewStartUnit, template.defaultHeightU),
-        mountPosition,
-        isValid
-      });
-      return;
-    }
-
-    if (devicePayload) {
-      const device = allDevices.find((entry) => String(entry.id) === devicePayload);
-      if (!device) {
-        resetDragGuides();
-        return;
-      }
-
-      const isPdu = isVerticalPduMountPosition(device.mountPosition);
-      const offsetUnitsFromTop = draggingDevice?.deviceId === device.id ? draggingDevice.offsetUnitsFromTop : device.heightU - 1;
-      const startUnit = clamp(hoveredUnit - (device.heightU - 1 - offsetUnitsFromTop), 1, rack.totalUnits - device.heightU + 1);
-      const hoveredMountPosition = isPdu ? getPduLaneFromPointer(event, rackWidth, activeRackFace) : "full";
-      const mountPosition = isPdu && hoveredMountPosition === "full" ? device.mountPosition : hoveredMountPosition;
-      const previewRackFace = getMountPositionFace(mountPosition) ?? activeRackFace;
-      const isValid = canPlaceRackDeviceAtStartUnit(
-        {
-          placementType: "rack",
-          rackFace: previewRackFace,
-          mountPosition,
-          blocksBothFaces: isPdu ? false : device.blocksBothFaces,
-          heightU: device.heightU
-        },
-        startUnit,
-        rack.totalUnits,
-        rack.devices,
-        device.id
-      );
-
-      setPduGuideVisible(isPdu);
-      setPduGuideMountPosition(isPdu ? mountPosition : null);
-      setPreviewPlacement({ startUnit, endUnit: getEndUnit(startUnit, device.heightU), mountPosition, isValid });
-      return;
-    }
-
-    resetDragGuides();
-  }
-
-  function handleDrop(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    const hoveredUnit = getUnitFromPointer(event);
-    const templatePayload = event.dataTransfer.getData("application/x-aethercab-template");
-    const devicePayload = event.dataTransfer.getData("application/x-aethercab-device");
-
-    if (templatePayload) {
-      const template = JSON.parse(templatePayload) as DeviceTemplate;
-      const mountPosition = template.mountStyle === "vertical-pdu" ? getPduLaneFromPointer(event, rackWidth, activeRackFace) : "full";
-      resetDragGuides();
-      onTemplateDrop(hoveredUnit, mountPosition, templatePayload);
-      return;
-    }
-
-    if (devicePayload) {
-      const device = allDevices.find((entry) => String(entry.id) === devicePayload);
-      if (device) {
-        const offsetUnitsFromTop = draggingDevice?.deviceId === device.id ? draggingDevice.offsetUnitsFromTop : device.heightU - 1;
-        const nextStartUnit = clamp(hoveredUnit - (device.heightU - 1 - offsetUnitsFromTop), 1, rack.totalUnits - device.heightU + 1);
-        const hoveredMountPosition = isVerticalPduMountPosition(device.mountPosition)
-          ? getPduLaneFromPointer(event, rackWidth, activeRackFace)
-          : "full";
-        const nextMountPosition =
-          isVerticalPduMountPosition(device.mountPosition) && hoveredMountPosition === "full"
-            ? device.mountPosition
-            : hoveredMountPosition;
-        resetDragGuides();
-        onDeviceMove(device, nextStartUnit, nextMountPosition);
-      }
-    }
-
-    setDraggingDevice(null);
-  }
-
-  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
-    const rackBounds = event.currentTarget.getBoundingClientRect();
-    const isOutsideRack =
-      event.clientX < rackBounds.left ||
-      event.clientX > rackBounds.right ||
-      event.clientY < rackBounds.top ||
-      event.clientY > rackBounds.bottom;
-
-    if (isOutsideRack) {
-      resetDragGuides();
-    }
-  }
-
-  const layout = getRackLayout(rackWidth, reservePduColumns);
-
   return (
-    <section className="panel rack-panel">
-      <div className="panel-header">
-        <div className="rack-panel-heading">
-          <p className="eyebrow">Rack Editor</p>
-          <h2>Rack View</h2>
-          <div className="rack-capacity-summary" aria-label="Available rack space by side">
-            {[capacitySummary.front, capacitySummary.rear].map((stats) => (
-              <div className="rack-capacity-card" key={stats.face}>
-                <div className="rack-capacity-copy">
-                  <span>{stats.face === "front" ? "Front free" : "Rear free"}</span>
-                  <strong>{`${stats.freePercent}%`}</strong>
-                </div>
-                <div className={getCapacityClassName(stats.tone)}>
-                  <span style={{ width: `${stats.freePercent}%` }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="rack-toolbar">
-          <span className="toolbar-label">View</span>
-          <div className="rack-face-toggle">
-            <button
-              className={activeRackFace === "front" ? "face-toggle selected" : "face-toggle"}
-              onClick={() => onRackFaceChange("front")}
-              type="button"
-            >
-              Front
-            </button>
-            <button
-              className={activeRackFace === "rear" ? "face-toggle selected" : "face-toggle"}
-              onClick={() => onRackFaceChange("rear")}
-              type="button"
-            >
-              Rear
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="rack-face-section">
       <div className="rack-face-banner">{`-- ${faceLabel} --`}</div>
       <div className="rack-frame">
         <div
           ref={rackUnitsRef}
-          className={draggingDevice || previewPlacement !== null ? "rack-units drag-active" : "rack-units"}
+          className={draggingDevice || panePreviewPlacement !== null ? "rack-units drag-active" : "rack-units"}
           style={{ height: rack.totalUnits * slotHeight }}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-          onDragLeave={handleDragLeave}
+          onDragOver={(event) => onDragOver(rackFace, rackWidth, event)}
+          onDrop={(event) => onDrop(rackFace, rackWidth, event)}
+          onDragLeave={onDragLeave}
         >
-          {pduGuideVisible ? (
+          {panePduGuideVisible ? (
             <>
               <div className="rack-pdu-guide-banner">
                 <strong>Vertical PDU</strong>
@@ -446,8 +277,8 @@ export function RackCanvas({
                 <div
                   key={mountPosition}
                   className={
-                    pduGuideMountPosition === mountPosition
-                      ? previewPlacement?.isValid === false
+                    pduGuide?.mountPosition === mountPosition
+                      ? panePreviewPlacement?.isValid === false
                         ? "rack-pdu-lane active invalid"
                         : "rack-pdu-lane active"
                       : "rack-pdu-lane"
@@ -463,15 +294,16 @@ export function RackCanvas({
           {Array.from({ length: rack.totalUnits }, (_, index) => {
             const unit = rack.totalUnits - index;
             const isPreviewUnit =
-              previewPlacement !== null &&
-              previewPlacement.mountPosition === "full" &&
-              unit >= previewPlacement.startUnit &&
-              unit <= previewPlacement.endUnit;
+              panePreviewPlacement !== null &&
+              panePreviewPlacement.mountPosition === "full" &&
+              unit >= panePreviewPlacement.startUnit &&
+              unit <= panePreviewPlacement.endUnit;
             const slotClassName = isPreviewUnit
-              ? previewPlacement?.isValid
+              ? panePreviewPlacement.isValid
                 ? "rack-slot drop-target valid"
                 : "rack-slot drop-target invalid"
               : "rack-slot";
+
             return (
               <div className={slotClassName} key={unit}>
                 <span className="slot-label">{unit}U</span>
@@ -479,25 +311,25 @@ export function RackCanvas({
             );
           })}
 
-          {previewPlacement ? (
+          {panePreviewPlacement ? (
             <div
               className={
-                previewPlacement.mountPosition === "full"
-                  ? previewPlacement.isValid
+                panePreviewPlacement.mountPosition === "full"
+                  ? panePreviewPlacement.isValid
                     ? "rack-preview valid"
                     : "rack-preview invalid"
-                  : previewPlacement.isValid
+                  : panePreviewPlacement.isValid
                     ? "rack-preview pdu valid"
                     : "rack-preview pdu invalid"
               }
-              style={getDeviceStyle(rack, previewPlacement, rackWidth, reservePduColumns)}
+              style={getDeviceStyle(rack, panePreviewPlacement, rackWidth, reservePduColumns)}
             />
           ) : null}
 
           {placedDevices.map((device) => {
             const startUnit = device.startUnit!;
             const endUnit = getEndUnit(startUnit, device.heightU);
-            const isMirroredFromOppositeFace = device.blocksBothFaces && device.rackFace !== null && device.rackFace !== activeRackFace;
+            const isMirroredFromOppositeFace = device.blocksBothFaces && device.rackFace !== null && device.rackFace !== rackFace;
             const detailLine = `${device.manufacturer} ${device.model}`;
             const positionLine = `${startUnit}U - ${endUnit}U`;
             const faceLine =
@@ -518,7 +350,7 @@ export function RackCanvas({
 
             return (
               <button
-                key={device.id}
+                key={`${rackFace}-${device.id}`}
                 className={
                   device.id === selectedDeviceId
                     ? isMirroredFromOppositeFace
@@ -539,23 +371,8 @@ export function RackCanvas({
                 data-origin-face={isMirroredFromOppositeFace ? device.rackFace : undefined}
                 style={getDeviceStyle(rack, device, rackWidth, reservePduColumns)}
                 draggable
-                onDragStart={(event) => {
-                  const deviceBounds = event.currentTarget.getBoundingClientRect();
-                  const pointerOffsetY = clamp(event.clientY - deviceBounds.top, 0, deviceBounds.height - 1);
-                  const offsetUnitsFromTop = clamp(Math.floor(pointerOffsetY / slotHeight), 0, device.heightU - 1);
-                  const isPdu = isVerticalPduMountPosition(device.mountPosition);
-
-                  event.dataTransfer.setData("application/x-aethercab-device", String(device.id));
-                  event.dataTransfer.effectAllowed = "move";
-                  setDraggingDevice({ deviceId: device.id, offsetUnitsFromTop });
-                  setPduGuideVisible(isPdu);
-                  setPduGuideMountPosition(isPdu ? device.mountPosition : null);
-                  setPreviewPlacement({ startUnit, endUnit, mountPosition: device.mountPosition, isValid: true });
-                }}
-                onDragEnd={() => {
-                  setDraggingDevice(null);
-                  resetDragGuides();
-                }}
+                onDragStart={(event) => onDeviceDragStart(rackFace, device, startUnit, endUnit, event)}
+                onDragEnd={onDeviceDragEnd}
                 onClick={() => onSelectDevice(device.id)}
                 type="button"
                 title={`${device.name} | ${detailLine} | ${positionLine} | ${faceLine}${isMirroredFromOppositeFace ? ` | Mounted on ${device.rackFace}` : ""}`}
@@ -585,6 +402,313 @@ export function RackCanvas({
         </div>
       </div>
       <div className="rack-face-banner bottom">{`-- ${faceLabel} --`}</div>
+    </div>
+  );
+}
+
+export function RackCanvas({
+  rack,
+  activeRackView,
+  selectedDeviceId,
+  onSelectDevice,
+  onRackFaceChange,
+  onTemplateDrop,
+  onDeviceMove
+}: RackCanvasProps) {
+  const [previewPlacement, setPreviewPlacement] = useState<PreviewPlacement | null>(null);
+  const [draggingDevice, setDraggingDevice] = useState<DraggingDeviceState | null>(null);
+  const [pduGuide, setPduGuide] = useState<PduGuideState | null>(null);
+  const allDevices = rack.devices.filter((device) => device.placementType === "rack" || device.placementType === "spare");
+  const capacitySummary = getRackCapacitySummary(rack.totalUnits, rack.devices);
+  const visibleFaces: RackFace[] = activeRackView === "both" ? ["front", "rear"] : [activeRackView];
+
+  function resetDragGuides() {
+    setPreviewPlacement(null);
+    setPduGuide(null);
+  }
+
+  function getUnitFromPointer(event: DragEvent<HTMLDivElement>): number {
+    const rackBounds = event.currentTarget.getBoundingClientRect();
+    const pointerY = clamp(event.clientY - rackBounds.top, 0, rackBounds.height - 1);
+    const slotIndexFromTop = clamp(Math.floor(pointerY / slotHeight), 0, rack.totalUnits - 1);
+
+    return rack.totalUnits - slotIndexFromTop;
+  }
+
+  function handleDragOver(rackFace: RackFace, rackWidth: number, event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const hoveredUnit = getUnitFromPointer(event);
+    const templatePayload = event.dataTransfer.getData("application/x-aethercab-template");
+    const devicePayload = event.dataTransfer.getData("application/x-aethercab-device");
+
+    event.dataTransfer.dropEffect = devicePayload || draggingDevice ? "move" : "copy";
+
+    if (templatePayload) {
+      const template = JSON.parse(templatePayload) as DeviceTemplate;
+      const isPdu = template.mountStyle === "vertical-pdu";
+      const mountPosition = isPdu ? getPduLaneFromPointer(event, rackWidth, rackFace) : "full";
+      const previewRange = getPreviewRange(hoveredUnit, template.defaultHeightU, rack.totalUnits);
+
+      if (isPdu) {
+        setPduGuide({ rackFace, mountPosition: mountPosition === "full" ? null : mountPosition });
+      } else {
+        setPduGuide(null);
+      }
+
+      if (isPdu && mountPosition === "full") {
+        setPreviewPlacement({
+          rackFace,
+          startUnit: previewRange.startUnit,
+          endUnit: previewRange.endUnit,
+          mountPosition,
+          isValid: false
+        });
+        return;
+      }
+
+      const startUnit = getAnchoredStartUnit(
+        hoveredUnit,
+        template.defaultHeightU,
+        rack.totalUnits,
+        rackFace,
+        mountPosition,
+        isPdu ? false : template.blocksBothFaces,
+        rack.devices
+      );
+      const previewStartUnit = startUnit ?? previewRange.startUnit;
+      const previewRackFace = getMountPositionFace(mountPosition) ?? rackFace;
+      const isValid =
+        startUnit !== null &&
+        canPlaceRackDeviceAtStartUnit(
+          {
+            placementType: "rack",
+            rackFace: previewRackFace,
+            mountPosition,
+            blocksBothFaces: isPdu ? false : template.blocksBothFaces,
+            heightU: template.defaultHeightU
+          },
+          previewStartUnit,
+          rack.totalUnits,
+          rack.devices
+        );
+
+      setPreviewPlacement({
+        rackFace: previewRackFace,
+        startUnit: previewStartUnit,
+        endUnit: getEndUnit(previewStartUnit, template.defaultHeightU),
+        mountPosition,
+        isValid
+      });
+      return;
+    }
+
+    if (devicePayload) {
+      const device = allDevices.find((entry) => String(entry.id) === devicePayload);
+      if (!device) {
+        resetDragGuides();
+        return;
+      }
+
+      const isPdu = isVerticalPduMountPosition(device.mountPosition);
+      const offsetUnitsFromTop = draggingDevice?.deviceId === device.id ? draggingDevice.offsetUnitsFromTop : device.heightU - 1;
+      const startUnit = clamp(hoveredUnit - (device.heightU - 1 - offsetUnitsFromTop), 1, rack.totalUnits - device.heightU + 1);
+      const hoveredMountPosition = isPdu ? getPduLaneFromPointer(event, rackWidth, rackFace) : "full";
+
+      if (isPdu) {
+        setPduGuide({ rackFace, mountPosition: hoveredMountPosition === "full" ? null : hoveredMountPosition });
+      } else {
+        setPduGuide(null);
+      }
+
+      if (isPdu && hoveredMountPosition === "full") {
+        setPreviewPlacement({
+          rackFace,
+          startUnit,
+          endUnit: getEndUnit(startUnit, device.heightU),
+          mountPosition: "full",
+          isValid: false
+        });
+        return;
+      }
+
+      const previewRackFace = getMountPositionFace(hoveredMountPosition) ?? rackFace;
+      const isValid = canPlaceRackDeviceAtStartUnit(
+        {
+          placementType: "rack",
+          rackFace: previewRackFace,
+          mountPosition: hoveredMountPosition,
+          blocksBothFaces: isPdu ? false : device.blocksBothFaces,
+          heightU: device.heightU
+        },
+        startUnit,
+        rack.totalUnits,
+        rack.devices,
+        device.id
+      );
+
+      setPreviewPlacement({
+        rackFace: previewRackFace,
+        startUnit,
+        endUnit: getEndUnit(startUnit, device.heightU),
+        mountPosition: hoveredMountPosition,
+        isValid
+      });
+      return;
+    }
+
+    resetDragGuides();
+  }
+
+  function handleDrop(rackFace: RackFace, rackWidth: number, event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const hoveredUnit = getUnitFromPointer(event);
+    const templatePayload = event.dataTransfer.getData("application/x-aethercab-template");
+    const devicePayload = event.dataTransfer.getData("application/x-aethercab-device");
+
+    if (templatePayload) {
+      const template = JSON.parse(templatePayload) as DeviceTemplate;
+      const mountPosition = template.mountStyle === "vertical-pdu" ? getPduLaneFromPointer(event, rackWidth, rackFace) : "full";
+      resetDragGuides();
+      onTemplateDrop(rackFace, hoveredUnit, mountPosition, templatePayload);
+      return;
+    }
+
+    if (devicePayload) {
+      const device = allDevices.find((entry) => String(entry.id) === devicePayload);
+      if (device) {
+        const offsetUnitsFromTop = draggingDevice?.deviceId === device.id ? draggingDevice.offsetUnitsFromTop : device.heightU - 1;
+        const nextStartUnit = clamp(hoveredUnit - (device.heightU - 1 - offsetUnitsFromTop), 1, rack.totalUnits - device.heightU + 1);
+        const hoveredMountPosition = isVerticalPduMountPosition(device.mountPosition)
+          ? getPduLaneFromPointer(event, rackWidth, rackFace)
+          : "full";
+
+        if (isVerticalPduMountPosition(device.mountPosition) && hoveredMountPosition === "full") {
+          resetDragGuides();
+          setDraggingDevice(null);
+          return;
+        }
+
+        resetDragGuides();
+        onDeviceMove(device, nextStartUnit, hoveredMountPosition, rackFace);
+      }
+    }
+
+    setDraggingDevice(null);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLDivElement>) {
+    const rackBounds = event.currentTarget.getBoundingClientRect();
+    const isOutsideRack =
+      event.clientX < rackBounds.left ||
+      event.clientX > rackBounds.right ||
+      event.clientY < rackBounds.top ||
+      event.clientY > rackBounds.bottom;
+
+    if (isOutsideRack) {
+      resetDragGuides();
+    }
+  }
+
+  function handleDeviceDragStart(
+    rackFace: RackFace,
+    device: RackDevice,
+    startUnit: number,
+    endUnit: number,
+    event: DragEvent<HTMLButtonElement>
+  ) {
+    const deviceBounds = event.currentTarget.getBoundingClientRect();
+    const pointerOffsetY = clamp(event.clientY - deviceBounds.top, 0, deviceBounds.height - 1);
+    const offsetUnitsFromTop = clamp(Math.floor(pointerOffsetY / slotHeight), 0, device.heightU - 1);
+    const isPdu = isVerticalPduMountPosition(device.mountPosition);
+    const previewRackFace = getMountPositionFace(device.mountPosition) ?? device.rackFace ?? rackFace;
+
+    event.dataTransfer.setData("application/x-aethercab-device", String(device.id));
+    event.dataTransfer.effectAllowed = "move";
+    setDraggingDevice({ deviceId: device.id, offsetUnitsFromTop });
+    setPduGuide(isPdu ? { rackFace: previewRackFace, mountPosition: device.mountPosition } : null);
+    setPreviewPlacement({
+      rackFace: previewRackFace,
+      startUnit,
+      endUnit,
+      mountPosition: device.mountPosition,
+      isValid: true
+    });
+  }
+
+  function handleDeviceDragEnd() {
+    setDraggingDevice(null);
+    resetDragGuides();
+  }
+
+  return (
+    <section className="panel rack-panel">
+      <div className="panel-header">
+        <div className="rack-panel-heading">
+          <p className="eyebrow">Rack Editor</p>
+          <div className="rack-title-row">
+            <h2>Rack View</h2>
+            <div className="rack-capacity-summary" aria-label="Rack occupancy by side">
+              {[capacitySummary.front, capacitySummary.rear].map((stats) => (
+                <div className="rack-capacity-card" key={stats.face}>
+                  <div className="rack-capacity-copy">
+                    <span>{stats.face === "front" ? "Front occupied" : "Rear occupied"}</span>
+                    <strong>{`${stats.usedPercent}%`}</strong>
+                  </div>
+                  <div className={getCapacityClassName(stats.tone)}>
+                    <span style={{ width: `${stats.usedPercent}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="rack-toolbar">
+          <span className="toolbar-label">View</span>
+          <div className="rack-face-toggle">
+            <button
+              className={activeRackView === "front" ? "face-toggle selected" : "face-toggle"}
+              onClick={() => onRackFaceChange("front")}
+              type="button"
+            >
+              Front
+            </button>
+            <button
+              className={activeRackView === "rear" ? "face-toggle selected" : "face-toggle"}
+              onClick={() => onRackFaceChange("rear")}
+              type="button"
+            >
+              Rear
+            </button>
+            <button
+              className={activeRackView === "both" ? "face-toggle selected" : "face-toggle"}
+              onClick={() => onRackFaceChange("both")}
+              type="button"
+            >
+              Both
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className={activeRackView === "both" ? "rack-face-grid both" : "rack-face-grid"}>
+        {visibleFaces.map((rackFace) => (
+          <RackFacePane
+            key={rackFace}
+            rack={rack}
+            rackFace={rackFace}
+            selectedDeviceId={selectedDeviceId}
+            previewPlacement={previewPlacement}
+            draggingDevice={draggingDevice}
+            pduGuide={pduGuide}
+            onSelectDevice={onSelectDevice}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            onDragLeave={handleDragLeave}
+            onDeviceDragStart={handleDeviceDragStart}
+            onDeviceDragEnd={handleDeviceDragEnd}
+          />
+        ))}
+      </div>
     </section>
   );
 }
