@@ -1213,10 +1213,34 @@ export function buildPdfExport(audit: AuditExportDetail): Promise<Buffer> {
         pdf.addPage(pdfPageOptions);
       }
 
+      const contentX = 36;
+      const contentWidth = pdf.page.width - 72;
+      const rackGap = 18;
+      const frontHasPdus = getVisiblePduMountPositionsForFace("front", rack.devices).length > 0;
+      const rearHasPdus = getVisiblePduMountPositionsForFace("rear", rack.devices).length > 0;
+      let frontWidth = (contentWidth - rackGap) / 2;
+      let rearWidth = (contentWidth - rackGap) / 2;
+
+      if (frontHasPdus !== rearHasPdus) {
+        const narrowWidth = 300;
+        const wideWidth = contentWidth - rackGap - narrowWidth;
+
+        if (frontHasPdus) {
+          frontWidth = wideWidth;
+          rearWidth = narrowWidth;
+        } else {
+          frontWidth = narrowWidth;
+          rearWidth = wideWidth;
+        }
+      }
+
+      const frontX = contentX;
+      const rearX = frontX + frontWidth + rackGap;
+
       drawPdfPageBackground(pdf);
       drawPdfHeader(pdf, audit, `${appBrandName} Rack View`, appBrandSlogan, rack);
-      drawPdfRackFace(pdf, rack, "front", 42, 86, 340);
-      drawPdfRackFace(pdf, rack, "rear", 430, 86, 340);
+      drawPdfRackFace(pdf, rack, "front", frontX, 86, frontWidth);
+      drawPdfRackFace(pdf, rack, "rear", rearX, 86, rearWidth);
 
       startPdfInventoryPage(pdf, audit, rack);
       drawPdfGroupedInventory(pdf, audit, rack);

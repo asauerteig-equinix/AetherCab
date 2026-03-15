@@ -212,28 +212,6 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
             <option value="vertical">Vertical side device</option>
           </select>
         </label>
-        <label>
-          Rack face
-          <select
-            value={draft.rackFace ?? "front"}
-            disabled={device.placementType === "spare" || draft.blocksBothFaces}
-            onChange={(event) => {
-              const nextRackFace = event.target.value as RackDeviceInput["rackFace"];
-
-              setDraft({
-                ...draft,
-                rackFace: nextRackFace,
-                mountPosition: isVerticalPduMountPosition(draft.mountPosition)
-                  ? getVerticalPduMountPositionsForFace(nextRackFace ?? "front")[0]
-                  : draft.mountPosition
-              });
-            }}
-            onBlur={() => commitDraft()}
-          >
-            <option value="front">Front</option>
-            <option value="rear">Rear</option>
-          </select>
-        </label>
         <label className="checkbox-field">
           Blocks front and rear
           <input
