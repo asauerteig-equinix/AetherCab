@@ -43,10 +43,10 @@ import {
 
 type AsyncRoute = (request: Request, response: Response, next: NextFunction) => Promise<void>;
 
-const adminCookieName = "aethercab_admin_session";
+const adminCookieName = "aethercad_admin_session";
 
 function getAdminAccessKey(): string {
-  return process.env.ADMIN_ACCESS_KEY ?? "aethercab-admin";
+  return process.env.ADMIN_ACCESS_KEY ?? "aethercad-admin";
 }
 
 function getAdminSessionToken(): string {

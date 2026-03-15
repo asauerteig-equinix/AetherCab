@@ -102,6 +102,7 @@ export function AdminTemplatesPage({
   const [deviceTypesOpen, setDeviceTypesOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [completedAuditsOpen, setCompletedAuditsOpen] = useState(false);
+  const [completedAuditSearch, setCompletedAuditSearch] = useState("");
   const [showCreateIcons, setShowCreateIcons] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<number | null>(null);
   const [editingForm, setEditingForm] = useState<DeviceTemplateInput | null>(null);
@@ -129,6 +130,18 @@ export function AdminTemplatesPage({
         .sort((left, right) => left.name.localeCompare(right.name)),
     [deviceTypes, templates]
   );
+  const visibleCompletedAudits = useMemo(() => {
+    const query = completedAuditSearch.trim().toLowerCase();
+    if (!query) {
+      return completedAudits;
+    }
+
+    return completedAudits.filter((audit) =>
+      [audit.name, audit.siteName, audit.roomName, audit.salesOrder ?? "", audit.notes ?? ""].some((value) =>
+        value.toLowerCase().includes(query)
+      )
+    );
+  }, [completedAuditSearch, completedAudits]);
 
   return (
     <>
@@ -452,10 +465,18 @@ export function AdminTemplatesPage({
 
           {completedAuditsOpen ? (
             <div className="admin-device-type-list">
-              {completedAudits.length === 0 ? (
+              <label className="search-field">
+                Search completed audits
+                <input
+                  value={completedAuditSearch}
+                  onChange={(event) => setCompletedAuditSearch(event.target.value)}
+                  placeholder="Customer, sales order, site, room, notes"
+                />
+              </label>
+              {visibleCompletedAudits.length === 0 ? (
                 <div className="empty-state">No completed audits are available right now.</div>
               ) : (
-                completedAudits.map((audit) => (
+                visibleCompletedAudits.map((audit) => (
                   <article className="admin-device-type-card" key={audit.id}>
                     <div>
                       <strong>{audit.name}</strong>

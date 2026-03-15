@@ -6,9 +6,11 @@ interface OverviewPageProps {
   audits: AuditSummary[];
   searchValue: string;
   createForm: AuditCreateInput;
+  isAdmin: boolean;
   saving: boolean;
   onSearchChange(next: string): void;
   onOpenAudit(auditId: number): void;
+  onReopenAudit(auditId: number): void;
   onCreateFormChange(next: AuditCreateInput): void;
   onCreateAudit(): Promise<void>;
 }
@@ -47,9 +49,11 @@ export function OverviewPage({
   audits,
   searchValue,
   createForm,
+  isAdmin,
   saving,
   onSearchChange,
   onOpenAudit,
+  onReopenAudit,
   onCreateFormChange,
   onCreateAudit
 }: OverviewPageProps) {
@@ -202,9 +206,16 @@ export function OverviewPage({
                     <span>{formatAuditDateTime(audit.createdAt)}</span>
                     <span>{audit.notes || "No notes yet."}</span>
                   </div>
-                  <button className="primary-button" onClick={() => onOpenAudit(audit.id)} type="button">
-                    Open
-                  </button>
+                  <div className="overview-audit-actions">
+                    <button className="primary-button" onClick={() => onOpenAudit(audit.id)} type="button">
+                      Open
+                    </button>
+                    {isAdmin && audit.status === "completed" ? (
+                      <button className="ghost-button" disabled={saving} onClick={() => onReopenAudit(audit.id)} type="button">
+                        Set In Progress
+                      </button>
+                    ) : null}
+                  </div>
                 </article>
               ))
             )}

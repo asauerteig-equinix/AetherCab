@@ -14,7 +14,7 @@ Visual rack inventory editor for fast rack documentation.
 
 ## Local development
 
-1. `docker compose up -d aethercab-db`
+1. `docker compose up -d aethercad-db`
 2. `npm.cmd install`
 3. `npm.cmd run dev`
 
@@ -24,7 +24,7 @@ The PostgreSQL database is exposed on `localhost:5496`.
 
 ## Stack deployment
 
-The repository includes [`compose.yml`](/c:/Users/Simaxe/GitHub Repos/AetherCab/compose.yml) and [`Dockerfile`](/c:/Users/Simaxe/GitHub Repos/AetherCab/Dockerfile) so Portainer can deploy it directly from a GitHub repository as a stack.
+The repository includes [`compose.yml`](./compose.yml) and [`Dockerfile`](./Dockerfile) so Portainer can deploy it directly from a GitHub repository as a stack.
 
 Recommended stack settings:
 
@@ -32,7 +32,7 @@ Recommended stack settings:
 - compose path: `compose.yml`
 - web app port: `5500`
 - database port: `5496`
-- persistent volume: `aethercab-db-data`
+- persistent volume: `aethercad-db-data`
 
 This compose setup is intentionally plain Compose spec, so it works for Docker-based Portainer and Podman-based environments that accept standard compose stacks.
 The app listens on port `5500`, and PostgreSQL is published on `5496` to avoid collisions with other projects.

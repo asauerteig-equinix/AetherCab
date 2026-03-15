@@ -485,8 +485,8 @@ export function RackCanvas({
 
     event.preventDefault();
     const hoveredUnit = getUnitFromPointer(event);
-    const templatePayload = event.dataTransfer.getData("application/x-aethercab-template");
-    const devicePayload = event.dataTransfer.getData("application/x-aethercab-device");
+    const templatePayload = event.dataTransfer.getData("application/x-aethercad-template");
+    const devicePayload = event.dataTransfer.getData("application/x-aethercad-device");
 
     event.dataTransfer.dropEffect = devicePayload || draggingDevice ? "move" : "copy";
 
@@ -620,8 +620,8 @@ export function RackCanvas({
 
     event.preventDefault();
     const hoveredUnit = getUnitFromPointer(event);
-    const templatePayload = event.dataTransfer.getData("application/x-aethercab-template");
-    const devicePayload = event.dataTransfer.getData("application/x-aethercab-device");
+    const templatePayload = event.dataTransfer.getData("application/x-aethercad-template");
+    const devicePayload = event.dataTransfer.getData("application/x-aethercad-device");
 
     if (templatePayload) {
       const template = JSON.parse(templatePayload) as DeviceTemplate;
@@ -702,7 +702,7 @@ export function RackCanvas({
     const isPdu = isVerticalPduMountPosition(device.mountPosition);
     const previewRackFace = getMountPositionFace(device.mountPosition) ?? device.rackFace ?? rackFace;
 
-    event.dataTransfer.setData("application/x-aethercab-device", String(device.id));
+    event.dataTransfer.setData("application/x-aethercad-device", String(device.id));
     event.dataTransfer.effectAllowed = "move";
     setDraggingDevice({ deviceId: device.id, offsetUnitsFromTop });
     setPduGuide(isPdu ? { rackFace: previewRackFace, mountPosition: device.mountPosition, extraSide: getPduLaneSide(device.mountPosition) } : null);

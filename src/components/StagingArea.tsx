@@ -22,7 +22,7 @@ export function StagingArea({ devices, selectedDeviceId, saving, disabled = fals
     if (disabled) {
       return;
     }
-    const deviceId = Number(event.dataTransfer.getData("application/x-aethercab-device"));
+    const deviceId = Number(event.dataTransfer.getData("application/x-aethercad-device"));
     if (!Number.isNaN(deviceId)) {
       onStageDevice(deviceId);
     }
@@ -85,7 +85,7 @@ export function StagingArea({ devices, selectedDeviceId, saving, disabled = fals
                   event.preventDefault();
                   return;
                 }
-                event.dataTransfer.setData("application/x-aethercab-device", String(device.id));
+                event.dataTransfer.setData("application/x-aethercad-device", String(device.id));
                 event.dataTransfer.effectAllowed = "move";
               }}
             >

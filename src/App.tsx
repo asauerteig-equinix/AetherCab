@@ -1253,9 +1253,13 @@ export default function App() {
           audits={audits}
           searchValue={auditSearch}
           createForm={createAuditForm}
+          isAdmin={isAdminAuthenticated}
           saving={saving}
           onSearchChange={setAuditSearch}
           onOpenAudit={openAudit}
+          onReopenAudit={(auditId) => {
+            void handleReopenAudit(auditId);
+          }}
           onCreateFormChange={setCreateAuditForm}
           onCreateAudit={() => {
             void handleCreateAudit();

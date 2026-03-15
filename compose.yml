@@ -1,37 +1,37 @@
 services:
-  aethercab:
+  aethercad:
     build:
       context: .
       dockerfile: Dockerfile
-    image: aethercab:latest
-    container_name: aethercab-app
+    image: aethercad:latest
+    container_name: aethercad-app
     depends_on:
-      aethercab-db:
+      aethercad-db:
         condition: service_healthy
     ports:
       - "5500:5500"
     environment:
       PORT: "5500"
-      DATABASE_URL: postgresql://aethercab:aethercab@aethercab-db:5432/aethercab
+      DATABASE_URL: postgresql://aethercad:aethercad@aethercad-db:5432/aethercad
     restart: unless-stopped
 
-  aethercab-db:
+  aethercad-db:
     image: postgres:17-alpine
-    container_name: aethercab-db
+    container_name: aethercad-db
     environment:
-      POSTGRES_DB: aethercab
-      POSTGRES_USER: aethercab
-      POSTGRES_PASSWORD: aethercab
+      POSTGRES_DB: aethercad
+      POSTGRES_USER: aethercad
+      POSTGRES_PASSWORD: aethercad
     ports:
       - "5496:5432"
     volumes:
-      - aethercab-db-data:/var/lib/postgresql/data
+      - aethercad-db-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aethercab -d aethercab"]
+      test: ["CMD-SHELL", "pg_isready -U aethercad -d aethercad"]
       interval: 10s
       timeout: 5s
       retries: 10
     restart: unless-stopped
 
 volumes:
-  aethercab-db-data:
+  aethercad-db-data:

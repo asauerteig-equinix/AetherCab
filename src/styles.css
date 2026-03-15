@@ -546,6 +546,13 @@ a {
   background: rgba(188, 175, 159, 0.04);
 }
 
+.overview-audit-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+
 .overview-audit-card.status-created {
   border-left: 4px solid rgba(91, 124, 149, 0.62);
 }
@@ -2075,6 +2082,10 @@ textarea {
   .overview-audit-topline {
     flex-direction: column;
     align-items: start;
+  }
+
+  .overview-audit-actions {
+    width: 100%;
   }
 
   .export-actions {

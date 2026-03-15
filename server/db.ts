@@ -1,6 +1,6 @@
 import { Pool } from "pg";
 
-const defaultDatabaseUrl = "postgresql://aethercab:aethercab@127.0.0.1:5496/aethercab";
+const defaultDatabaseUrl = "postgresql://aethercad:aethercad@127.0.0.1:5496/aethercad";
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL ?? defaultDatabaseUrl

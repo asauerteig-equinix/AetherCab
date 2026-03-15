@@ -73,7 +73,7 @@ export function Palette({ templates, collapsed, disabled = false }: PaletteProps
                       event.preventDefault();
                       return;
                     }
-                    event.dataTransfer.setData("application/x-aethercab-template", JSON.stringify(template));
+                    event.dataTransfer.setData("application/x-aethercad-template", JSON.stringify(template));
                   }}
                 >
                   <img alt="" aria-hidden="true" className="template-icon" src={getDeviceIconUrl(template.iconKey)} />
