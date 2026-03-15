@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Aether C.A.D">
+  <defs>
+    <linearGradient id="cad-bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f5f8fb" />
+      <stop offset="100%" stop-color="#dfe8ef" />
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="url(#cad-bg)" stroke="#4f6f86" stroke-width="3" />
+  <rect x="14" y="12" width="36" height="7" rx="3.5" fill="#2f5067" opacity="0.9" />
+  <circle cx="18" cy="15.5" r="1.6" fill="#f5f8fb" />
+  <circle cx="24" cy="15.5" r="1.6" fill="#f5f8fb" />
+  <circle cx="30" cy="15.5" r="1.6" fill="#f5f8fb" />
+  <text
+    x="32"
+    y="42"
+    text-anchor="middle"
+    font-family="Bahnschrift, 'Segoe UI', sans-serif"
+    font-size="20"
+    font-weight="700"
+    letter-spacing="0.06em"
+    fill="#2f5067"
+  >
+    CAD
+  </text>
+</svg>
