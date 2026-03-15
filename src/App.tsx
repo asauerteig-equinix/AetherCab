@@ -214,6 +214,30 @@ export default function App() {
     }
   }, [recentlyDeletedDevice, selectedDeviceId]);
 
+  useEffect(() => {
+    if (selectedDeviceId === null) {
+      return;
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      if (target.closest("[data-device-selection='true']")) {
+        return;
+      }
+
+      setSelectedDeviceId(null);
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [selectedDeviceId]);
+
   function navigate(path: "/" | "/audits" | "/admin") {
     window.history.pushState({}, "", path);
     setCurrentPath(path);
@@ -920,7 +944,7 @@ export default function App() {
           </div>
 
           <div className="side-column">
-            <Palette templates={templates} />
+            <Palette collapsed={selectedDeviceId !== null} templates={templates} />
             <StagingArea
               devices={stagedDevices}
               selectedDeviceId={selectedDeviceId}

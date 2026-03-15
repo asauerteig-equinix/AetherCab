@@ -1,6 +1,8 @@
 import { useEffect, useState, type ChangeEvent } from "react";
-import { getRackMountPositionLabel, isVerticalPduMountPosition, verticalPduMountPositions } from "../../shared/rack";
+import { getVerticalPduMountPositionsForFace, isVerticalPduMountPosition } from "../../shared/rack";
 import type { RackDevice, RackDeviceInput } from "../../shared/types";
+
+type InspectorMountStyle = "full" | "vertical";
 
 interface InspectorProps {
   device: RackDevice | null;
@@ -14,6 +16,21 @@ interface InspectorProps {
 
 function normalizeValue(value: string): string | null {
   return value.trim() ? value : null;
+}
+
+function getInspectorMountStyle(mountPosition: RackDeviceInput["mountPosition"]): InspectorMountStyle {
+  return isVerticalPduMountPosition(mountPosition) ? "vertical" : "full";
+}
+
+function resolveVerticalMountPosition(
+  rackFace: RackDeviceInput["rackFace"],
+  currentMountPosition: RackDeviceInput["mountPosition"]
+): RackDeviceInput["mountPosition"] {
+  if (isVerticalPduMountPosition(currentMountPosition)) {
+    return currentMountPosition;
+  }
+
+  return getVerticalPduMountPositionsForFace(rackFace ?? "front")[0];
 }
 
 function toDeviceInput(device: RackDevice): RackDeviceInput {
@@ -65,9 +82,14 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
 
   if (!device || !draft) {
     return (
-      <section className="panel inspector-panel empty">
-        <p className="eyebrow">Inspector</p>
-        <h2>Quick edit</h2>
+      <section className="panel inspector-panel collapsed" data-device-selection="true">
+        <div className="panel-header">
+          <div>
+            <p className="eyebrow">Inspector</p>
+            <h2>Quick edit</h2>
+          </div>
+          <span className="muted">No device selected</span>
+        </div>
         {recentlyDeletedDeviceName ? (
           <div className="inspector-undo-card">
             <span>{`${recentlyDeletedDeviceName} was deleted.`}</span>
@@ -76,7 +98,6 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
             </button>
           </div>
         ) : null}
-        <p>Select a device to edit its metadata.</p>
       </section>
     );
   }
@@ -104,7 +125,7 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
   }
 
   return (
-    <section className="panel inspector-panel">
+    <section className="panel inspector-panel" data-device-selection="true">
       <div className="panel-header">
         <div>
           <p className="eyebrow">Inspector</p>
@@ -170,27 +191,43 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
           <input value={draft.model} onBlur={() => commitDraft()} onChange={updateInput("model")} />
         </label>
         <label>
-          Mount position
+          Mount style
           <select
-            value={draft.mountPosition}
+            value={getInspectorMountStyle(draft.mountPosition)}
             disabled={device.placementType === "spare"}
-            onChange={updateInput("mountPosition", (event) => event.target.value as RackDeviceInput["mountPosition"])}
+            onChange={(event) => {
+              const nextMountStyle = event.target.value as InspectorMountStyle;
+
+              setDraft({
+                ...draft,
+                rackFace: draft.rackFace ?? "front",
+                blocksBothFaces: nextMountStyle === "vertical" ? false : draft.blocksBothFaces,
+                mountPosition:
+                  nextMountStyle === "vertical" ? resolveVerticalMountPosition(draft.rackFace, draft.mountPosition) : "full"
+              });
+            }}
             onBlur={() => commitDraft()}
           >
-            <option value="full">{getRackMountPositionLabel("full")}</option>
-            {verticalPduMountPositions.map((mountPosition) => (
-              <option key={mountPosition} value={mountPosition}>
-                {getRackMountPositionLabel(mountPosition)}
-              </option>
-            ))}
+            <option value="full">Standard rack device</option>
+            <option value="vertical">Vertical side device</option>
           </select>
         </label>
         <label>
           Rack face
           <select
             value={draft.rackFace ?? "front"}
-            disabled={device.placementType === "spare" || draft.blocksBothFaces || isVerticalPduMountPosition(draft.mountPosition)}
-            onChange={updateInput("rackFace", (event) => event.target.value as RackDeviceInput["rackFace"])}
+            disabled={device.placementType === "spare" || draft.blocksBothFaces}
+            onChange={(event) => {
+              const nextRackFace = event.target.value as RackDeviceInput["rackFace"];
+
+              setDraft({
+                ...draft,
+                rackFace: nextRackFace,
+                mountPosition: isVerticalPduMountPosition(draft.mountPosition)
+                  ? getVerticalPduMountPositionsForFace(nextRackFace ?? "front")[0]
+                  : draft.mountPosition
+              });
+            }}
             onBlur={() => commitDraft()}
           >
             <option value="front">Front</option>
@@ -233,7 +270,7 @@ export function Inspector({ device, recentlyDeletedDeviceName, onChange, onMoveT
           />
         </label>
       </div>
-      {isVerticalPduMountPosition(device.mountPosition) ? <p className="muted">Vertical PDUs use side lanes and do not block the main rack width.</p> : null}
+      {isVerticalPduMountPosition(draft.mountPosition) ? <p className="muted">Vertical PDUs use side lanes and do not block the main rack width.</p> : null}
       {device.placementType === "spare" ? (
         <p className="muted">This device is only parked temporarily and will not appear in exports.</p>
       ) : null}

@@ -4,10 +4,12 @@ import {
   getAnchoredStartUnit,
   getEndUnit,
   getMountPositionFace,
+  getOrderedPduMountPositionsForFace,
+  getPduLaneSide,
   getRackCapacitySummary,
   getRackMountPositionLabel,
   getRackMountPositionShortLabel,
-  getVerticalPduMountPositionsForFace,
+  getVisiblePduMountPositionsForFace,
   isVerticalPduMountPosition
 } from "../../shared/rack";
 import type { DeviceTemplate, RackDetail, RackDevice, RackFace, RackMountPosition } from "../../shared/types";
@@ -41,6 +43,7 @@ interface DraggingDeviceState {
 interface PduGuideState {
   rackFace: RackFace;
   mountPosition: RackMountPosition | null;
+  extraSide: "left" | "right" | null;
 }
 
 interface RackFacePaneProps {
@@ -74,54 +77,59 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(Math.max(value, minimum), maximum);
 }
 
-function getRackLayout(width: number, reservePduColumns: boolean) {
+function getRackLayout(width: number, visiblePduMountPositions: RackMountPosition[]) {
   const labelWidth = clamp(width * 0.16, 56, 82);
   const sidePadding = clamp(width * 0.026, 10, 16);
   const pduLaneWidth = clamp(width * 0.06, 22, 30);
   const laneGap = clamp(width * 0.014, 4, 8);
   const centerGap = clamp(width * 0.026, 10, 18);
-  const fullLeft = reservePduColumns ? labelWidth + sidePadding + pduLaneWidth * 2 + laneGap + centerGap : labelWidth + sidePadding;
-  const fullRight = reservePduColumns ? sidePadding + pduLaneWidth * 2 + laneGap + centerGap : sidePadding;
+  const leftPduMountPositions = visiblePduMountPositions.filter((mountPosition) => getPduLaneSide(mountPosition) === "left");
+  const rightPduMountPositions = visiblePduMountPositions.filter((mountPosition) => getPduLaneSide(mountPosition) === "right");
+  const leftPduWidth =
+    leftPduMountPositions.length * pduLaneWidth +
+    Math.max(0, leftPduMountPositions.length - 1) * laneGap +
+    (leftPduMountPositions.length > 0 ? centerGap : 0);
+  const rightPduWidth =
+    rightPduMountPositions.length * pduLaneWidth +
+    Math.max(0, rightPduMountPositions.length - 1) * laneGap +
+    (rightPduMountPositions.length > 0 ? centerGap : 0);
 
   return {
     labelWidth,
     sidePadding,
     pduLaneWidth,
     laneGap,
-    fullLeft,
-    fullRight
+    centerGap,
+    leftPduMountPositions,
+    rightPduMountPositions,
+    fullLeft: labelWidth + sidePadding + leftPduWidth,
+    fullRight: sidePadding + rightPduWidth
   };
 }
 
 function getMountStyle(
   layout: ReturnType<typeof getRackLayout>,
   mountPosition: RackMountPosition,
-  reservePduColumns: boolean
 ): CSSProperties {
   if (mountPosition === "full") {
     return {
-      left: reservePduColumns ? layout.fullLeft : layout.labelWidth + layout.sidePadding,
-      right: reservePduColumns ? layout.fullRight : layout.sidePadding
+      left: layout.fullLeft,
+      right: layout.fullRight
     };
   }
 
-  if (mountPosition.endsWith("left-outer")) {
+  const leftIndex = layout.leftPduMountPositions.indexOf(mountPosition);
+  if (leftIndex >= 0) {
     return {
-      left: layout.labelWidth + layout.sidePadding,
+      left: layout.labelWidth + layout.sidePadding + leftIndex * (layout.pduLaneWidth + layout.laneGap),
       width: layout.pduLaneWidth
     };
   }
 
-  if (mountPosition.endsWith("left-inner")) {
+  const rightIndex = layout.rightPduMountPositions.indexOf(mountPosition);
+  if (rightIndex >= 0) {
     return {
-      left: layout.labelWidth + layout.sidePadding + layout.pduLaneWidth + layout.laneGap,
-      width: layout.pduLaneWidth
-    };
-  }
-
-  if (mountPosition.endsWith("right-inner")) {
-    return {
-      right: layout.sidePadding + layout.pduLaneWidth + layout.laneGap,
+      right: layout.sidePadding + rightIndex * (layout.pduLaneWidth + layout.laneGap),
       width: layout.pduLaneWidth
     };
   }
@@ -136,9 +144,8 @@ function getMountHitbox(
   rackWidth: number,
   layout: ReturnType<typeof getRackLayout>,
   mountPosition: RackMountPosition,
-  reservePduColumns: boolean
 ): { startX: number; endX: number } {
-  const style = getMountStyle(layout, mountPosition, reservePduColumns);
+  const style = getMountStyle(layout, mountPosition);
 
   if (mountPosition === "full") {
     const left = Number(style.left ?? 0);
@@ -155,19 +162,38 @@ function getMountHitbox(
   return { startX: rackWidth - right - width, endX: rackWidth - right };
 }
 
-function getPduLaneFromPointer(event: DragEvent<HTMLDivElement>, rackWidth: number, rackFace: RackFace): RackMountPosition {
-  const layout = getRackLayout(rackWidth, true);
+function getPduHoverSide(event: DragEvent<HTMLDivElement>, rackWidth: number): "left" | "right" | null {
   const rackBounds = event.currentTarget.getBoundingClientRect();
   const relativeX = clamp(event.clientX - rackBounds.left, 0, rackBounds.width - 1);
-  const fullHitbox = getMountHitbox(rackBounds.width, layout, "full", true);
+  if (relativeX <= rackWidth * 0.34) {
+    return "left";
+  }
+
+  if (relativeX >= rackWidth * 0.66) {
+    return "right";
+  }
+
+  return null;
+}
+
+function getPduLaneFromPointer(
+  event: DragEvent<HTMLDivElement>,
+  rackWidth: number,
+  rackFace: RackFace,
+  visiblePduMountPositions: RackMountPosition[]
+): RackMountPosition {
+  const layout = getRackLayout(rackWidth, visiblePduMountPositions);
+  const rackBounds = event.currentTarget.getBoundingClientRect();
+  const relativeX = clamp(event.clientX - rackBounds.left, 0, rackBounds.width - 1);
+  const fullHitbox = getMountHitbox(rackBounds.width, layout, "full");
 
   if (relativeX >= fullHitbox.startX && relativeX <= fullHitbox.endX) {
     return "full";
   }
 
-  return getVerticalPduMountPositionsForFace(rackFace).reduce<{ mountPosition: RackMountPosition; distance: number }>(
+  return visiblePduMountPositions.reduce<{ mountPosition: RackMountPosition; distance: number }>(
     (closest, mountPosition) => {
-      const hitbox = getMountHitbox(rackBounds.width, layout, mountPosition, true);
+      const hitbox = getMountHitbox(rackBounds.width, layout, mountPosition);
       const center = (hitbox.startX + hitbox.endX) / 2;
       const distance = Math.abs(center - relativeX);
 
@@ -177,7 +203,7 @@ function getPduLaneFromPointer(event: DragEvent<HTMLDivElement>, rackWidth: numb
 
       return closest;
     },
-    { mountPosition: getVerticalPduMountPositionsForFace(rackFace)[0], distance: Number.POSITIVE_INFINITY }
+    { mountPosition: getOrderedPduMountPositionsForFace(rackFace, "left")[0], distance: Number.POSITIVE_INFINITY }
   ).mountPosition;
 }
 
@@ -185,7 +211,7 @@ function getDeviceStyle(
   rack: RackDetail,
   device: Pick<RackDevice, "startUnit" | "heightU" | "mountPosition">,
   rackWidth: number,
-  reservePduColumns: boolean
+  visiblePduMountPositions: RackMountPosition[]
 ): CSSProperties {
   const startUnit = device.startUnit ?? 1;
   const bottom = (startUnit - 1) * slotHeight;
@@ -195,7 +221,7 @@ function getDeviceStyle(
   return {
     top,
     height,
-    ...getMountStyle(getRackLayout(rackWidth, reservePduColumns), device.mountPosition, reservePduColumns)
+    ...getMountStyle(getRackLayout(rackWidth, visiblePduMountPositions), device.mountPosition)
   };
 }
 
@@ -231,11 +257,9 @@ function RackFacePane({
       (device.blocksBothFaces || device.rackFace === rackFace)
   );
   const panePreviewPlacement = previewPlacement?.rackFace === rackFace ? previewPlacement : null;
-  const panePduGuideVisible = pduGuide?.rackFace === rackFace;
-  const facePduLanePositions = getVerticalPduMountPositionsForFace(rackFace);
-  const reservePduColumns =
-    panePduGuideVisible || placedDevices.some((device) => isVerticalPduMountPosition(device.mountPosition));
-  const layout = getRackLayout(rackWidth, reservePduColumns);
+  const panePduGuide = pduGuide?.rackFace === rackFace ? pduGuide : null;
+  const facePduLanePositions = getVisiblePduMountPositionsForFace(rackFace, rack.devices, panePduGuide?.extraSide);
+  const layout = getRackLayout(rackWidth, facePduLanePositions);
 
   useEffect(() => {
     const rackUnits = rackUnitsRef.current;
@@ -267,7 +291,7 @@ function RackFacePane({
           onDrop={(event) => onDrop(rackFace, rackWidth, event)}
           onDragLeave={onDragLeave}
         >
-          {panePduGuideVisible ? (
+          {panePduGuide ? (
             <>
               <div className="rack-pdu-guide-banner">
                 <strong>Vertical PDU</strong>
@@ -277,13 +301,13 @@ function RackFacePane({
                 <div
                   key={mountPosition}
                   className={
-                    pduGuide?.mountPosition === mountPosition
+                    panePduGuide.mountPosition === mountPosition
                       ? panePreviewPlacement?.isValid === false
                         ? "rack-pdu-lane active invalid"
                         : "rack-pdu-lane active"
                       : "rack-pdu-lane"
                   }
-                  style={{ ...getMountStyle(layout, mountPosition, true), height: rack.totalUnits * slotHeight - 2 }}
+                  style={{ ...getMountStyle(layout, mountPosition), height: rack.totalUnits * slotHeight - 2 }}
                 >
                   <span>{getRackMountPositionShortLabel(mountPosition)}</span>
                 </div>
@@ -322,7 +346,7 @@ function RackFacePane({
                     ? "rack-preview pdu valid"
                     : "rack-preview pdu invalid"
               }
-              style={getDeviceStyle(rack, panePreviewPlacement, rackWidth, reservePduColumns)}
+              style={getDeviceStyle(rack, panePreviewPlacement, rackWidth, facePduLanePositions)}
             />
           ) : null}
 
@@ -351,6 +375,7 @@ function RackFacePane({
             return (
               <button
                 key={`${rackFace}-${device.id}`}
+                data-device-selection="true"
                 className={
                   device.id === selectedDeviceId
                     ? isMirroredFromOppositeFace
@@ -369,7 +394,7 @@ function RackFacePane({
                         : "rack-device"
                 }
                 data-origin-face={isMirroredFromOppositeFace ? device.rackFace : undefined}
-                style={getDeviceStyle(rack, device, rackWidth, reservePduColumns)}
+                style={getDeviceStyle(rack, device, rackWidth, facePduLanePositions)}
                 draggable
                 onDragStart={(event) => onDeviceDragStart(rackFace, device, startUnit, endUnit, event)}
                 onDragEnd={onDeviceDragEnd}
@@ -446,11 +471,13 @@ export function RackCanvas({
     if (templatePayload) {
       const template = JSON.parse(templatePayload) as DeviceTemplate;
       const isPdu = template.mountStyle === "vertical-pdu";
-      const mountPosition = isPdu ? getPduLaneFromPointer(event, rackWidth, rackFace) : "full";
+      const extraSide = isPdu ? getPduHoverSide(event, rackWidth) : null;
+      const visiblePduMountPositions = isPdu ? getVisiblePduMountPositionsForFace(rackFace, rack.devices, extraSide) : [];
+      const mountPosition = isPdu ? getPduLaneFromPointer(event, rackWidth, rackFace, visiblePduMountPositions) : "full";
       const previewRange = getPreviewRange(hoveredUnit, template.defaultHeightU, rack.totalUnits);
 
       if (isPdu) {
-        setPduGuide({ rackFace, mountPosition: mountPosition === "full" ? null : mountPosition });
+        setPduGuide({ rackFace, mountPosition: mountPosition === "full" ? null : mountPosition, extraSide });
       } else {
         setPduGuide(null);
       }
@@ -512,10 +539,12 @@ export function RackCanvas({
       const isPdu = isVerticalPduMountPosition(device.mountPosition);
       const offsetUnitsFromTop = draggingDevice?.deviceId === device.id ? draggingDevice.offsetUnitsFromTop : device.heightU - 1;
       const startUnit = clamp(hoveredUnit - (device.heightU - 1 - offsetUnitsFromTop), 1, rack.totalUnits - device.heightU + 1);
-      const hoveredMountPosition = isPdu ? getPduLaneFromPointer(event, rackWidth, rackFace) : "full";
+      const extraSide = isPdu ? getPduHoverSide(event, rackWidth) : null;
+      const visiblePduMountPositions = isPdu ? getVisiblePduMountPositionsForFace(rackFace, rack.devices, extraSide) : [];
+      const hoveredMountPosition = isPdu ? getPduLaneFromPointer(event, rackWidth, rackFace, visiblePduMountPositions) : "full";
 
       if (isPdu) {
-        setPduGuide({ rackFace, mountPosition: hoveredMountPosition === "full" ? null : hoveredMountPosition });
+        setPduGuide({ rackFace, mountPosition: hoveredMountPosition === "full" ? null : hoveredMountPosition, extraSide });
       } else {
         setPduGuide(null);
       }
@@ -567,7 +596,15 @@ export function RackCanvas({
 
     if (templatePayload) {
       const template = JSON.parse(templatePayload) as DeviceTemplate;
-      const mountPosition = template.mountStyle === "vertical-pdu" ? getPduLaneFromPointer(event, rackWidth, rackFace) : "full";
+      const mountPosition =
+        template.mountStyle === "vertical-pdu"
+          ? getPduLaneFromPointer(
+              event,
+              rackWidth,
+              rackFace,
+              getVisiblePduMountPositionsForFace(rackFace, rack.devices, getPduHoverSide(event, rackWidth))
+            )
+          : "full";
       resetDragGuides();
       onTemplateDrop(rackFace, hoveredUnit, mountPosition, templatePayload);
       return;
@@ -579,7 +616,12 @@ export function RackCanvas({
         const offsetUnitsFromTop = draggingDevice?.deviceId === device.id ? draggingDevice.offsetUnitsFromTop : device.heightU - 1;
         const nextStartUnit = clamp(hoveredUnit - (device.heightU - 1 - offsetUnitsFromTop), 1, rack.totalUnits - device.heightU + 1);
         const hoveredMountPosition = isVerticalPduMountPosition(device.mountPosition)
-          ? getPduLaneFromPointer(event, rackWidth, rackFace)
+          ? getPduLaneFromPointer(
+              event,
+              rackWidth,
+              rackFace,
+              getVisiblePduMountPositionsForFace(rackFace, rack.devices, getPduHoverSide(event, rackWidth))
+            )
           : "full";
 
         if (isVerticalPduMountPosition(device.mountPosition) && hoveredMountPosition === "full") {
@@ -625,7 +667,7 @@ export function RackCanvas({
     event.dataTransfer.setData("application/x-aethercab-device", String(device.id));
     event.dataTransfer.effectAllowed = "move";
     setDraggingDevice({ deviceId: device.id, offsetUnitsFromTop });
-    setPduGuide(isPdu ? { rackFace: previewRackFace, mountPosition: device.mountPosition } : null);
+    setPduGuide(isPdu ? { rackFace: previewRackFace, mountPosition: device.mountPosition, extraSide: getPduLaneSide(device.mountPosition) } : null);
     setPreviewPlacement({
       rackFace: previewRackFace,
       startUnit,

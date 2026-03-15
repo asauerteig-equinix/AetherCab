@@ -13,6 +13,7 @@ interface StagingAreaProps {
 
 export function StagingArea({ devices, selectedDeviceId, saving, onSelectDevice, onStageDevice }: StagingAreaProps) {
   const [dragActive, setDragActive] = useState(false);
+  const isCompact = devices.length === 0 && !dragActive;
 
   function handleDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
@@ -24,7 +25,7 @@ export function StagingArea({ devices, selectedDeviceId, saving, onSelectDevice,
   }
 
   return (
-    <section className="panel">
+    <section className={isCompact ? "panel tray-panel compact" : "panel tray-panel"}>
       <div className="panel-header">
         <div>
           <p className="eyebrow">Staging Area</p>
@@ -34,7 +35,7 @@ export function StagingArea({ devices, selectedDeviceId, saving, onSelectDevice,
       </div>
 
       <div
-        className={dragActive ? "staging-dropzone active" : "staging-dropzone"}
+        className={dragActive ? "staging-dropzone active" : isCompact ? "staging-dropzone compact" : "staging-dropzone"}
         onDragEnter={(event) => {
           event.preventDefault();
           setDragActive(true);
@@ -55,15 +56,16 @@ export function StagingArea({ devices, selectedDeviceId, saving, onSelectDevice,
         onDrop={handleDrop}
       >
         <strong>Drop device here</strong>
-        <span>Drag devices into the temporary tray to park them without losing their data.</span>
+        <span>{isCompact ? "Park devices here temporarily." : "Drag devices into the temporary tray to park them without losing their data."}</span>
       </div>
 
-      <div className="spare-list">
+      <div className={isCompact ? "spare-list hidden" : "spare-list"}>
         {devices.length === 0 ? (
           <div className="empty-state">No parked devices right now.</div>
         ) : (
           devices.map((device) => (
             <article
+              data-device-selection="true"
               className={device.id === selectedDeviceId ? "spare-card selected" : "spare-card"}
               draggable
               key={device.id}

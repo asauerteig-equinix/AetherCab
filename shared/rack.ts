@@ -1,5 +1,7 @@
 import type { RackDevice, RackDeviceInput, RackFace, RackMountPosition } from "./types.js";
 
+export type PduLaneSide = "left" | "right";
+
 export const frontVerticalPduMountPositions: RackMountPosition[] = [
   "front-left-outer",
   "front-left-inner",
@@ -60,6 +62,61 @@ export function getMountPositionFace(mountPosition: RackMountPosition): RackFace
 
 export function getVerticalPduMountPositionsForFace(face: RackFace): RackMountPosition[] {
   return face === "front" ? frontVerticalPduMountPositions : rearVerticalPduMountPositions;
+}
+
+export function getPduLaneSide(mountPosition: RackMountPosition): PduLaneSide | null {
+  if (mountPosition === "full") {
+    return null;
+  }
+
+  return mountPosition.includes("-left-") ? "left" : "right";
+}
+
+export function getOrderedPduMountPositionsForFace(face: RackFace, side: PduLaneSide): Exclude<RackMountPosition, "full">[] {
+  if (face === "front" && side === "left") {
+    return ["front-left-outer", "front-left-inner"];
+  }
+
+  if (face === "front" && side === "right") {
+    return ["front-right-outer", "front-right-inner"];
+  }
+
+  if (face === "rear" && side === "left") {
+    return ["rear-left-outer", "rear-left-inner"];
+  }
+
+  return ["rear-right-outer", "rear-right-inner"];
+}
+
+export function getVisiblePduMountPositionsForFace(
+  face: RackFace,
+  devices: RackDevice[],
+  extraSide?: PduLaneSide | null
+): Exclude<RackMountPosition, "full">[] {
+  const occupied = new Set(
+    devices
+      .filter((device) => device.placementType === "rack" && device.startUnit !== null && getMountPositionFace(device.mountPosition) === face)
+      .map((device) => device.mountPosition)
+      .filter((mountPosition): mountPosition is Exclude<RackMountPosition, "full"> => mountPosition !== "full")
+  );
+
+  const visible: Exclude<RackMountPosition, "full">[] = [];
+
+  (["left", "right"] as const).forEach((side) => {
+    const ordered = getOrderedPduMountPositionsForFace(face, side);
+    const sideVisible = ordered.filter((mountPosition) => occupied.has(mountPosition));
+
+    if (extraSide === side) {
+      const nextAvailable = ordered.find((mountPosition) => !occupied.has(mountPosition));
+      if (nextAvailable) {
+        sideVisible.push(nextAvailable);
+      }
+    }
+
+    visible.push(...sideVisible);
+  });
+
+  return visible;
 }
 
 export function getRackMountPositionLabel(mountPosition: RackMountPosition): string {

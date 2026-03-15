@@ -4,6 +4,7 @@ import { getDeviceIconUrl } from "../deviceIcons";
 
 interface PaletteProps {
   templates: DeviceTemplate[];
+  collapsed: boolean;
 }
 
 function formatTemplateType(templateType: string): string {
@@ -13,7 +14,7 @@ function formatTemplateType(templateType: string): string {
     .join("/");
 }
 
-export function Palette({ templates }: PaletteProps) {
+export function Palette({ templates, collapsed }: PaletteProps) {
   const templatesByType = useMemo(
     () =>
       templates.reduce<Record<string, DeviceTemplate[]>>((groups, template) => {
@@ -45,7 +46,7 @@ export function Palette({ templates }: PaletteProps) {
   }
 
   return (
-    <section className="panel">
+    <section className={collapsed ? "panel side-panel-collapsed" : "panel"}>
       <div className="panel-header">
         <div>
           <p className="eyebrow">Templates</p>
@@ -53,7 +54,7 @@ export function Palette({ templates }: PaletteProps) {
         </div>
         <span className="muted">Drag into the audit</span>
       </div>
-      <div className="template-list compact">
+      <div className={collapsed ? "template-list compact hidden" : "template-list compact"}>
         {Object.entries(templatesByType).map(([templateType, group]) => (
           <section className="template-group" key={templateType}>
             <button className="template-group-title" onClick={() => toggleGroup(templateType)} type="button">

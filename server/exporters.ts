@@ -4,8 +4,10 @@ import { formatAuditDateTime, getAuditStatusLabel } from "../shared/audits.js";
 import {
   getEndUnit,
   getMountPositionFace,
+  getPduLaneSide,
   getRackCapacitySummary,
   getRackMountPositionLabel,
+  getVisiblePduMountPositionsForFace,
   isVerticalPduMountPosition,
   type RackFaceCapacityStats,
   type RackFaceCapacityTone
@@ -791,42 +793,38 @@ function drawPdfHeader(pdf: PdfDocument, audit: AuditExportDetail, title: string
 }
 
 function getPdfRackDeviceFrame(
-  reservePduColumns: boolean,
-  rackX: number,
-  rackWidth: number,
+  layout: ReturnType<typeof getPdfRackFaceLayoutForFace>,
   mountPosition: RackMountPosition
 ): { x: number; width: number } {
-  if (reservePduColumns) {
-    const sidePadding = 10;
-    const pduLaneWidth = 18;
-    const laneGap = 8;
-    const centerGap = 16;
-    const fullX = rackX + sidePadding + pduLaneWidth * 2 + laneGap + centerGap;
-    const fullWidth = rackWidth - sidePadding * 2 - pduLaneWidth * 4 - laneGap * 2 - centerGap * 2;
-
-    if (mountPosition.endsWith("left-outer")) {
-      return { x: rackX + sidePadding, width: pduLaneWidth };
-    }
-
-    if (mountPosition.endsWith("left-inner")) {
-      return { x: rackX + sidePadding + pduLaneWidth + laneGap, width: pduLaneWidth };
-    }
-
-    if (mountPosition.endsWith("right-inner")) {
-      return { x: rackX + rackWidth - sidePadding - pduLaneWidth * 2 - laneGap, width: pduLaneWidth };
-    }
-
-    if (mountPosition.endsWith("right-outer")) {
-      return { x: rackX + rackWidth - sidePadding - pduLaneWidth, width: pduLaneWidth };
-    }
-
-    return { x: fullX, width: fullWidth };
+  if (mountPosition === "full") {
+    return { x: layout.fullX, width: layout.fullWidth };
   }
 
-  return { x: rackX + 8, width: rackWidth - 16 };
+  const leftIndex = layout.leftPduMountPositions.indexOf(mountPosition);
+  if (leftIndex >= 0) {
+    return {
+      x: layout.rackX + layout.sidePadding + leftIndex * (layout.pduLaneWidth + layout.laneGap),
+      width: layout.pduLaneWidth
+    };
+  }
+
+  const rightIndex = layout.rightPduMountPositions.indexOf(mountPosition);
+  if (rightIndex >= 0) {
+    return {
+      x: layout.rackX + layout.rackWidth - layout.sidePadding - layout.pduLaneWidth - rightIndex * (layout.pduLaneWidth + layout.laneGap),
+      width: layout.pduLaneWidth
+    };
+  }
+
+  return { x: layout.fullX, width: layout.fullWidth };
 }
 
-function getPdfRackFaceLayout(x: number, width: number): {
+function getPdfRackFaceLayoutForFace(
+  x: number,
+  width: number,
+  leftPduMountPositions: RackMountPosition[],
+  rightPduMountPositions: RackMountPosition[]
+): {
   labelX: number;
   labelWidth: number;
   leftCalloutX: number;
@@ -834,12 +832,37 @@ function getPdfRackFaceLayout(x: number, width: number): {
   rackX: number;
   rackWidth: number;
   rightCalloutX: number;
+  leftPduMountPositions: RackMountPosition[];
+  rightPduMountPositions: RackMountPosition[];
+  sidePadding: number;
+  pduLaneWidth: number;
+  laneGap: number;
+  fullX: number;
+  fullWidth: number;
 } {
   const labelWidth = 28;
   const calloutWidth = 66;
   const calloutGap = 6;
-  const rackX = x + labelWidth + calloutWidth + calloutGap;
-  const rackWidth = width - labelWidth - calloutWidth * 2 - calloutGap * 2;
+  const leftCalloutWidth = leftPduMountPositions.length > 0 ? calloutWidth : 0;
+  const rightCalloutWidth = rightPduMountPositions.length > 0 ? calloutWidth : 0;
+  const leftCalloutGap = leftCalloutWidth > 0 ? calloutGap : 0;
+  const rightCalloutGap = rightCalloutWidth > 0 ? calloutGap : 0;
+  const rackX = x + labelWidth + leftCalloutWidth + leftCalloutGap;
+  const rackWidth = width - labelWidth - leftCalloutWidth - rightCalloutWidth - leftCalloutGap - rightCalloutGap;
+  const sidePadding = 10;
+  const pduLaneWidth = 18;
+  const laneGap = 8;
+  const centerGap = 16;
+  const leftPduWidth =
+    leftPduMountPositions.length * pduLaneWidth +
+    Math.max(0, leftPduMountPositions.length - 1) * laneGap +
+    (leftPduMountPositions.length > 0 ? centerGap : 0);
+  const rightPduWidth =
+    rightPduMountPositions.length * pduLaneWidth +
+    Math.max(0, rightPduMountPositions.length - 1) * laneGap +
+    (rightPduMountPositions.length > 0 ? centerGap : 0);
+  const fullX = rackX + sidePadding + leftPduWidth;
+  const fullWidth = rackWidth - sidePadding * 2 - leftPduWidth - rightPduWidth;
 
   return {
     labelX: x,
@@ -848,7 +871,14 @@ function getPdfRackFaceLayout(x: number, width: number): {
     calloutWidth,
     rackX,
     rackWidth,
-    rightCalloutX: rackX + rackWidth + calloutGap
+    rightCalloutX: rackX + rackWidth + rightCalloutGap,
+    leftPduMountPositions,
+    rightPduMountPositions,
+    sidePadding,
+    pduLaneWidth,
+    laneGap,
+    fullX,
+    fullWidth
   };
 }
 
@@ -865,9 +895,7 @@ function drawPdfPduCallouts(
   calloutWidth: number,
   unitHeight: number,
   rackUnits: number,
-  reservePduColumns: boolean,
-  rackX: number,
-  rackWidth: number
+  layout: ReturnType<typeof getPdfRackFaceLayoutForFace>
 ): void {
   const pduDevices = devices.filter((device) => isVerticalPduMountPosition(device.mountPosition));
   if (pduDevices.length === 0) {
@@ -890,7 +918,7 @@ function drawPdfPduCallouts(
       const endUnit = getEndUnit(startUnit, device.heightU);
       const topY = rackY + (rackUnits - endUnit) * unitHeight + 1;
       const height = Math.max(unitHeight * device.heightU - 2, unitHeight - 2);
-      const frame = getPdfRackDeviceFrame(reservePduColumns, rackX, rackWidth, device.mountPosition);
+      const frame = getPdfRackDeviceFrame(layout, device.mountPosition);
       const anchorX = side === "left" ? frame.x + frame.width : frame.x;
       const anchorY = topY + height / 2;
       const lines = deviceVisualLines(device);
@@ -923,12 +951,17 @@ function drawPdfPduCallouts(
 }
 
 function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: number, y: number, width: number): void {
-  const layout = getPdfRackFaceLayout(x, width);
   const unitHeight = Math.max(8, Math.min(11, Math.floor((pdf.page.height - y - 82) / rack.totalUnits)));
   const rackHeight = unitHeight * rack.totalUnits;
   const innerPadding = 8;
   const devices = visibleDevicesForFace(rack, face);
-  const reservePduColumns = devices.some((device) => isVerticalPduMountPosition(device.mountPosition));
+  const visiblePduMountPositions = getVisiblePduMountPositionsForFace(face, rack.devices);
+  const layout = getPdfRackFaceLayoutForFace(
+    x,
+    width,
+    visiblePduMountPositions.filter((mountPosition) => getPduLaneSide(mountPosition) === "left"),
+    visiblePduMountPositions.filter((mountPosition) => getPduLaneSide(mountPosition) === "right")
+  );
 
   pdf.fillColor(pdfPalette.accentStrong).fontSize(9).text(`-- ${faceLabel(face)} --`, x, y - 20, { width, align: "center" });
 
@@ -956,7 +989,7 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
     const endUnit = getEndUnit(startUnit, device.heightU);
     const topY = y + (rack.totalUnits - endUnit) * unitHeight + 1;
     const height = Math.max(unitHeight * device.heightU - 2, unitHeight - 2);
-    const frame = getPdfRackDeviceFrame(reservePduColumns, layout.rackX, layout.rackWidth, device.mountPosition);
+    const frame = getPdfRackDeviceFrame(layout, device.mountPosition);
     const iconSize = Math.min(14, Math.max(8, Math.min(height - 6, frame.width * 0.22)));
     const isPdu = isVerticalPduMountPosition(device.mountPosition);
     const showIcon = frame.width >= 24 && height >= 12 && !isPdu;
@@ -1000,9 +1033,7 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
     layout.calloutWidth,
     unitHeight,
     rack.totalUnits,
-    reservePduColumns,
-    layout.rackX,
-    layout.rackWidth
+    layout
   );
 
   const footerY = y + rackHeight + 4;
