@@ -424,9 +424,7 @@ export default function App() {
             form={rackForm}
             saving={saving}
             onFormChange={setRackForm}
-            onSave={() => {
-              void handleRackUpdate();
-            }}
+            onSave={handleRackUpdate}
             onBackToOverview={() => navigate("/")}
           />
           <div className="hero-actions">

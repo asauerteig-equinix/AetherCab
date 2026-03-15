@@ -113,6 +113,8 @@ a {
   display: grid;
   grid-template-columns: minmax(220px, 0.85fr) minmax(420px, 1.45fr) minmax(240px, 0.8fr);
   align-items: start;
+  gap: 18px;
+  padding: 18px 22px;
 }
 
 .hero h1,
@@ -147,7 +149,8 @@ a {
 
 .hero-copy {
   max-width: 50ch;
-  margin: 12px 0 0;
+  margin: 6px 0 0;
+  font-size: 0.94rem;
 }
 
 .hero-primary {
@@ -158,10 +161,10 @@ a {
 .hero-actions {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   align-items: end;
   align-self: stretch;
-  justify-content: space-between;
+  justify-content: center;
 }
 
 .status-pill,
@@ -401,7 +404,7 @@ a {
 
 .audit-summary {
   display: grid;
-  gap: 14px;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -409,6 +412,10 @@ a {
   display: flex;
   justify-content: space-between;
   gap: 14px;
+  align-items: start;
+}
+
+.audit-summary-header.compact {
   align-items: start;
 }
 
@@ -423,31 +430,76 @@ a {
   font-size: 1.45rem;
 }
 
-.audit-summary-grid {
+.audit-summary-surface {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.audit-summary-surface h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.audit-summary-inline,
+.audit-summary-notes,
+.audit-summary-hint {
+  margin: 0;
+}
+
+.audit-summary-inline {
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
 }
 
-.audit-summary-grid.editable {
-  align-items: start;
-}
-
-.audit-summary-card {
-  min-height: 0;
-  padding: 12px;
-  background: rgba(255, 255, 255, 0.54);
-}
-
-.audit-summary-card strong {
-  font-size: 0.84rem;
+.audit-summary-inline strong {
   color: var(--text-primary);
 }
 
-.audit-summary-card input,
-.audit-summary-card textarea {
-  margin-top: 4px;
-  background: rgba(255, 255, 255, 0.92);
+.audit-summary-notes {
+  font-size: 0.86rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.audit-summary-hint {
+  font-size: 0.76rem;
+  color: var(--text-quiet);
+}
+
+.audit-edit-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(24, 35, 45, 0.34);
+}
+
+.audit-edit-modal {
+  width: min(760px, 100%);
+  max-height: min(88vh, 760px);
+  overflow: auto;
+}
+
+.audit-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.audit-edit-actions {
+  display: flex;
+  justify-content: end;
+  gap: 10px;
+  margin-top: 16px;
 }
 
 .template-card[draggable="true"],
@@ -939,7 +991,7 @@ textarea {
     padding: 22px 18px;
   }
 
-  .audit-summary-grid {
+  .audit-edit-grid {
     grid-template-columns: 1fr;
   }
 
