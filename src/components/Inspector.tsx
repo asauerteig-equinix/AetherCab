@@ -1,4 +1,4 @@
-import type { ChangeEvent } from "react";
+import { useEffect, useState, type ChangeEvent } from "react";
 import { getRackMountPositionLabel, isVerticalPduMountPosition, verticalPduMountPositions } from "../../shared/rack";
 import type { RackDevice, RackDeviceInput } from "../../shared/types";
 
@@ -34,8 +34,34 @@ function toDeviceInput(device: RackDevice): RackDeviceInput {
   };
 }
 
+function hasDraftChanges(left: RackDeviceInput, right: RackDeviceInput): boolean {
+  return (
+    left.templateId !== right.templateId ||
+    left.placementType !== right.placementType ||
+    left.rackFace !== right.rackFace ||
+    left.mountPosition !== right.mountPosition ||
+    left.blocksBothFaces !== right.blocksBothFaces ||
+    left.startUnit !== right.startUnit ||
+    left.heightU !== right.heightU ||
+    left.iconKey !== right.iconKey ||
+    left.name !== right.name ||
+    left.manufacturer !== right.manufacturer ||
+    left.model !== right.model ||
+    left.serialNumber !== right.serialNumber ||
+    left.hostname !== right.hostname ||
+    left.notes !== right.notes ||
+    left.storageLocation !== right.storageLocation
+  );
+}
+
 export function Inspector({ device, onChange, onMoveToTray, onDelete, saving }: InspectorProps) {
-  if (!device) {
+  const [draft, setDraft] = useState<RackDeviceInput | null>(() => (device ? toDeviceInput(device) : null));
+
+  useEffect(() => {
+    setDraft(device ? toDeviceInput(device) : null);
+  }, [device]);
+
+  if (!device || !draft) {
     return (
       <section className="panel inspector-panel empty">
         <p className="eyebrow">Inspector</p>
@@ -45,14 +71,22 @@ export function Inspector({ device, onChange, onMoveToTray, onDelete, saving }: 
     );
   }
 
-  const draft = toDeviceInput(device);
+  const persistedDevice = toDeviceInput(device);
+
+  function commitDraft(nextDraft: RackDeviceInput = draft) {
+    if (!hasDraftChanges(nextDraft, persistedDevice)) {
+      return;
+    }
+
+    onChange(nextDraft);
+  }
 
   function updateInput(
     key: keyof RackDeviceInput,
     transform?: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => RackDeviceInput[keyof RackDeviceInput]
   ) {
     return (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-      onChange({
+      setDraft({
         ...draft,
         [key]: transform ? transform(event) : event.target.value
       });
@@ -89,31 +123,41 @@ export function Inspector({ device, onChange, onMoveToTray, onDelete, saving }: 
         <label className="full-width">
           Hostname
           <input
-            value={device.hostname ?? device.name}
+            value={draft.hostname ?? draft.name}
             onChange={(event) => {
               const nextValue = event.target.value;
-              onChange({
+              setDraft({
                 ...draft,
                 name: nextValue,
                 hostname: normalizeValue(nextValue)
               });
             }}
+            onBlur={() => commitDraft()}
+          />
+        </label>
+        <label className="full-width">
+          Serial number
+          <input
+            value={draft.serialNumber ?? ""}
+            onBlur={() => commitDraft()}
+            onChange={updateInput("serialNumber", (event) => normalizeValue(event.target.value))}
           />
         </label>
         <label>
           Manufacturer
-          <input value={device.manufacturer} onChange={updateInput("manufacturer")} />
+          <input value={draft.manufacturer} onBlur={() => commitDraft()} onChange={updateInput("manufacturer")} />
         </label>
         <label>
           Model
-          <input value={device.model} onChange={updateInput("model")} />
+          <input value={draft.model} onBlur={() => commitDraft()} onChange={updateInput("model")} />
         </label>
         <label>
           Mount position
           <select
-            value={device.mountPosition}
+            value={draft.mountPosition}
             disabled={device.placementType === "spare"}
             onChange={updateInput("mountPosition", (event) => event.target.value as RackDeviceInput["mountPosition"])}
+            onBlur={() => commitDraft()}
           >
             <option value="full">{getRackMountPositionLabel("full")}</option>
             {verticalPduMountPositions.map((mountPosition) => (
@@ -126,9 +170,10 @@ export function Inspector({ device, onChange, onMoveToTray, onDelete, saving }: 
         <label>
           Rack face
           <select
-            value={device.rackFace ?? "front"}
-            disabled={device.placementType === "spare" || device.blocksBothFaces || isVerticalPduMountPosition(device.mountPosition)}
+            value={draft.rackFace ?? "front"}
+            disabled={device.placementType === "spare" || draft.blocksBothFaces || isVerticalPduMountPosition(draft.mountPosition)}
             onChange={updateInput("rackFace", (event) => event.target.value as RackDeviceInput["rackFace"])}
+            onBlur={() => commitDraft()}
           >
             <option value="front">Front</option>
             <option value="rear">Rear</option>
@@ -137,55 +182,37 @@ export function Inspector({ device, onChange, onMoveToTray, onDelete, saving }: 
         <label className="checkbox-field">
           Blocks front and rear
           <input
-            checked={device.blocksBothFaces}
-            disabled={device.placementType === "spare" || isVerticalPduMountPosition(device.mountPosition)}
+            checked={draft.blocksBothFaces}
+            disabled={device.placementType === "spare" || isVerticalPduMountPosition(draft.mountPosition)}
             type="checkbox"
             onChange={(event) => {
-              onChange({
+              setDraft({
                 ...draft,
                 blocksBothFaces: event.target.checked,
-                rackFace: event.target.checked ? device.rackFace ?? "front" : device.rackFace ?? "front"
+                rackFace: draft.rackFace ?? "front"
               });
             }}
+            onBlur={() => commitDraft()}
           />
         </label>
-        <label className="inspector-column-left">
-          Serial number
-          <input
-            value={device.serialNumber ?? ""}
-            onChange={updateInput("serialNumber", (event) => normalizeValue(event.target.value))}
-          />
-        </label>
-        <label className="inspector-column-left">
+        <label>
           Height U
           <input
             min={1}
             type="number"
-            value={device.heightU}
+            value={draft.heightU}
+            onBlur={() => commitDraft()}
             onChange={updateInput("heightU", (event) => Number(event.target.value))}
-          />
-        </label>
-        <label>
-          Start U
-          <input
-            min={1}
-            type="number"
-            value={device.startUnit ?? ""}
-            disabled={device.placementType === "spare"}
-            onChange={updateInput("startUnit", (event) => (event.target.value ? Number(event.target.value) : null))}
-          />
-        </label>
-        <label>
-          Storage location
-          <input
-            value={device.storageLocation ?? ""}
-            disabled={device.placementType === "rack"}
-            onChange={updateInput("storageLocation", (event) => normalizeValue(event.target.value))}
           />
         </label>
         <label className="full-width">
           Notes
-          <textarea rows={4} value={device.notes ?? ""} onChange={updateInput("notes", (event) => normalizeValue(event.target.value))} />
+          <textarea
+            rows={4}
+            value={draft.notes ?? ""}
+            onBlur={() => commitDraft()}
+            onChange={updateInput("notes", (event) => normalizeValue(event.target.value))}
+          />
         </label>
       </div>
       {isVerticalPduMountPosition(device.mountPosition) ? <p className="muted">Vertical PDUs use side lanes and do not block the main rack width.</p> : null}
