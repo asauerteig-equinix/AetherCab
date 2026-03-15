@@ -56,6 +56,7 @@ export async function initializeDatabase(): Promise<void> {
     CREATE TABLE IF NOT EXISTS device_templates (
       id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
       template_type TEXT NOT NULL DEFAULT 'other',
+      mount_style TEXT NOT NULL DEFAULT 'full' CHECK (mount_style IN ('full', 'vertical-pdu')),
       name TEXT NOT NULL,
       manufacturer TEXT NOT NULL,
       model TEXT NOT NULL,
@@ -69,6 +70,7 @@ export async function initializeDatabase(): Promise<void> {
       rack_id INTEGER NOT NULL REFERENCES racks(id) ON DELETE CASCADE,
       placement_type TEXT NOT NULL CHECK (placement_type IN ('rack', 'spare')),
       rack_face TEXT CHECK (rack_face IN ('front', 'rear')),
+      mount_position TEXT NOT NULL DEFAULT 'full' CHECK (mount_position IN ('full', 'rear-left-outer', 'rear-left-inner', 'rear-right-inner', 'rear-right-outer')),
       blocks_both_faces BOOLEAN NOT NULL DEFAULT FALSE,
       start_unit INTEGER,
       height_u INTEGER NOT NULL,
@@ -91,12 +93,22 @@ export async function initializeDatabase(): Promise<void> {
 
   await pool.query(`
     ALTER TABLE device_templates
+    ADD COLUMN IF NOT EXISTS mount_style TEXT NOT NULL DEFAULT 'full'
+  `);
+
+  await pool.query(`
+    ALTER TABLE device_templates
     ADD COLUMN IF NOT EXISTS blocks_both_faces BOOLEAN NOT NULL DEFAULT FALSE
   `);
 
   await pool.query(`
     ALTER TABLE rack_devices
     ADD COLUMN IF NOT EXISTS rack_face TEXT CHECK (rack_face IN ('front', 'rear'))
+  `);
+
+  await pool.query(`
+    ALTER TABLE rack_devices
+    ADD COLUMN IF NOT EXISTS mount_position TEXT NOT NULL DEFAULT 'full'
   `);
 
   await pool.query(`
@@ -110,21 +122,34 @@ export async function initializeDatabase(): Promise<void> {
     WHERE placement_type = 'rack' AND rack_face IS NULL
   `);
 
+  await pool.query(`
+    UPDATE device_templates
+    SET mount_style = 'full'
+    WHERE mount_style IS NULL
+  `);
+
+  await pool.query(`
+    UPDATE rack_devices
+    SET mount_position = 'full'
+    WHERE mount_position IS NULL
+  `);
+
   await seedDatabase();
 }
 
 async function seedDatabase(): Promise<void> {
   await pool.query(
     `
-      INSERT INTO device_templates (template_type, name, manufacturer, model, default_height_u, blocks_both_faces)
+      INSERT INTO device_templates (template_type, mount_style, name, manufacturer, model, default_height_u, blocks_both_faces)
       VALUES
-        ('server', 'Server 1U', 'Generic', 'Rack Server 1U', 1, TRUE),
-        ('server', 'Server 2U', 'Generic', 'Rack Server 2U', 2, TRUE),
-        ('switch-router', 'Switch/Router 1U', 'Generic', 'Network Device 1U', 1, FALSE),
-        ('switch-router', 'Switch/Router 2U', 'Generic', 'Network Device 2U', 2, TRUE),
-        ('patch-panel', 'Patchpanel 1U', 'Generic', 'Patchpanel 1U', 1, FALSE),
-        ('storage', 'Storage 2U', 'Generic', 'Storage Shelf 2U', 2, TRUE),
-        ('ups', 'UPS 2U', 'Generic', 'UPS 2U', 2, TRUE)
+        ('server', 'full', 'Server 1U', 'Generic', 'Rack Server 1U', 1, TRUE),
+        ('server', 'full', 'Server 2U', 'Generic', 'Rack Server 2U', 2, TRUE),
+        ('switch-router', 'full', 'Switch/Router 1U', 'Generic', 'Network Device 1U', 1, FALSE),
+        ('switch-router', 'full', 'Switch/Router 2U', 'Generic', 'Network Device 2U', 2, TRUE),
+        ('patch-panel', 'full', 'Patchpanel 1U', 'Generic', 'Patchpanel 1U', 1, FALSE),
+        ('storage', 'full', 'Storage 2U', 'Generic', 'Storage Shelf 2U', 2, TRUE),
+        ('ups', 'full', 'UPS 2U', 'Generic', 'UPS 2U', 2, TRUE),
+        ('pdu', 'vertical-pdu', 'Vertical PDU 31U', 'Generic', 'Vertical Rack PDU', 31, FALSE)
       ON CONFLICT (name, manufacturer, model) DO NOTHING
     `
   );
@@ -158,6 +183,7 @@ async function seedDatabase(): Promise<void> {
         rack_id,
         placement_type,
         rack_face,
+        mount_position,
         blocks_both_faces,
         start_unit,
         height_u,
@@ -169,9 +195,10 @@ async function seedDatabase(): Promise<void> {
         notes,
         storage_location
       ) VALUES
-        ($1, 'rack', 'front', TRUE, 40, 2, 'Storage Shelf 01', 'Dell', 'EMC Unity Shelf', 'D-EMC-4401', 'unity-shelf-01', 'Primary storage shelf', NULL),
-        ($1, 'rack', 'rear', FALSE, 38, 1, 'Core Switch 01', 'Cisco', 'Catalyst 9300', 'C9300-01', 'core-sw-01', 'Top of rack core switch', NULL),
-        ($1, 'spare', NULL, FALSE, NULL, 1, 'SFP Module Kit', 'Cisco', 'SFP-10G-SR', NULL, NULL, 'Loose spare transceivers', 'Accessory box')
+        ($1, 'rack', 'front', 'full', TRUE, 40, 2, 'Storage Shelf 01', 'Dell', 'EMC Unity Shelf', 'D-EMC-4401', 'unity-shelf-01', 'Primary storage shelf', NULL),
+        ($1, 'rack', 'rear', 'full', FALSE, 38, 1, 'Core Switch 01', 'Cisco', 'Catalyst 9300', 'C9300-01', 'core-sw-01', 'Top of rack core switch', NULL),
+        ($1, 'rack', 'rear', 'rear-left-outer', FALSE, 3, 31, 'PDU A', 'APC', 'Metered PDU', 'APC-PDU-A', NULL, 'Rear left vertical PDU', NULL),
+        ($1, 'spare', NULL, 'full', FALSE, NULL, 1, 'SFP Module Kit', 'Cisco', 'SFP-10G-SR', NULL, NULL, 'Loose spare transceivers', 'Accessory box')
     `,
     [rackId]
   );

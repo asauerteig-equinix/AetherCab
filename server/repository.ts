@@ -27,6 +27,7 @@ interface RackDeviceRow {
   rack_id: number;
   placement_type: "rack" | "spare";
   rack_face: RackFace | null;
+  mount_position: RackDevice["mountPosition"];
   blocks_both_faces: boolean;
   start_unit: number | null;
   height_u: number;
@@ -44,6 +45,7 @@ interface RackDeviceRow {
 interface DeviceTemplateRow {
   id: number;
   template_type: string;
+  mount_style: DeviceTemplate["mountStyle"];
   name: string;
   manufacturer: string;
   model: string;
@@ -70,6 +72,7 @@ function mapRackDevice(row: RackDeviceRow): RackDevice {
     rackId: row.rack_id,
     placementType: row.placement_type,
     rackFace: row.rack_face,
+    mountPosition: row.mount_position,
     blocksBothFaces: row.blocks_both_faces,
     startUnit: row.start_unit,
     heightU: row.height_u,
@@ -89,6 +92,7 @@ function normalizeDeviceInput(input: RackDeviceInput): RackDeviceInput {
   const normalized: RackDeviceInput = {
     placementType: input.placementType,
     rackFace: input.rackFace,
+    mountPosition: input.mountPosition,
     blocksBothFaces: input.blocksBothFaces,
     startUnit: input.startUnit,
     heightU: input.heightU,
@@ -100,6 +104,21 @@ function normalizeDeviceInput(input: RackDeviceInput): RackDeviceInput {
     notes: input.notes?.trim() || null,
     storageLocation: input.storageLocation?.trim() || null
   };
+
+  if (normalized.placementType === "spare") {
+    return {
+      ...normalized,
+      rackFace: null,
+      mountPosition: "full",
+      blocksBothFaces: false,
+      startUnit: null
+    };
+  }
+
+  if (normalized.mountPosition !== "full") {
+    normalized.rackFace = "rear";
+    normalized.blocksBothFaces = false;
+  }
 
   if (!normalized.name || !normalized.manufacturer || !normalized.model) {
     throw new Error("Name, manufacturer and model are required.");
@@ -151,7 +170,7 @@ export async function listRacks(): Promise<RackSummary[]> {
 
 export async function listDeviceTemplates(): Promise<DeviceTemplate[]> {
   const result = await pool.query<DeviceTemplateRow>(`
-    SELECT id, template_type, name, manufacturer, model, default_height_u, blocks_both_faces
+    SELECT id, template_type, mount_style, name, manufacturer, model, default_height_u, blocks_both_faces
     FROM device_templates
     ORDER BY template_type, default_height_u, name
   `);
@@ -159,6 +178,7 @@ export async function listDeviceTemplates(): Promise<DeviceTemplate[]> {
   return result.rows.map((row) => ({
     id: row.id,
     templateType: row.template_type,
+    mountStyle: row.mount_style,
     name: row.name,
     manufacturer: row.manufacturer,
     model: row.model,
@@ -170,6 +190,7 @@ export async function listDeviceTemplates(): Promise<DeviceTemplate[]> {
 function normalizeTemplateInput(input: DeviceTemplateInput): DeviceTemplateInput {
   const normalized: DeviceTemplateInput = {
     templateType: input.templateType.trim().toLowerCase(),
+    mountStyle: input.mountStyle,
     name: input.name.trim(),
     manufacturer: input.manufacturer.trim(),
     model: input.model.trim(),
@@ -179,6 +200,10 @@ function normalizeTemplateInput(input: DeviceTemplateInput): DeviceTemplateInput
 
   if (!normalized.templateType || !normalized.name || !normalized.manufacturer || !normalized.model) {
     throw new Error("Template type, name, manufacturer and model are required.");
+  }
+
+  if (normalized.mountStyle === "vertical-pdu") {
+    normalized.blocksBothFaces = false;
   }
 
   if (normalized.defaultHeightU < 1) {
@@ -193,17 +218,26 @@ export async function createDeviceTemplate(input: DeviceTemplateInput): Promise<
 
   const result = await pool.query<DeviceTemplateRow>(
     `
-      INSERT INTO device_templates (template_type, name, manufacturer, model, default_height_u, blocks_both_faces)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING id, template_type, name, manufacturer, model, default_height_u, blocks_both_faces
+      INSERT INTO device_templates (template_type, mount_style, name, manufacturer, model, default_height_u, blocks_both_faces)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING id, template_type, mount_style, name, manufacturer, model, default_height_u, blocks_both_faces
     `,
-    [normalized.templateType, normalized.name, normalized.manufacturer, normalized.model, normalized.defaultHeightU, normalized.blocksBothFaces]
+    [
+      normalized.templateType,
+      normalized.mountStyle,
+      normalized.name,
+      normalized.manufacturer,
+      normalized.model,
+      normalized.defaultHeightU,
+      normalized.blocksBothFaces
+    ]
   );
 
   const row = result.rows[0];
   return {
     id: row.id,
     templateType: row.template_type,
+    mountStyle: row.mount_style,
     name: row.name,
     manufacturer: row.manufacturer,
     model: row.model,
@@ -322,6 +356,7 @@ export async function createRackDevice(rackId: number, input: RackDeviceInput): 
         rack_id,
         placement_type,
         rack_face,
+        mount_position,
         blocks_both_faces,
         start_unit,
         height_u,
@@ -333,13 +368,14 @@ export async function createRackDevice(rackId: number, input: RackDeviceInput): 
         notes,
         storage_location,
         updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CURRENT_TIMESTAMP)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CURRENT_TIMESTAMP)
       RETURNING *
     `,
     [
       rackId,
       normalized.placementType,
       normalized.rackFace,
+      normalized.mountPosition,
       normalized.blocksBothFaces,
       normalized.startUnit,
       normalized.heightU,
@@ -375,23 +411,25 @@ export async function updateRackDevice(rackId: number, deviceId: number, input: 
       SET
         placement_type = $1,
         rack_face = $2,
-        blocks_both_faces = $3,
-        start_unit = $4,
-        height_u = $5,
-        name = $6,
-        manufacturer = $7,
-        model = $8,
-        serial_number = $9,
-        hostname = $10,
-        notes = $11,
-        storage_location = $12,
+        mount_position = $3,
+        blocks_both_faces = $4,
+        start_unit = $5,
+        height_u = $6,
+        name = $7,
+        manufacturer = $8,
+        model = $9,
+        serial_number = $10,
+        hostname = $11,
+        notes = $12,
+        storage_location = $13,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $13 AND rack_id = $14
+      WHERE id = $14 AND rack_id = $15
       RETURNING *
     `,
     [
       normalized.placementType,
       normalized.rackFace,
+      normalized.mountPosition,
       normalized.blocksBothFaces,
       normalized.startUnit,
       normalized.heightU,

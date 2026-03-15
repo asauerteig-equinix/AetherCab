@@ -1,11 +1,45 @@
-import type { RackDevice, RackDeviceInput, RackFace } from "./types.js";
+import type { RackDevice, RackDeviceInput, RackFace, RackMountPosition } from "./types.js";
+
+export const verticalPduMountPositions: RackMountPosition[] = [
+  "rear-left-outer",
+  "rear-left-inner",
+  "rear-right-inner",
+  "rear-right-outer"
+];
+
+const mountPositionSortOrder: Record<RackMountPosition, number> = {
+  full: 0,
+  "rear-left-outer": 1,
+  "rear-left-inner": 2,
+  "rear-right-inner": 3,
+  "rear-right-outer": 4
+};
+
+export function isVerticalPduMountPosition(mountPosition: RackMountPosition): boolean {
+  return mountPosition !== "full";
+}
+
+export function getRackMountPositionLabel(mountPosition: RackMountPosition): string {
+  switch (mountPosition) {
+    case "rear-left-outer":
+      return "Rear left outer PDU lane";
+    case "rear-left-inner":
+      return "Rear left inner PDU lane";
+    case "rear-right-inner":
+      return "Rear right inner PDU lane";
+    case "rear-right-outer":
+      return "Rear right outer PDU lane";
+    default:
+      return "Standard rack width";
+  }
+}
 
 export function getEndUnit(startUnit: number, heightU: number): number {
   return startUnit + heightU - 1;
 }
 
 export function validateRackPlacement(
-  device: Pick<RackDeviceInput, "placementType" | "rackFace" | "startUnit" | "heightU">,
+  device: Pick<RackDeviceInput, "placementType" | "rackFace" | "mountPosition" | "blocksBothFaces" | "startUnit" | "heightU">,
   rackUnits: number
 ): string[] {
   const issues: string[] = [];
@@ -20,6 +54,16 @@ export function validateRackPlacement(
 
   if (device.rackFace === null) {
     issues.push("Rack devices require a rack face.");
+  }
+
+  if (isVerticalPduMountPosition(device.mountPosition)) {
+    if (device.rackFace !== "rear") {
+      issues.push("Vertical PDUs can only be placed on the rear face.");
+    }
+
+    if (device.blocksBothFaces) {
+      issues.push("Vertical PDUs cannot block both rack faces.");
+    }
   }
 
   if (device.startUnit === null) {
@@ -39,16 +83,25 @@ export function validateRackPlacement(
 }
 
 export function devicesOverlap(
-  first: Pick<RackDeviceInput, "rackFace" | "blocksBothFaces" | "startUnit" | "heightU">,
-  second: Pick<RackDeviceInput, "rackFace" | "blocksBothFaces" | "startUnit" | "heightU">
+  first: Pick<RackDeviceInput, "rackFace" | "mountPosition" | "blocksBothFaces" | "startUnit" | "heightU">,
+  second: Pick<RackDeviceInput, "rackFace" | "mountPosition" | "blocksBothFaces" | "startUnit" | "heightU">
 ): boolean {
   if (first.startUnit === null || second.startUnit === null || first.rackFace === null || second.rackFace === null) {
     return false;
   }
 
-  const facesConflict = first.blocksBothFaces || second.blocksBothFaces || first.rackFace === second.rackFace;
-  if (!facesConflict) {
-    return false;
+  const firstVerticalPdu = isVerticalPduMountPosition(first.mountPosition);
+  const secondVerticalPdu = isVerticalPduMountPosition(second.mountPosition);
+
+  if (firstVerticalPdu || secondVerticalPdu) {
+    if (!firstVerticalPdu || !secondVerticalPdu || first.mountPosition !== second.mountPosition) {
+      return false;
+    }
+  } else {
+    const facesConflict = first.blocksBothFaces || second.blocksBothFaces || first.rackFace === second.rackFace;
+    if (!facesConflict) {
+      return false;
+    }
   }
 
   const firstEnd = getEndUnit(first.startUnit, first.heightU);
@@ -58,7 +111,7 @@ export function devicesOverlap(
 }
 
 export function findOverlaps(
-  device: Pick<RackDeviceInput, "placementType" | "rackFace" | "blocksBothFaces" | "startUnit" | "heightU">,
+  device: Pick<RackDeviceInput, "placementType" | "rackFace" | "mountPosition" | "blocksBothFaces" | "startUnit" | "heightU">,
   existingDevices: RackDevice[],
   currentDeviceId?: number
 ): RackDevice[] {
@@ -89,13 +142,24 @@ export function sortRackDevices(devices: RackDevice[]): RackDevice[] {
       return left.name.localeCompare(right.name);
     }
 
-    return (right.startUnit ?? 0) - (left.startUnit ?? 0);
+    const startUnitDelta = (right.startUnit ?? 0) - (left.startUnit ?? 0);
+    if (startUnitDelta !== 0) {
+      return startUnitDelta;
+    }
+
+    const mountPositionDelta = mountPositionSortOrder[left.mountPosition] - mountPositionSortOrder[right.mountPosition];
+    if (mountPositionDelta !== 0) {
+      return mountPositionDelta;
+    }
+
+    return left.name.localeCompare(right.name);
   });
 }
 
 function isUnitOccupiedOnFace(
   unit: number,
   rackFace: RackFace,
+  mountPosition: RackMountPosition,
   blocksBothFaces: boolean,
   devices: RackDevice[],
   currentDeviceId?: number
@@ -111,6 +175,13 @@ function isUnitOccupiedOnFace(
       return false;
     }
 
+    const targetVerticalPdu = isVerticalPduMountPosition(mountPosition);
+    const existingVerticalPdu = isVerticalPduMountPosition(device.mountPosition);
+
+    if (targetVerticalPdu || existingVerticalPdu) {
+      return targetVerticalPdu && existingVerticalPdu && mountPosition === device.mountPosition;
+    }
+
     return blocksBothFaces || device.blocksBothFaces || device.rackFace === rackFace;
   });
 }
@@ -119,6 +190,7 @@ export function findFreeUnitSpan(
   targetUnit: number,
   rackUnits: number,
   rackFace: RackFace,
+  mountPosition: RackMountPosition,
   blocksBothFaces: boolean,
   devices: RackDevice[],
   currentDeviceId?: number
@@ -127,18 +199,18 @@ export function findFreeUnitSpan(
     return null;
   }
 
-  if (isUnitOccupiedOnFace(targetUnit, rackFace, blocksBothFaces, devices, currentDeviceId)) {
+  if (isUnitOccupiedOnFace(targetUnit, rackFace, mountPosition, blocksBothFaces, devices, currentDeviceId)) {
     return null;
   }
 
   let startUnit = targetUnit;
   let endUnit = targetUnit;
 
-  while (startUnit > 1 && !isUnitOccupiedOnFace(startUnit - 1, rackFace, blocksBothFaces, devices, currentDeviceId)) {
+  while (startUnit > 1 && !isUnitOccupiedOnFace(startUnit - 1, rackFace, mountPosition, blocksBothFaces, devices, currentDeviceId)) {
     startUnit -= 1;
   }
 
-  while (endUnit < rackUnits && !isUnitOccupiedOnFace(endUnit + 1, rackFace, blocksBothFaces, devices, currentDeviceId)) {
+  while (endUnit < rackUnits && !isUnitOccupiedOnFace(endUnit + 1, rackFace, mountPosition, blocksBothFaces, devices, currentDeviceId)) {
     endUnit += 1;
   }
 
@@ -150,11 +222,12 @@ export function getAnchoredStartUnit(
   heightU: number,
   rackUnits: number,
   rackFace: RackFace,
+  mountPosition: RackMountPosition,
   blocksBothFaces: boolean,
   devices: RackDevice[],
   currentDeviceId?: number
 ): number | null {
-  const freeSpan = findFreeUnitSpan(targetUnit, rackUnits, rackFace, blocksBothFaces, devices, currentDeviceId);
+  const freeSpan = findFreeUnitSpan(targetUnit, rackUnits, rackFace, mountPosition, blocksBothFaces, devices, currentDeviceId);
   if (!freeSpan) {
     return null;
   }

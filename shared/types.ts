@@ -1,5 +1,12 @@
 export type PlacementType = "rack" | "spare";
 export type RackFace = "front" | "rear";
+export type TemplateMountStyle = "full" | "vertical-pdu";
+export type RackMountPosition =
+  | "full"
+  | "rear-left-outer"
+  | "rear-left-inner"
+  | "rear-right-inner"
+  | "rear-right-outer";
 
 export interface RackSummary {
   id: number;
@@ -15,6 +22,7 @@ export interface RackSummary {
 export interface DeviceTemplate {
   id: number;
   templateType: string;
+  mountStyle: TemplateMountStyle;
   name: string;
   manufacturer: string;
   model: string;
@@ -24,6 +32,7 @@ export interface DeviceTemplate {
 
 export interface DeviceTemplateInput {
   templateType: string;
+  mountStyle: TemplateMountStyle;
   name: string;
   manufacturer: string;
   model: string;
@@ -36,6 +45,7 @@ export interface RackDevice {
   rackId: number;
   placementType: PlacementType;
   rackFace: RackFace | null;
+  mountPosition: RackMountPosition;
   blocksBothFaces: boolean;
   startUnit: number | null;
   heightU: number;
@@ -57,6 +67,7 @@ export interface RackDetail extends RackSummary {
 export interface RackDeviceInput {
   placementType: PlacementType;
   rackFace: RackFace | null;
+  mountPosition: RackMountPosition;
   blocksBothFaces: boolean;
   startUnit: number | null;
   heightU: number;

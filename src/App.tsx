@@ -1,10 +1,11 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
-import { getAnchoredStartUnit } from "../shared/rack";
+import { getAnchoredStartUnit, getRackMountPositionLabel } from "../shared/rack";
 import type {
   DeviceTemplate,
   DeviceTemplateInput,
   RackFace,
+  RackMountPosition,
   RackCreateInput,
   RackDetail,
   RackDevice,
@@ -29,6 +30,7 @@ const initialRackCreateForm: RackCreateInput = {
 
 const initialTemplateForm: DeviceTemplateInput = {
   templateType: "server",
+  mountStyle: "full",
   name: "",
   manufacturer: "Generic",
   model: "",
@@ -40,12 +42,14 @@ function templateToRackDevice(
   template: DeviceTemplate,
   startUnit: number | null,
   placementType: "rack",
-  rackFace: RackFace
+  rackFace: RackFace,
+  mountPosition: RackMountPosition
 ): RackDeviceInput {
   return {
     placementType,
     rackFace,
-    blocksBothFaces: template.blocksBothFaces,
+    mountPosition,
+    blocksBothFaces: template.mountStyle === "vertical-pdu" ? false : template.blocksBothFaces,
     startUnit,
     heightU: template.defaultHeightU,
     name: template.name,
@@ -167,24 +171,30 @@ export default function App() {
   const selectedDevice =
     rackDetail?.devices.find((device) => device.id === selectedDeviceId && device.placementType === "rack") ?? null;
 
-  async function handleTemplateDrop(unit: number, templatePayload: string) {
+  async function handleTemplateDrop(unit: number, mountPosition: RackMountPosition, templatePayload: string) {
     if (activeRackId === null || rackDetail === null) {
       return;
     }
 
     try {
       const template = JSON.parse(templatePayload) as DeviceTemplate;
-      const anchoredStartUnit =
-        template.defaultHeightU > 1
-          ? getAnchoredStartUnit(
-              unit,
-              template.defaultHeightU,
-              rackDetail.totalUnits,
-              activeRackFace,
-              template.blocksBothFaces,
-              rackDetail.devices
-            )
-          : unit;
+      const targetMountPosition = template.mountStyle === "vertical-pdu" ? mountPosition : "full";
+      const targetRackFace = template.mountStyle === "vertical-pdu" ? "rear" : activeRackFace;
+
+      if (template.mountStyle === "vertical-pdu" && mountPosition === "full") {
+        setError("Vertical PDUs can only be dropped onto one of the rear PDU lanes.");
+        return;
+      }
+
+      const anchoredStartUnit = getAnchoredStartUnit(
+        unit,
+        template.defaultHeightU,
+        rackDetail.totalUnits,
+        targetRackFace,
+        targetMountPosition,
+        template.mountStyle === "vertical-pdu" ? false : template.blocksBothFaces,
+        rackDetail.devices
+      );
 
       if (anchoredStartUnit === null) {
         setError("The device does not fit from the selected unit either upward or downward.");
@@ -192,9 +202,16 @@ export default function App() {
       }
 
       setSaving(true);
-      await api.createDevice(activeRackId, templateToRackDevice(template, anchoredStartUnit, "rack", activeRackFace));
+      await api.createDevice(
+        activeRackId,
+        templateToRackDevice(template, anchoredStartUnit, "rack", targetRackFace, targetMountPosition)
+      );
       await loadRack(activeRackId);
-      setMessage(`${template.name} was placed at ${anchoredStartUnit}U.`);
+      setMessage(
+        template.mountStyle === "vertical-pdu"
+          ? `${template.name} was placed at ${anchoredStartUnit}U in ${getRackMountPositionLabel(targetMountPosition)}.`
+          : `${template.name} was placed at ${anchoredStartUnit}U.`
+      );
       setError(null);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Device could not be placed.");
@@ -203,7 +220,7 @@ export default function App() {
     }
   }
 
-  async function handleDeviceMove(device: RackDevice, nextStartUnit: number) {
+  async function handleDeviceMove(device: RackDevice, nextStartUnit: number, nextMountPosition: RackMountPosition) {
     if (activeRackId === null) {
       return;
     }
@@ -212,8 +229,9 @@ export default function App() {
       setSaving(true);
       await api.updateDevice(activeRackId, device.id, {
         placementType: "rack",
-        rackFace: device.rackFace,
-        blocksBothFaces: device.blocksBothFaces,
+        rackFace: nextMountPosition === "full" ? device.rackFace : "rear",
+        mountPosition: nextMountPosition,
+        blocksBothFaces: nextMountPosition === "full" ? device.blocksBothFaces : false,
         startUnit: nextStartUnit,
         heightU: device.heightU,
         name: device.name,
@@ -225,7 +243,11 @@ export default function App() {
         storageLocation: null
       });
       await loadRack(activeRackId);
-      setMessage(`${device.name} was moved to ${nextStartUnit}U.`);
+      setMessage(
+        nextMountPosition === "full"
+          ? `${device.name} was moved to ${nextStartUnit}U.`
+          : `${device.name} was moved to ${nextStartUnit}U in ${getRackMountPositionLabel(nextMountPosition)}.`
+      );
       setError(null);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Device could not be moved.");
@@ -405,11 +427,11 @@ export default function App() {
                 selectedDeviceId={selectedDeviceId}
                 onSelectDevice={setSelectedDeviceId}
                 onRackFaceChange={setActiveRackFace}
-                onTemplateDrop={(unit, templatePayload) => {
-                  void handleTemplateDrop(unit, templatePayload);
+                onTemplateDrop={(unit, mountPosition, templatePayload) => {
+                  void handleTemplateDrop(unit, mountPosition, templatePayload);
                 }}
-                onDeviceMove={(device, nextStartUnit) => {
-                  void handleDeviceMove(device, nextStartUnit);
+                onDeviceMove={(device, nextStartUnit, nextMountPosition) => {
+                  void handleDeviceMove(device, nextStartUnit, nextMountPosition);
                 }}
               />
             ) : (

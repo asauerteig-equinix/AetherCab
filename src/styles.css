@@ -642,29 +642,54 @@ textarea {
     );
 }
 
-.rack-slot.drop-target {
-  background:
-    linear-gradient(90deg, rgba(79, 111, 134, 0.16), rgba(79, 111, 134, 0.08)),
-    repeating-linear-gradient(
-      90deg,
-      transparent 0,
-      transparent 48px,
-      rgba(127, 146, 163, 0.08) 48px,
-      rgba(127, 146, 163, 0.08) 49px
-    );
-  box-shadow: inset 0 0 0 1px rgba(79, 111, 134, 0.2);
-}
-
 .slot-label {
   font-size: 0.76rem;
   letter-spacing: 0.08em;
   color: var(--text-quiet);
+  position: relative;
+  z-index: 2;
+}
+
+.rack-pdu-lane {
+  position: absolute;
+  top: 1px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  border-radius: 8px;
+  border: 1px dashed rgba(79, 111, 134, 0.24);
+  background:
+    linear-gradient(180deg, rgba(79, 111, 134, 0.08), rgba(79, 111, 134, 0.03)),
+    rgba(255, 255, 255, 0.26);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.rack-pdu-lane span {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.58rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(47, 80, 103, 0.6);
+}
+
+.rack-preview {
+  position: absolute;
+  border-radius: 10px;
+  border: 1px dashed rgba(79, 111, 134, 0.45);
+  background: linear-gradient(135deg, rgba(79, 111, 134, 0.22), rgba(79, 111, 134, 0.12));
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.rack-preview.pdu {
+  border-radius: 8px;
 }
 
 .rack-device {
   position: absolute;
-  left: 72px;
-  right: 20px;
   display: flex;
   align-items: center;
   text-align: left;
@@ -700,6 +725,26 @@ textarea {
 .rack-device-content span {
   font-size: 0.72rem;
   color: var(--text-secondary);
+}
+
+.rack-device-content.pdu {
+  align-content: start;
+  gap: 6px;
+}
+
+.rack-device-content.pdu strong,
+.rack-device-content.pdu span {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.1;
+}
+
+.rack-device-content.pdu strong {
+  font-size: 0.68rem;
+}
+
+.rack-device-content.pdu span {
+  font-size: 0.62rem;
 }
 
 .rack-device-content.compact {
@@ -797,6 +842,6 @@ textarea {
   }
 
   .rack-device {
-    left: 58px;
+    padding: 4px 8px;
   }
 }

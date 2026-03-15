@@ -1,4 +1,5 @@
 import type { ChangeEvent } from "react";
+import { getRackMountPositionLabel, isVerticalPduMountPosition, verticalPduMountPositions } from "../../shared/rack";
 import type { RackDevice, RackDeviceInput } from "../../shared/types";
 
 interface InspectorProps {
@@ -16,6 +17,7 @@ function toDeviceInput(device: RackDevice): RackDeviceInput {
   return {
     placementType: device.placementType,
     rackFace: device.rackFace,
+    mountPosition: device.mountPosition,
     blocksBothFaces: device.blocksBothFaces,
     startUnit: device.startUnit,
     heightU: device.heightU,
@@ -80,6 +82,21 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
           <input value={device.model} onChange={updateInput("model")} />
         </label>
         <label>
+          Mount position
+          <select
+            value={device.mountPosition}
+            disabled={device.placementType === "spare"}
+            onChange={updateInput("mountPosition", (event) => event.target.value as RackDeviceInput["mountPosition"])}
+          >
+            <option value="full">{getRackMountPositionLabel("full")}</option>
+            {verticalPduMountPositions.map((mountPosition) => (
+              <option key={mountPosition} value={mountPosition}>
+                {getRackMountPositionLabel(mountPosition)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
           Height U
           <input
             min={1}
@@ -92,7 +109,7 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
           Rack face
           <select
             value={device.rackFace ?? "front"}
-            disabled={device.placementType === "spare" || device.blocksBothFaces}
+            disabled={device.placementType === "spare" || device.blocksBothFaces || isVerticalPduMountPosition(device.mountPosition)}
             onChange={updateInput("rackFace", (event) => event.target.value as RackDeviceInput["rackFace"])}
           >
             <option value="front">Front</option>
@@ -103,7 +120,7 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
           Blocks front and rear
           <input
             checked={device.blocksBothFaces}
-            disabled={device.placementType === "spare"}
+            disabled={device.placementType === "spare" || isVerticalPduMountPosition(device.mountPosition)}
             type="checkbox"
             onChange={(event) => {
               onChange({
@@ -148,6 +165,9 @@ export function Inspector({ device, onChange, onDelete, saving }: InspectorProps
           <textarea rows={4} value={device.notes ?? ""} onChange={updateInput("notes", (event) => normalizeValue(event.target.value))} />
         </label>
       </div>
+      {isVerticalPduMountPosition(device.mountPosition) ? (
+        <p className="muted">Vertical PDUs are stored as rear-side lanes and do not block the main rack width.</p>
+      ) : null}
       <p className="muted">{saving ? "Saving changes..." : "Changes are written directly to the database."}</p>
     </section>
   );

@@ -1,7 +1,7 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
-import { getEndUnit } from "../shared/rack.js";
-import type { RackDetail, RackDevice, RackFace } from "../shared/types.js";
+import { getEndUnit, getRackMountPositionLabel, isVerticalPduMountPosition } from "../shared/rack.js";
+import type { RackDetail, RackDevice, RackFace, RackMountPosition } from "../shared/types.js";
 
 type PdfDocument = InstanceType<typeof PDFDocument>;
 
@@ -50,11 +50,19 @@ function faceLabel(face: RackFace): string {
 }
 
 function deviceFaceLabel(device: RackDevice): string {
+  if (isVerticalPduMountPosition(device.mountPosition)) {
+    return "Rear";
+  }
+
   if (device.blocksBothFaces) {
     return "Front + Rear";
   }
 
   return device.rackFace === "rear" ? "Rear" : "Front";
+}
+
+function deviceMountLabel(device: RackDevice): string {
+  return getRackMountPositionLabel(device.mountPosition);
 }
 
 function devicePositionLabel(device: RackDevice): string {
@@ -72,6 +80,10 @@ function deviceSecondaryLine(device: RackDevice): string {
 }
 
 function deviceVisualLines(device: RackDevice): string[] {
+  if (isVerticalPduMountPosition(device.mountPosition)) {
+    return [devicePrimaryLine(device), deviceSecondaryLine(device), devicePositionLabel(device)];
+  }
+
   if (device.heightU === 1) {
     return [`${devicePrimaryLine(device)} | ${deviceSecondaryLine(device)}`];
   }
@@ -106,6 +118,10 @@ function sortDevices(devices: RackDevice[]): RackDevice[] {
     const rightStart = right.startUnit ?? 0;
     if (leftStart !== rightStart) {
       return rightStart - leftStart;
+    }
+
+    if (left.mountPosition !== right.mountPosition) {
+      return left.mountPosition.localeCompare(right.mountPosition);
     }
 
     return left.name.localeCompare(right.name);
@@ -173,6 +189,28 @@ function applyExcelRangeBorder(
   }
 }
 
+function getExcelFaceSpan(face: RackFace): number {
+  return face === "rear" ? 9 : 5;
+}
+
+function getExcelDeviceRange(face: RackFace, startColumn: number, mountPosition: RackMountPosition): { startColumn: number; endColumn: number } {
+  if (face === "rear" && isVerticalPduMountPosition(mountPosition)) {
+    const laneColumnMap = {
+      "rear-left-outer": startColumn + 1,
+      "rear-left-inner": startColumn + 2,
+      "rear-right-inner": startColumn + 7,
+      "rear-right-outer": startColumn + 8
+    } satisfies Record<Exclude<RackMountPosition, "full">, number>;
+
+    const laneColumn = laneColumnMap[mountPosition as Exclude<RackMountPosition, "full">];
+    return { startColumn: laneColumn, endColumn: laneColumn };
+  }
+
+  return face === "rear"
+    ? { startColumn: startColumn + 3, endColumn: startColumn + 6 }
+    : { startColumn: startColumn + 1, endColumn: startColumn + 4 };
+}
+
 function drawExcelRackFace(
   worksheet: ExcelJS.Worksheet,
   detail: RackDetail,
@@ -180,7 +218,9 @@ function drawExcelRackFace(
   startColumn: number,
   startRow: number
 ): void {
-  worksheet.mergeCells(startRow, startColumn, startRow, startColumn + 4);
+  const faceSpan = getExcelFaceSpan(face);
+
+  worksheet.mergeCells(startRow, startColumn, startRow, startColumn + faceSpan - 1);
   const headerCell = worksheet.getCell(startRow, startColumn);
   headerCell.value = `-- ${faceLabel(face)} --`;
   headerCell.font = { name: "Bahnschrift", size: 10, bold: true, color: { argb: excelPalette.accentStrong } };
@@ -190,8 +230,19 @@ function drawExcelRackFace(
   const rackDevices = visibleDevicesForFace(detail, face);
 
   worksheet.getColumn(startColumn).width = 8;
-  for (let columnIndex = startColumn + 1; columnIndex <= startColumn + 4; columnIndex += 1) {
-    worksheet.getColumn(columnIndex).width = 12;
+  if (face === "rear") {
+    worksheet.getColumn(startColumn + 1).width = 5.2;
+    worksheet.getColumn(startColumn + 2).width = 5.2;
+    worksheet.getColumn(startColumn + 3).width = 10.5;
+    worksheet.getColumn(startColumn + 4).width = 10.5;
+    worksheet.getColumn(startColumn + 5).width = 10.5;
+    worksheet.getColumn(startColumn + 6).width = 10.5;
+    worksheet.getColumn(startColumn + 7).width = 5.2;
+    worksheet.getColumn(startColumn + 8).width = 5.2;
+  } else {
+    for (let columnIndex = startColumn + 1; columnIndex <= startColumn + 4; columnIndex += 1) {
+      worksheet.getColumn(columnIndex).width = 12;
+    }
   }
 
   for (let unit = detail.totalUnits; unit >= 1; unit -= 1) {
@@ -206,9 +257,15 @@ function drawExcelRackFace(
     labelCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: excelPalette.panelBackground } };
     labelCell.border = createThinBorder(excelPalette.panelBorder);
 
-    for (let columnIndex = startColumn + 1; columnIndex <= startColumn + 4; columnIndex += 1) {
+    for (let columnIndex = startColumn + 1; columnIndex <= startColumn + faceSpan - 1; columnIndex += 1) {
       const cell = worksheet.getCell(rowIndex, columnIndex);
-      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: excelPalette.slotBackground } };
+      const isRearPduLane =
+        face === "rear" && [startColumn + 1, startColumn + 2, startColumn + 7, startColumn + 8].includes(columnIndex);
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: isRearPduLane ? excelPalette.panelBackground : excelPalette.slotBackground }
+      };
       cell.border = createThinBorder(excelPalette.slotLine);
     }
   }
@@ -218,15 +275,16 @@ function drawExcelRackFace(
     const endUnit = getEndUnit(startUnit, device.heightU);
     const topRow = rackStartRow + (detail.totalUnits - endUnit);
     const bottomRow = topRow + device.heightU - 1;
+    const deviceRange = getExcelDeviceRange(face, startColumn, device.mountPosition);
 
-    worksheet.mergeCells(topRow, startColumn + 1, bottomRow, startColumn + 4);
-    applyExcelRangeBorder(worksheet, topRow, bottomRow, startColumn + 1, startColumn + 4, excelPalette.deviceBorder);
+    worksheet.mergeCells(topRow, deviceRange.startColumn, bottomRow, deviceRange.endColumn);
+    applyExcelRangeBorder(worksheet, topRow, bottomRow, deviceRange.startColumn, deviceRange.endColumn, excelPalette.deviceBorder);
 
-    const deviceCell = worksheet.getCell(topRow, startColumn + 1);
+    const deviceCell = worksheet.getCell(topRow, deviceRange.startColumn);
     deviceCell.value = deviceVisualLabel(device);
     deviceCell.font = {
       name: "Bahnschrift",
-      size: device.heightU === 1 ? 8 : 9,
+      size: isVerticalPduMountPosition(device.mountPosition) ? 7 : device.heightU === 1 ? 8 : 9,
       bold: true,
       color: { argb: excelPalette.textPrimary }
     };
@@ -239,7 +297,7 @@ function drawExcelRackFace(
   });
 
   const footerRow = rackStartRow + detail.totalUnits;
-  worksheet.mergeCells(footerRow, startColumn, footerRow, startColumn + 4);
+  worksheet.mergeCells(footerRow, startColumn, footerRow, startColumn + faceSpan - 1);
   const footerCell = worksheet.getCell(footerRow, startColumn);
   footerCell.value = `-- ${faceLabel(face)} --`;
   footerCell.font = { name: "Bahnschrift", size: 10, bold: true, color: { argb: excelPalette.accentStrong } };
@@ -260,6 +318,7 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, detail: RackDetail): vo
     { header: "End U", key: "endUnit", width: 10 },
     { header: "Height U", key: "heightU", width: 10 },
     { header: "Face", key: "rackFace", width: 16 },
+    { header: "Mount", key: "mountPosition", width: 24 },
     { header: "Name", key: "name", width: 24 },
     { header: "Manufacturer", key: "manufacturer", width: 20 },
     { header: "Model", key: "model", width: 22 },
@@ -268,18 +327,18 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, detail: RackDetail): vo
     { header: "Notes", key: "notes", width: 28 }
   ];
 
-  worksheet.mergeCells("A1:M1");
+  worksheet.mergeCells("A1:N1");
   const titleCell = worksheet.getCell("A1");
   titleCell.value = "AetherCab Inventory Export";
   titleCell.font = { name: "Bahnschrift", size: 16, bold: true, color: { argb: "FF2B2520" } };
   titleCell.alignment = { vertical: "middle", horizontal: "left" };
-  worksheet.mergeCells("A2:M2");
+  worksheet.mergeCells("A2:N2");
   const metaCell = worksheet.getCell("A2");
   metaCell.value = `${detail.siteName} | ${detail.roomName} | ${detail.name} | ${detail.totalUnits}U`;
   metaCell.font = { name: "Bahnschrift", size: 10, color: { argb: "FF4C433B" } };
   metaCell.alignment = { vertical: "middle", horizontal: "left" };
 
-  worksheet.mergeCells("A3:M3");
+  worksheet.mergeCells("A3:N3");
   const notesCell = worksheet.getCell("A3");
   notesCell.value = detail.notes ? `Notes: ${detail.notes}` : "Notes: -";
   notesCell.font = { name: "Bahnschrift", size: 10, color: { argb: "FF4C433B" } };
@@ -303,6 +362,7 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, detail: RackDetail): vo
       endUnit: getEndUnit(device.startUnit ?? 1, device.heightU),
       heightU: device.heightU,
       rackFace: deviceFaceLabel(device),
+      mountPosition: deviceMountLabel(device),
       name: device.name,
       manufacturer: device.manufacturer,
       model: device.model,
@@ -326,18 +386,18 @@ function buildRackViewSheet(workbook: ExcelJS.Workbook, detail: RackDetail): voi
   worksheet.views = [{ showGridLines: false }];
   worksheet.properties.defaultRowHeight = 22;
 
-  worksheet.mergeCells("A1:M1");
+  worksheet.mergeCells("A1:R1");
   styleExcelTitle(worksheet.getCell("A1"), "AetherCab Rack View");
-  worksheet.mergeCells("A2:M2");
+  worksheet.mergeCells("A2:R2");
   worksheet.getCell("A2").value = `${detail.siteName} | ${detail.roomName} | ${detail.name}`;
   styleExcelMeta(worksheet.getCell("A2"));
 
-  worksheet.mergeCells("A3:M3");
+  worksheet.mergeCells("A3:R3");
   worksheet.getCell("A3").value = detail.notes ? `Notes: ${detail.notes}` : "Notes: -";
   styleExcelMeta(worksheet.getCell("A3"));
 
   drawExcelRackFace(worksheet, detail, "front", 1, 5);
-  drawExcelRackFace(worksheet, detail, "rear", 8, 5);
+  drawExcelRackFace(worksheet, detail, "rear", 10, 5);
 
 }
 
@@ -357,6 +417,42 @@ function drawPdfHeader(pdf: PdfDocument, detail: RackDetail, title: string, subt
   }
 }
 
+function getPdfRackDeviceFrame(
+  face: RackFace,
+  rackX: number,
+  rackWidth: number,
+  mountPosition: RackMountPosition
+): { x: number; width: number } {
+  if (face === "rear") {
+    const sidePadding = 10;
+    const pduLaneWidth = 18;
+    const laneGap = 8;
+    const centerGap = 16;
+    const fullX = rackX + sidePadding + pduLaneWidth * 2 + laneGap + centerGap;
+    const fullWidth = rackWidth - sidePadding * 2 - pduLaneWidth * 4 - laneGap * 2 - centerGap * 2;
+
+    if (mountPosition === "rear-left-outer") {
+      return { x: rackX + sidePadding, width: pduLaneWidth };
+    }
+
+    if (mountPosition === "rear-left-inner") {
+      return { x: rackX + sidePadding + pduLaneWidth + laneGap, width: pduLaneWidth };
+    }
+
+    if (mountPosition === "rear-right-inner") {
+      return { x: rackX + rackWidth - sidePadding - pduLaneWidth * 2 - laneGap, width: pduLaneWidth };
+    }
+
+    if (mountPosition === "rear-right-outer") {
+      return { x: rackX + rackWidth - sidePadding - pduLaneWidth, width: pduLaneWidth };
+    }
+
+    return { x: fullX, width: fullWidth };
+  }
+
+  return { x: rackX + 8, width: rackWidth - 16 };
+}
+
 function drawPdfRackFace(
   pdf: PdfDocument,
   detail: RackDetail,
@@ -367,6 +463,7 @@ function drawPdfRackFace(
 ): void {
   const labelWidth = 42;
   const rackWidth = width - labelWidth;
+  const rackX = x + labelWidth;
   const unitHeight = Math.max(8, Math.min(10, Math.floor((pdf.page.height - y - 90) / detail.totalUnits)));
   const rackHeight = unitHeight * detail.totalUnits;
   const innerPadding = 8;
@@ -375,16 +472,25 @@ function drawPdfRackFace(
   pdf.fillColor(pdfPalette.accentStrong).fontSize(9).text(`-- ${faceLabel(face)} --`, x, y - 20, { width, align: "center" });
 
   pdf.save();
-  pdf.roundedRect(x + labelWidth, y, rackWidth, rackHeight, 10).fill(pdfPalette.panelBackground);
-  pdf.roundedRect(x + labelWidth, y, rackWidth, rackHeight, 10).lineWidth(1).strokeColor(pdfPalette.panelBorder).stroke();
+  pdf.roundedRect(rackX, y, rackWidth, rackHeight, 10).fill(pdfPalette.panelBackground);
+  pdf.roundedRect(rackX, y, rackWidth, rackHeight, 10).lineWidth(1).strokeColor(pdfPalette.panelBorder).stroke();
   pdf.restore();
+
+  if (face === "rear") {
+    (["rear-left-outer", "rear-left-inner", "rear-right-inner", "rear-right-outer"] as const).forEach((mountPosition) => {
+      const laneFrame = getPdfRackDeviceFrame(face, rackX, rackWidth, mountPosition);
+      pdf.save();
+      pdf.roundedRect(laneFrame.x, y + 2, laneFrame.width, rackHeight - 4, 6).fillOpacity(0.18).fill(pdfPalette.accent);
+      pdf.restore();
+    });
+  }
 
   for (let unit = detail.totalUnits; unit >= 1; unit -= 1) {
     const rowY = y + (detail.totalUnits - unit) * unitHeight;
 
     pdf.save();
-    pdf.rect(x + labelWidth, rowY, rackWidth, unitHeight).fill(pdfPalette.slotBackground);
-    pdf.rect(x + labelWidth, rowY, rackWidth, unitHeight).lineWidth(0.5).strokeColor(pdfPalette.slotLine).stroke();
+    pdf.rect(rackX, rowY, rackWidth, unitHeight).fill(pdfPalette.slotBackground);
+    pdf.rect(rackX, rowY, rackWidth, unitHeight).lineWidth(0.5).strokeColor(pdfPalette.slotLine).stroke();
     pdf.restore();
 
     pdf.fillColor(pdfPalette.slotLabel).fontSize(7).text(`${unit}U`, x, rowY + 3, {
@@ -398,17 +504,22 @@ function drawPdfRackFace(
     const endUnit = getEndUnit(startUnit, device.heightU);
     const topY = y + (detail.totalUnits - endUnit) * unitHeight + 1;
     const height = Math.max(unitHeight * device.heightU - 2, unitHeight - 2);
-    const textX = x + labelWidth + innerPadding;
-    const textWidth = rackWidth - innerPadding * 2;
+    const frame = getPdfRackDeviceFrame(face, rackX, rackWidth, device.mountPosition);
+    const textX = frame.x + innerPadding;
+    const textWidth = frame.width - innerPadding * 2;
     const lines = deviceVisualLines(device);
-    const fontSize = device.heightU === 1 ? 6.2 : device.heightU === 2 ? 6.8 : 7.2;
+    const fontSize = isVerticalPduMountPosition(device.mountPosition) ? 5.8 : device.heightU === 1 ? 6.2 : device.heightU === 2 ? 6.8 : 7.2;
     const lineHeight = fontSize + 1.5;
     const textBlockHeight = lines.length * lineHeight;
     const startTextY = topY + Math.max(3, (height - textBlockHeight) / 2);
 
     pdf.save();
-    pdf.roundedRect(textX - 2, topY, textWidth + 4, height, 8).fill(pdfPalette.deviceFill);
-    pdf.roundedRect(textX - 2, topY, textWidth + 4, height, 8).lineWidth(0.8).strokeColor(pdfPalette.deviceBorder).stroke();
+    pdf.roundedRect(frame.x, topY, frame.width, height, isVerticalPduMountPosition(device.mountPosition) ? 6 : 8).fill(pdfPalette.deviceFill);
+    pdf
+      .roundedRect(frame.x, topY, frame.width, height, isVerticalPduMountPosition(device.mountPosition) ? 6 : 8)
+      .lineWidth(0.8)
+      .strokeColor(pdfPalette.deviceBorder)
+      .stroke();
     pdf.restore();
 
     lines.forEach((line, index) => {
@@ -444,7 +555,7 @@ function drawPdfTextSectionTitle(pdf: PdfDocument, title: string): void {
 
 function drawPdfDeviceTextLine(pdf: PdfDocument, device: RackDevice): void {
   ensurePdfTextSpace(pdf, 48);
-  const metadataParts = [`${devicePositionLabel(device)}`, `${device.heightU}U`, deviceFaceLabel(device)];
+  const metadataParts = [`${devicePositionLabel(device)}`, `${device.heightU}U`, deviceFaceLabel(device), deviceMountLabel(device)];
   if (device.hostname) {
     metadataParts.push(`Hostname: ${device.hostname}`);
   }

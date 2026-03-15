@@ -49,10 +49,22 @@ export function Palette({ templates }: PaletteProps) {
                     <p>
                       {template.defaultHeightU}U | {template.manufacturer} {template.model}
                     </p>
-                    <p>{template.blocksBothFaces ? "Front + Rear" : "Single side"}</p>
+                    <p>
+                      {template.mountStyle === "vertical-pdu"
+                        ? "Rear vertical PDU lane"
+                        : template.blocksBothFaces
+                          ? "Front + Rear"
+                          : "Single side"}
+                    </p>
                   </div>
                   <div className="template-actions compact">
-                    <span>{template.blocksBothFaces ? "Front + Rear" : "Single side"}</span>
+                    <span>
+                      {template.mountStyle === "vertical-pdu"
+                        ? "Rear PDU"
+                        : template.blocksBothFaces
+                          ? "Front + Rear"
+                          : "Single side"}
+                    </span>
                   </div>
                 </article>
               ))}

@@ -15,8 +15,14 @@ const templateTypeOptions = [
   { value: "patch-panel", label: "Patchpanel" },
   { value: "storage", label: "Storage" },
   { value: "ups", label: "UPS" },
+  { value: "pdu", label: "PDU" },
   { value: "other", label: "Other" }
 ];
+
+const mountStyleOptions = [
+  { value: "full", label: "Standard rack device" },
+  { value: "vertical-pdu", label: "Vertical rear PDU" }
+] as const;
 
 function formatTemplateType(templateType: string): string {
   return templateTypeOptions.find((option) => option.value === templateType)?.label ?? templateType;
@@ -37,8 +43,38 @@ export function AdminTemplatesPage({
         <form className="create-rack-form overview-create-form" onSubmit={onCreateTemplate}>
           <label>
             Device type
-            <select value={form.templateType} onChange={(event) => onFormChange({ ...form, templateType: event.target.value })}>
+            <select
+              value={form.templateType}
+              onChange={(event) =>
+                onFormChange({
+                  ...form,
+                  templateType: event.target.value,
+                  mountStyle: event.target.value === "pdu" ? "vertical-pdu" : form.mountStyle,
+                  blocksBothFaces: event.target.value === "pdu" ? false : form.blocksBothFaces
+                })
+              }
+            >
               {templateTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Mounting
+            <select
+              value={form.mountStyle}
+              onChange={(event) =>
+                onFormChange({
+                  ...form,
+                  templateType: event.target.value === "vertical-pdu" ? "pdu" : form.templateType,
+                  mountStyle: event.target.value as DeviceTemplateInput["mountStyle"],
+                  blocksBothFaces: event.target.value === "vertical-pdu" ? false : form.blocksBothFaces
+                })
+              }
+            >
+              {mountStyleOptions.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -73,6 +109,7 @@ export function AdminTemplatesPage({
             Blocks front and rear
             <input
               checked={form.blocksBothFaces}
+              disabled={form.mountStyle === "vertical-pdu"}
               type="checkbox"
               onChange={(event) => onFormChange({ ...form, blocksBothFaces: event.target.checked })}
             />
@@ -101,7 +138,12 @@ export function AdminTemplatesPage({
                   {formatTemplateType(template.templateType)} | {template.defaultHeightU}U
                 </span>
                 <span>
-                  {template.manufacturer} | {template.model} | {template.blocksBothFaces ? "Front + Rear" : "Single side"}
+                  {template.manufacturer} | {template.model} |{" "}
+                  {template.mountStyle === "vertical-pdu"
+                    ? "Rear vertical PDU"
+                    : template.blocksBothFaces
+                      ? "Front + Rear"
+                      : "Single side"}
                 </span>
               </div>
               <button className="ghost-button" onClick={() => onDeleteTemplate(template.id)} type="button">
