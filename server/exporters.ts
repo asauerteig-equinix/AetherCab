@@ -278,6 +278,31 @@ function deviceExportGroupOrder(device: RackDevice): number {
   return getMountPositionFace(device.mountPosition) === "front" ? 1 : 2;
 }
 
+function compareDevicesForGroupedExport(left: RackDevice, right: RackDevice): number {
+  const leftStart = left.startUnit ?? 0;
+  const rightStart = right.startUnit ?? 0;
+  if (leftStart !== rightStart) {
+    return rightStart - leftStart;
+  }
+
+  const leftEnd = getEndUnit(leftStart, left.heightU);
+  const rightEnd = getEndUnit(rightStart, right.heightU);
+  if (leftEnd !== rightEnd) {
+    return rightEnd - leftEnd;
+  }
+
+  const faceDelta = faceSortValue(left) - faceSortValue(right);
+  if (faceDelta !== 0) {
+    return faceDelta;
+  }
+
+  if (left.mountPosition !== right.mountPosition) {
+    return left.mountPosition.localeCompare(right.mountPosition);
+  }
+
+  return left.name.localeCompare(right.name);
+}
+
 function sortDevicesForGroupedExport(devices: RackDevice[]): RackDevice[] {
   return [...devices].sort((left, right) => {
     const groupDelta = deviceExportGroupOrder(left) - deviceExportGroupOrder(right);
@@ -285,7 +310,7 @@ function sortDevicesForGroupedExport(devices: RackDevice[]): RackDevice[] {
       return groupDelta;
     }
 
-    return compareSortedDevices(left, right);
+    return compareDevicesForGroupedExport(left, right);
   });
 }
 
