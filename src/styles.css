@@ -247,19 +247,19 @@ a {
 }
 
 .overview-panel {
-  min-height: 220px;
+  min-height: 200px;
 }
 
 .overview-panel-primary {
   display: grid;
   align-content: start;
-  gap: 14px;
+  gap: 10px;
 }
 
 .overview-panel-primary h2 {
-  max-width: 16ch;
-  font-size: clamp(1.8rem, 3vw, 2.6rem);
-  line-height: 1.02;
+  max-width: none;
+  font-size: clamp(1.25rem, 2vw, 1.7rem);
+  line-height: 1.05;
 }
 
 .overview-actions {
@@ -272,7 +272,6 @@ a {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 8px;
 }
 
 .overview-feature-list {
@@ -362,14 +361,14 @@ a {
 .overview-stat-card {
   display: grid;
   gap: 4px;
-  padding: 18px;
+  padding: 16px;
   border: 1px solid var(--line-soft);
   border-radius: 12px;
   background: rgba(188, 175, 159, 0.04);
 }
 
 .overview-stat-card strong {
-  font-size: 2rem;
+  font-size: 1.7rem;
   font-weight: 600;
 }
 

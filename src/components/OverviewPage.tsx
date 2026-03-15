@@ -34,11 +34,7 @@ export function OverviewPage({
     <main className="overview-grid">
       <section className="panel overview-panel overview-panel-primary">
         <p className="eyebrow">Start</p>
-        <h2>Open one audit and switch between all related racks there</h2>
-        <p className="hero-copy">
-          The overview stays focused on finding or creating audits. Once an audit is open, all racks inside it can be managed
-          directly in the rack workspace.
-        </p>
+        <h2>Audits</h2>
         <div className="overview-stats-inline">
           <div className="overview-stat-card">
             <strong>{audits.length}</strong>
