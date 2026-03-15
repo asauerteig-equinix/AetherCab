@@ -356,7 +356,12 @@ export default function App() {
 
     try {
       setSaving(true);
-      const targetRackFace = nextMountPosition === "full" ? activeRackFace : getMountPositionFace(nextMountPosition);
+      const targetRackFace =
+        nextMountPosition === "full"
+          ? device.placementType === "spare"
+            ? activeRackFace
+            : device.rackFace ?? activeRackFace
+          : getMountPositionFace(nextMountPosition);
       await api.updateDevice(activeRackId, device.id, {
         templateId: device.templateId,
         placementType: "rack",

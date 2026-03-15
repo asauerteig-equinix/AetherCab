@@ -35,6 +35,10 @@ export function StagingArea({ devices, selectedDeviceId, saving, onSelectDevice,
 
       <div
         className={dragActive ? "staging-dropzone active" : "staging-dropzone"}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setDragActive(true);
+        }}
         onDragOver={(event) => {
           event.preventDefault();
           event.dataTransfer.dropEffect = "move";
@@ -50,7 +54,8 @@ export function StagingArea({ devices, selectedDeviceId, saving, onSelectDevice,
         }}
         onDrop={handleDrop}
       >
-        Drag devices here to park them temporarily.
+        <strong>Drop device here</strong>
+        <span>Drag devices into the temporary tray to park them without losing their data.</span>
       </div>
 
       <div className="spare-list">

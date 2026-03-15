@@ -67,6 +67,23 @@ export function Inspector({ device, onChange, onMoveToTray, onDelete, saving }: 
           <h2>{device.hostname ?? device.name}</h2>
         </div>
       </div>
+      <div className={device.placementType === "rack" ? "inspector-actions split top" : "inspector-actions top"}>
+        {device.placementType === "rack" ? (
+          <button className="ghost-button inspector-action-button" disabled={saving} onClick={onMoveToTray} type="button">
+            <span aria-hidden="true" className="inspector-action-icon">
+              <svg fill="none" height="14" viewBox="0 0 16 14" width="16" xmlns="http://www.w3.org/2000/svg">
+                <path d="M1 7H11" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+                <path d="M7.5 3.5L11 7L7.5 10.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+                <path d="M12.5 2H15V12H12.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+              </svg>
+            </span>
+            <span>Move to Tray</span>
+          </button>
+        ) : null}
+        <button className="ghost-button danger inspector-action-button" disabled={saving} onClick={onDelete} type="button">
+          Delete
+        </button>
+      </div>
 
       <div className="inspector-grid">
         <label className="full-width">
@@ -175,23 +192,6 @@ export function Inspector({ device, onChange, onMoveToTray, onDelete, saving }: 
       {device.placementType === "spare" ? (
         <p className="muted">This device is only parked temporarily and will not appear in exports.</p>
       ) : null}
-      <div className={device.placementType === "rack" ? "inspector-actions split" : "inspector-actions"}>
-        {device.placementType === "rack" ? (
-          <button className="ghost-button inspector-action-button" disabled={saving} onClick={onMoveToTray} type="button">
-            <span aria-hidden="true" className="inspector-action-icon">
-              <svg fill="none" height="14" viewBox="0 0 16 14" width="16" xmlns="http://www.w3.org/2000/svg">
-                <path d="M1 7H11" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
-                <path d="M7.5 3.5L11 7L7.5 10.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-                <path d="M12.5 2H15V12H12.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
-              </svg>
-            </span>
-            <span>Move to Tray</span>
-          </button>
-        ) : null}
-        <button className="ghost-button danger inspector-action-button" disabled={saving} onClick={onDelete} type="button">
-          Delete
-        </button>
-      </div>
       <p className="muted">{saving ? "Saving changes..." : "Changes are written directly to the database."}</p>
     </section>
   );
