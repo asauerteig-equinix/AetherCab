@@ -208,7 +208,7 @@ export function OverviewPage({
                   </div>
                   <div className="overview-audit-actions">
                     <button className="primary-button" onClick={() => onOpenAudit(audit.id)} type="button">
-                      Open
+                      {audit.status === "completed" ? "View" : "Open"}
                     </button>
                     {isAdmin && audit.status === "completed" ? (
                       <button className="ghost-button" disabled={saving} onClick={() => onReopenAudit(audit.id)} type="button">

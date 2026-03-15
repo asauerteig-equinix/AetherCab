@@ -174,11 +174,17 @@ export function RackSwitcher({ audit, form, saving, isAdmin, onFormChange, onSav
 
             {readOnly ? (
               <div className="audit-delete-section">
-                <div className="audit-delete-copy">
-                  <strong>Create follow-up audit</strong>
-                  <p>This creates a new editable audit with the same racks and devices as the current completed audit.</p>
+                <div className="completed-followup-callout">
+                  <span className="completed-followup-badge">
+                    <span className="completed-followup-pulse" />
+                    <span>Recommended next step</span>
+                  </span>
+                  <div className="audit-delete-copy">
+                    <strong>Create follow-up audit</strong>
+                    <p>This creates a new editable audit with the same racks and devices as the current completed audit.</p>
+                  </div>
                 </div>
-                <button className="primary-button" disabled={saving} onClick={() => void handleCloneAudit()} type="button">
+                <button className="primary-button completed-followup-button" disabled={saving} onClick={() => void handleCloneAudit()} type="button">
                   Create new audit from this one
                 </button>
                 {isAdmin ? (
