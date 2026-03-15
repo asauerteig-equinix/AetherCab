@@ -1220,29 +1220,57 @@ export default function App() {
       />
 
       {currentPath === "/audits" ? (
-        <header className="hero audit-hero">
-          <RackSwitcher
-            audit={auditDetail}
-            form={auditForm}
-            saving={saving}
-            isAdmin={isAdminAuthenticated}
-            onFormChange={setAuditForm}
-            onSave={handleAuditUpdate}
-            onCloneAudit={handleCloneAudit}
-            onReopenAudit={handleReopenAudit}
-            onDeleteAudit={() => {
-              void handleDeleteAudit();
-            }}
-          />
-          <div className="hero-actions">
-            {auditDetail ? (
-              <div className="export-actions">
-                <a href={api.excelExportUrl(auditDetail.id)}>Export Excel</a>
-                <a href={api.pdfExportUrl(auditDetail.id)}>Export PDF</a>
+        <>
+          <header className="hero audit-hero">
+            <RackSwitcher
+              audit={auditDetail}
+              form={auditForm}
+              saving={saving}
+              isAdmin={isAdminAuthenticated}
+              onFormChange={setAuditForm}
+              onSave={handleAuditUpdate}
+              onCloneAudit={handleCloneAudit}
+              onReopenAudit={handleReopenAudit}
+              onDeleteAudit={() => {
+                void handleDeleteAudit();
+              }}
+            />
+            <div className="hero-actions">
+              {auditDetail ? (
+                <div className="export-actions">
+                  <a href={api.excelExportUrl(auditDetail.id)}>Export Excel</a>
+                  <a href={api.pdfExportUrl(auditDetail.id)}>Export PDF</a>
+                </div>
+              ) : null}
+            </div>
+          </header>
+
+          {auditDetail && isCompletedAudit ? (
+            <section className="panel completed-audit-banner">
+              <div className="completed-audit-copy">
+                <span className="completed-audit-badge">
+                  <span className="completed-audit-pulse" />
+                  <span>Completed Audit</span>
+                </span>
+                <h2>This audit is locked for viewing only.</h2>
+                <p>
+                  To continue working, create a new audit based on this one. You can use the button here, or double-click the audit card above
+                  and choose <strong>Create new audit from this one</strong>.
+                </p>
               </div>
-            ) : null}
-          </div>
-        </header>
+              <div className="completed-audit-actions">
+                <button className="primary-button" disabled={saving} onClick={() => void handleCloneAudit()} type="button">
+                  Create cloned audit
+                </button>
+                {isAdminAuthenticated ? (
+                  <button className="ghost-button" disabled={saving} onClick={() => void handleReopenAudit()} type="button">
+                    Admin: Set to In Progress
+                  </button>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+        </>
       ) : null}
 
       {error ? <div className="error-banner">{error}</div> : null}
