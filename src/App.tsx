@@ -10,6 +10,7 @@ import type {
   RackDetail,
   RackDevice,
   RackDeviceInput,
+  RackUpdateInput,
   RackSummary
 } from "../shared/types";
 import { api } from "./api";
@@ -21,6 +22,14 @@ import { RackCanvas } from "./components/RackCanvas";
 import { RackSwitcher } from "./components/RackSwitcher";
 
 const initialRackCreateForm: RackCreateInput = {
+  siteName: "",
+  roomName: "",
+  rackName: "",
+  totalUnits: 42,
+  notes: ""
+};
+
+const initialRackUpdateForm: RackUpdateInput = {
   siteName: "",
   roomName: "",
   rackName: "",
@@ -76,6 +85,7 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [createForm, setCreateForm] = useState<RackCreateInput>(initialRackCreateForm);
   const [templateForm, setTemplateForm] = useState<DeviceTemplateInput>(initialTemplateForm);
+  const [rackForm, setRackForm] = useState<RackUpdateInput>(initialRackUpdateForm);
 
   useEffect(() => {
     void loadInitialData();
@@ -150,6 +160,13 @@ export default function App() {
     try {
       const detail = await api.getRack(rackId);
       setRackDetail(detail);
+      setRackForm({
+        siteName: detail.siteName,
+        roomName: detail.roomName,
+        rackName: detail.name,
+        totalUnits: detail.totalUnits,
+        notes: detail.notes ?? ""
+      });
       setSelectedDeviceId((current) => (current && detail.devices.some((device) => device.id === current) ? current : null));
       setMessage(`${detail.name} is open for editing.`);
       setError(null);
@@ -182,7 +199,7 @@ export default function App() {
       const targetRackFace = template.mountStyle === "vertical-pdu" ? (getMountPositionFace(targetMountPosition) ?? activeRackFace) : activeRackFace;
 
       if (template.mountStyle === "vertical-pdu" && mountPosition === "full") {
-        setError("Vertical PDUs can only be dropped onto one of the rear PDU lanes.");
+        setError("Vertical PDUs can only be dropped onto one of the visible PDU lanes.");
         return;
       }
 
@@ -229,7 +246,7 @@ export default function App() {
       setSaving(true);
       await api.updateDevice(activeRackId, device.id, {
         placementType: "rack",
-        rackFace: nextMountPosition === "full" ? device.rackFace : "rear",
+        rackFace: nextMountPosition === "full" ? device.rackFace : getMountPositionFace(nextMountPosition),
         mountPosition: nextMountPosition,
         blocksBothFaces: nextMountPosition === "full" ? device.blocksBothFaces : false,
         startUnit: nextStartUnit,
@@ -296,6 +313,32 @@ export default function App() {
       setError(null);
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Item could not be removed.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRackUpdate() {
+    if (activeRackId === null) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const updatedRack = await api.updateRack(activeRackId, rackForm);
+      setRackDetail(updatedRack);
+      setRackForm({
+        siteName: updatedRack.siteName,
+        roomName: updatedRack.roomName,
+        rackName: updatedRack.name,
+        totalUnits: updatedRack.totalUnits,
+        notes: updatedRack.notes ?? ""
+      });
+      await refreshRackList(activeRackId);
+      setMessage(`${updatedRack.name} was updated.`);
+      setError(null);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Audit details could not be saved.");
     } finally {
       setSaving(false);
     }
@@ -369,13 +412,23 @@ export default function App() {
       </nav>
 
       {currentPath === "/audits" ? (
-        <header className="hero">
-          <div>
+        <header className="hero audit-hero">
+          <div className="hero-primary">
             <p className="hero-kicker">AetherCab</p>
             <p className="hero-copy">
               Rack inventory with a clear workflow: create or open an audit first, then edit it with focus.
             </p>
           </div>
+          <RackSwitcher
+            rack={rackDetail}
+            form={rackForm}
+            saving={saving}
+            onFormChange={setRackForm}
+            onSave={() => {
+              void handleRackUpdate();
+            }}
+            onBackToOverview={() => navigate("/")}
+          />
           <div className="hero-actions">
             <span className="status-pill">{saving ? "Saving database changes" : message}</span>
             {rackDetail ? (
@@ -417,8 +470,6 @@ export default function App() {
         />
       ) : (
         <main className="workspace-grid">
-          <RackSwitcher rack={rackDetail} onBackToOverview={() => navigate("/")} />
-
           <div className="editor-column">
             {rackDetail ? (
               <RackCanvas

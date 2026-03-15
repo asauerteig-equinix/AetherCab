@@ -7,6 +7,7 @@ import type {
   RackDevice,
   RackDeviceInput,
   RackFace,
+  RackUpdateInput,
   RackSummary
 } from "../shared/types.js";
 import { pool } from "./db.js";
@@ -344,6 +345,75 @@ export async function createRack(input: RackCreateInput): Promise<RackSummary> {
   }
 
   return rack;
+}
+
+export async function updateRack(rackId: number, input: RackUpdateInput): Promise<RackDetail> {
+  const siteName = input.siteName.trim();
+  const roomName = input.roomName.trim();
+  const rackName = input.rackName.trim();
+
+  if (!siteName || !roomName || !rackName) {
+    throw new Error("Site, room and rack names are required.");
+  }
+
+  if (input.totalUnits < 1) {
+    throw new Error("Rack must have at least 1U.");
+  }
+
+  const existingRack = await getRack(rackId);
+  if (!existingRack) {
+    throw new Error("Rack not found.");
+  }
+
+  const highestOccupiedUnit = existingRack.devices.reduce((highest, device) => {
+    if (device.placementType !== "rack" || device.startUnit === null) {
+      return highest;
+    }
+
+    return Math.max(highest, device.startUnit + device.heightU - 1);
+  }, 0);
+
+  if (input.totalUnits < highestOccupiedUnit) {
+    throw new Error(`Rack height cannot be reduced below ${highestOccupiedUnit}U because devices are already placed there.`);
+  }
+
+  const siteResult = await pool.query<{ id: number }>(
+    `
+      INSERT INTO sites (name)
+      VALUES ($1)
+      ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+      RETURNING id
+    `,
+    [siteName]
+  );
+  const siteId = siteResult.rows[0].id;
+
+  const roomResult = await pool.query<{ id: number }>(
+    `
+      INSERT INTO rooms (site_id, name)
+      VALUES ($1, $2)
+      ON CONFLICT (site_id, name) DO UPDATE SET name = EXCLUDED.name
+      RETURNING id
+    `,
+    [siteId, roomName]
+  );
+  const roomId = roomResult.rows[0].id;
+
+  await pool.query(
+    `
+      UPDATE racks
+      SET room_id = $1, name = $2, total_units = $3, notes = $4
+      WHERE id = $5
+    `,
+    [roomId, rackName, input.totalUnits, input.notes?.trim() || null, rackId]
+  );
+
+  const updatedRack = await getRack(rackId);
+  if (!updatedRack) {
+    throw new Error("Failed to load updated rack.");
+  }
+
+  return updatedRack;
 }
 
 export async function createRackDevice(rackId: number, input: RackDeviceInput): Promise<RackDevice> {

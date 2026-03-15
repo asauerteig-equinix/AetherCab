@@ -114,24 +114,64 @@ function faceSortValue(device: RackDevice): number {
 }
 
 function sortDevices(devices: RackDevice[]): RackDevice[] {
+  return [...devices].sort(compareSortedDevices);
+}
+
+function compareSortedDevices(left: RackDevice, right: RackDevice): number {
+  const faceDelta = faceSortValue(left) - faceSortValue(right);
+  if (faceDelta !== 0) {
+    return faceDelta;
+  }
+
+  const leftStart = left.startUnit ?? 0;
+  const rightStart = right.startUnit ?? 0;
+  if (leftStart !== rightStart) {
+    return rightStart - leftStart;
+  }
+
+  if (left.mountPosition !== right.mountPosition) {
+    return left.mountPosition.localeCompare(right.mountPosition);
+  }
+
+  return left.name.localeCompare(right.name);
+}
+
+function deviceExportGroup(device: RackDevice): string {
+  if (!isVerticalPduMountPosition(device.mountPosition)) {
+    return "Rack Devices";
+  }
+
+  return getMountPositionFace(device.mountPosition) === "front" ? "Front PDUs" : "Rear PDUs";
+}
+
+function deviceExportGroupOrder(device: RackDevice): number {
+  if (!isVerticalPduMountPosition(device.mountPosition)) {
+    return 0;
+  }
+
+  return getMountPositionFace(device.mountPosition) === "front" ? 1 : 2;
+}
+
+function sortDevicesForGroupedExport(devices: RackDevice[]): RackDevice[] {
   return [...devices].sort((left, right) => {
-    const faceDelta = faceSortValue(left) - faceSortValue(right);
-    if (faceDelta !== 0) {
-      return faceDelta;
+    const groupDelta = deviceExportGroupOrder(left) - deviceExportGroupOrder(right);
+    if (groupDelta !== 0) {
+      return groupDelta;
     }
 
-    const leftStart = left.startUnit ?? 0;
-    const rightStart = right.startUnit ?? 0;
-    if (leftStart !== rightStart) {
-      return rightStart - leftStart;
-    }
-
-    if (left.mountPosition !== right.mountPosition) {
-      return left.mountPosition.localeCompare(right.mountPosition);
-    }
-
-    return left.name.localeCompare(right.name);
+    return compareSortedDevices(left, right);
   });
+}
+
+function groupDevicesForExport(devices: RackDevice[]): Array<{ label: string; devices: RackDevice[] }> {
+  const orderedGroups = ["Rack Devices", "Front PDUs", "Rear PDUs"] as const;
+
+  return orderedGroups
+    .map((label) => ({
+      label,
+      devices: sortDevicesForGroupedExport(devices).filter((device) => deviceExportGroup(device) === label)
+    }))
+    .filter((group) => group.devices.length > 0);
 }
 
 function visibleDevicesForFace(detail: RackDetail, face: RackFace): RackDevice[] {
@@ -316,6 +356,7 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, detail: RackDetail): vo
     { header: "Site", key: "site", width: 18 },
     { header: "Room", key: "room", width: 18 },
     { header: "Audit", key: "rack", width: 18 },
+    { header: "Group", key: "group", width: 16 },
     { header: "Start U", key: "startUnit", width: 10 },
     { header: "End U", key: "endUnit", width: 10 },
     { header: "Height U", key: "heightU", width: 10 },
@@ -329,18 +370,18 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, detail: RackDetail): vo
     { header: "Notes", key: "notes", width: 28 }
   ];
 
-  worksheet.mergeCells("A1:N1");
+  worksheet.mergeCells("A1:O1");
   const titleCell = worksheet.getCell("A1");
   titleCell.value = "AetherCab Inventory Export";
   titleCell.font = { name: "Bahnschrift", size: 16, bold: true, color: { argb: "FF2B2520" } };
   titleCell.alignment = { vertical: "middle", horizontal: "left" };
-  worksheet.mergeCells("A2:N2");
+  worksheet.mergeCells("A2:O2");
   const metaCell = worksheet.getCell("A2");
   metaCell.value = `${detail.siteName} | ${detail.roomName} | ${detail.name} | ${detail.totalUnits}U`;
   metaCell.font = { name: "Bahnschrift", size: 10, color: { argb: "FF4C433B" } };
   metaCell.alignment = { vertical: "middle", horizontal: "left" };
 
-  worksheet.mergeCells("A3:N3");
+  worksheet.mergeCells("A3:O3");
   const notesCell = worksheet.getCell("A3");
   notesCell.value = detail.notes ? `Notes: ${detail.notes}` : "Notes: -";
   notesCell.font = { name: "Bahnschrift", size: 10, color: { argb: "FF4C433B" } };
@@ -355,27 +396,44 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, detail: RackDetail): vo
     cell.border = createThinBorder("FFD6D0C9");
   });
 
-  sortDevices(installedDevices(detail)).forEach((device) => {
-    const row = worksheet.addRow({
-      site: detail.siteName,
-      room: detail.roomName,
-      rack: detail.name,
-      startUnit: device.startUnit,
-      endUnit: getEndUnit(device.startUnit ?? 1, device.heightU),
-      heightU: device.heightU,
-      rackFace: deviceFaceLabel(device),
-      mountPosition: deviceMountLabel(device),
-      name: device.name,
-      manufacturer: device.manufacturer,
-      model: device.model,
-      hostname: device.hostname ?? "",
-      serialNumber: device.serialNumber ?? "",
-      notes: device.notes ?? ""
+  groupDevicesForExport(installedDevices(detail)).forEach((group) => {
+    const groupRow = worksheet.addRow({
+      site: "",
+      room: "",
+      rack: "",
+      group: group.label
     });
-    row.eachCell((cell) => {
-      cell.font = { name: "Bahnschrift", size: 10, color: { argb: "FF2B2520" } };
-      cell.alignment = { vertical: "top", horizontal: "left", wrapText: true };
-      cell.border = createThinBorder("FFE0DBD4");
+    worksheet.mergeCells(`A${groupRow.number}:O${groupRow.number}`);
+    const groupCell = worksheet.getCell(`A${groupRow.number}`);
+    groupCell.value = group.label;
+    groupCell.font = { name: "Bahnschrift", size: 10, bold: true, color: { argb: excelPalette.accentStrong } };
+    groupCell.alignment = { vertical: "middle", horizontal: "left" };
+    groupCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: excelPalette.panelBackground } };
+    groupCell.border = createThinBorder(excelPalette.panelBorder);
+
+    group.devices.forEach((device) => {
+      const row = worksheet.addRow({
+        site: detail.siteName,
+        room: detail.roomName,
+        rack: detail.name,
+        group: group.label,
+        startUnit: device.startUnit,
+        endUnit: getEndUnit(device.startUnit ?? 1, device.heightU),
+        heightU: device.heightU,
+        rackFace: deviceFaceLabel(device),
+        mountPosition: deviceMountLabel(device),
+        name: device.name,
+        manufacturer: device.manufacturer,
+        model: device.model,
+        hostname: device.hostname ?? "",
+        serialNumber: device.serialNumber ?? "",
+        notes: device.notes ?? ""
+      });
+      row.eachCell((cell) => {
+        cell.font = { name: "Bahnschrift", size: 10, color: { argb: "FF2B2520" } };
+        cell.alignment = { vertical: "top", horizontal: "left", wrapText: true };
+        cell.border = createThinBorder("FFE0DBD4");
+      });
     });
   });
 }
@@ -433,19 +491,19 @@ function getPdfRackDeviceFrame(
     const fullX = rackX + sidePadding + pduLaneWidth * 2 + laneGap + centerGap;
     const fullWidth = rackWidth - sidePadding * 2 - pduLaneWidth * 4 - laneGap * 2 - centerGap * 2;
 
-    if (mountPosition === "rear-left-outer") {
+    if (mountPosition.endsWith("left-outer")) {
       return { x: rackX + sidePadding, width: pduLaneWidth };
     }
 
-    if (mountPosition === "rear-left-inner") {
+    if (mountPosition.endsWith("left-inner")) {
       return { x: rackX + sidePadding + pduLaneWidth + laneGap, width: pduLaneWidth };
     }
 
-    if (mountPosition === "rear-right-inner") {
+    if (mountPosition.endsWith("right-inner")) {
       return { x: rackX + rackWidth - sidePadding - pduLaneWidth * 2 - laneGap, width: pduLaneWidth };
     }
 
-    if (mountPosition === "rear-right-outer") {
+    if (mountPosition.endsWith("right-outer")) {
       return { x: rackX + rackWidth - sidePadding - pduLaneWidth, width: pduLaneWidth };
     }
 
@@ -556,25 +614,106 @@ function drawPdfTextSectionTitle(pdf: PdfDocument, title: string): void {
   pdf.moveDown(0.25);
 }
 
-function drawPdfDeviceTextLine(pdf: PdfDocument, device: RackDevice): void {
-  ensurePdfTextSpace(pdf, 48);
-  const metadataParts = [`${devicePositionLabel(device)}`, `${device.heightU}U`, deviceFaceLabel(device), deviceMountLabel(device)];
-  if (device.hostname) {
-    metadataParts.push(`Hostname: ${device.hostname}`);
-  }
-  if (device.serialNumber) {
-    metadataParts.push(`Serial: ${device.serialNumber}`);
+function drawPdfInventoryGroupLabel(pdf: PdfDocument, title: string): void {
+  ensurePdfTextSpace(pdf, 24);
+  pdf.moveDown(0.35);
+  pdf.fillColor(pdfPalette.accentStrong).fontSize(11).text(title);
+  pdf.moveDown(0.15);
+}
+
+function drawPdfInventoryTableHeader(pdf: PdfDocument): void {
+  ensurePdfTextSpace(pdf, 24);
+  const x = 36;
+  const y = pdf.y;
+  const columns = [
+    { label: "Pos", width: 58 },
+    { label: "Face", width: 54 },
+    { label: "Mount", width: 124 },
+    { label: "Name", width: 146 },
+    { label: "Model", width: 152 },
+    { label: "Details", width: 190 }
+  ] as const;
+
+  let columnX = x;
+  columns.forEach((column) => {
+    pdf.save();
+    pdf.rect(columnX, y, column.width, 18).fill(pdfPalette.panelBackground);
+    pdf.rect(columnX, y, column.width, 18).lineWidth(0.6).strokeColor(pdfPalette.panelBorder).stroke();
+    pdf.restore();
+    pdf.fillColor(pdfPalette.textPrimary).fontSize(8.3).text(column.label, columnX + 4, y + 5, {
+      width: column.width - 8,
+      ellipsis: true
+    });
+    columnX += column.width;
+  });
+
+  pdf.y = y + 18;
+}
+
+function drawPdfInventoryRow(pdf: PdfDocument, device: RackDevice): void {
+  ensurePdfTextSpace(pdf, 20);
+  const x = 36;
+  const y = pdf.y;
+  const details = [
+    `${device.heightU}U`,
+    device.hostname ? `Host: ${device.hostname}` : null,
+    device.serialNumber ? `Serial: ${device.serialNumber}` : null,
+    device.notes ? `Notes: ${device.notes}` : null
+  ]
+    .filter(Boolean)
+    .join(" | ");
+  const values = [
+    devicePositionLabel(device),
+    deviceFaceLabel(device),
+    deviceMountLabel(device),
+    device.name,
+    `${device.manufacturer} ${device.model}`.trim(),
+    details
+  ];
+  const columns = [58, 54, 124, 146, 152, 190];
+
+  let columnX = x;
+  values.forEach((value, index) => {
+    const width = columns[index];
+    pdf.save();
+    pdf.rect(columnX, y, width, 20).fill("#ffffff");
+    pdf.rect(columnX, y, width, 20).lineWidth(0.5).strokeColor(pdfPalette.slotLine).stroke();
+    pdf.restore();
+    pdf.fillColor(index < 4 ? pdfPalette.textPrimary : pdfPalette.textSecondary).fontSize(8.1).text(value, columnX + 4, y + 5, {
+      width: width - 8,
+      ellipsis: true
+    });
+    columnX += width;
+  });
+
+  pdf.y = y + 20;
+}
+
+function drawPdfGroupedInventory(pdf: PdfDocument, detail: RackDetail): void {
+  const groups = groupDevicesForExport(installedDevices(detail));
+
+  if (groups.length === 0) {
+    pdf.fillColor(pdfPalette.textSecondary).fontSize(10).text("No installed devices documented.");
+    return;
   }
 
-  pdf.fillColor(pdfPalette.textPrimary).fontSize(11).text(device.name, { continued: false });
-  pdf.fillColor(pdfPalette.textSecondary).fontSize(9).text(`${device.manufacturer} ${device.model}`.trim());
-  pdf.text(metadataParts.join(" | "));
+  groups.forEach((group) => {
+    drawPdfInventoryGroupLabel(pdf, group.label);
+    drawPdfInventoryTableHeader(pdf);
 
-  if (device.notes) {
-    pdf.text(`Notes: ${device.notes}`);
-  }
+    group.devices.forEach((device) => {
+      if (pdf.y + 24 > pdf.page.height - 36) {
+        pdf.addPage(pdfPageOptions);
+        drawPdfPageBackground(pdf);
+        drawPdfHeader(pdf, detail, "AetherCab Device List", "Structured inventory list for this rack");
+        pdf.moveDown(4);
+        drawPdfInventoryGroupLabel(pdf, group.label);
+        drawPdfInventoryTableHeader(pdf);
+      }
 
-  pdf.moveDown(0.45);
+      drawPdfInventoryRow(pdf, device);
+    });
+  });
 }
 
 export async function buildExcelExport(detail: RackDetail): Promise<Buffer> {
@@ -619,14 +758,7 @@ export function buildPdfExport(detail: RackDetail): Promise<Buffer> {
     pdf.moveDown(4);
 
     drawPdfTextSectionTitle(pdf, "Installed Devices");
-    const devices = sortDevices(installedDevices(detail));
-    if (devices.length === 0) {
-      pdf.fillColor(pdfPalette.textSecondary).fontSize(10).text("No installed devices documented.");
-    } else {
-      devices.forEach((device) => {
-        drawPdfDeviceTextLine(pdf, device);
-      });
-    }
+    drawPdfGroupedInventory(pdf, detail);
 
     pdf.end();
   });

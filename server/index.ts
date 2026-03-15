@@ -1,7 +1,7 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import type { DeviceTemplateInput, RackCreateInput, RackDeviceInput } from "../shared/types.js";
+import type { DeviceTemplateInput, RackCreateInput, RackDeviceInput, RackUpdateInput } from "../shared/types.js";
 import { initializeDatabase } from "./db.js";
 import { buildExcelExport, buildPdfExport } from "./exporters.js";
 import {
@@ -13,6 +13,7 @@ import {
   getRack,
   listDeviceTemplates,
   listRacks,
+  updateRack,
   updateRackDevice
 } from "./repository.js";
 
@@ -60,6 +61,13 @@ async function bootstrap(): Promise<void> {
       }
 
       response.json(rack);
+    })
+  );
+
+  app.put(
+    "/api/racks/:rackId",
+    asyncRoute(async (request, response) => {
+      response.json(await updateRack(Number(request.params.rackId), request.body as RackUpdateInput));
     })
   );
 
@@ -157,7 +165,14 @@ async function bootstrap(): Promise<void> {
     const message = error instanceof Error ? error.message : "Unknown error";
     const lowerMessage = message.toLowerCase();
     const statusCode =
-      lowerMessage.includes("not found") ? 404 : lowerMessage.includes("overlap") || lowerMessage.includes("required") ? 400 : 500;
+      lowerMessage.includes("not found")
+        ? 404
+        : lowerMessage.includes("overlap") ||
+            lowerMessage.includes("required") ||
+            lowerMessage.includes("at least") ||
+            lowerMessage.includes("cannot")
+          ? 400
+          : 500;
 
     response.status(statusCode).json({ error: message });
   });

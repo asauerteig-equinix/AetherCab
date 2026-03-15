@@ -5,6 +5,7 @@ import type {
   RackDetail,
   RackDevice,
   RackDeviceInput,
+  RackUpdateInput,
   RackSummary
 } from "../shared/types";
 
@@ -36,6 +37,12 @@ export const api = {
   createRack(payload: RackCreateInput): Promise<RackSummary> {
     return request("/api/racks", {
       method: "POST",
+      body: JSON.stringify(payload)
+    });
+  },
+  updateRack(rackId: number, payload: RackUpdateInput): Promise<RackDetail> {
+    return request(`/api/racks/${rackId}`, {
+      method: "PUT",
       body: JSON.stringify(payload)
     });
   },

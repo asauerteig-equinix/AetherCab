@@ -91,3 +91,11 @@ export interface RackCreateInput {
   totalUnits: number;
   notes?: string | null;
 }
+
+export interface RackUpdateInput {
+  siteName: string;
+  roomName: string;
+  rackName: string;
+  totalUnits: number;
+  notes?: string | null;
+}

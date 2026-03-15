@@ -1,46 +1,62 @@
-import type { RackDetail } from "../../shared/types";
+import type { RackDetail, RackUpdateInput } from "../../shared/types";
 
 interface RackSwitcherProps {
   rack: RackDetail | null;
+  form: RackUpdateInput;
+  saving: boolean;
+  onFormChange(next: RackUpdateInput): void;
+  onSave(): void;
   onBackToOverview(): void;
 }
 
-export function RackSwitcher({ rack, onBackToOverview }: RackSwitcherProps) {
+export function RackSwitcher({ rack, form, saving, onFormChange, onSave, onBackToOverview }: RackSwitcherProps) {
   return (
-    <section className="panel audit-context-panel">
-      <div className="panel-header">
+    <section className="audit-summary">
+      <div className="audit-summary-header">
         <div>
           <p className="eyebrow">Active Audit</p>
-          <h2>{rack ? rack.name : "No audit open"}</h2>
+          <h2>{rack ? form.rackName || rack.name : "No audit open"}</h2>
         </div>
-        <button className="ghost-button" onClick={onBackToOverview} type="button">
-          Back to overview
-        </button>
+        <div className="audit-summary-actions">
+          <button className="primary-button" disabled={!rack || saving} onClick={onSave} type="button">
+            {saving ? "Saving..." : "Save audit"}
+          </button>
+          <button className="ghost-button" onClick={onBackToOverview} type="button">
+            Back to overview
+          </button>
+        </div>
       </div>
 
       {rack ? (
-        <div className="audit-context-grid">
-          <div className="overview-feature">
+        <div className="audit-summary-grid editable">
+          <label className="overview-feature audit-summary-card">
             <strong>Site</strong>
-            <span>{rack.siteName}</span>
-          </div>
-          <div className="overview-feature">
+            <input value={form.siteName} onChange={(event) => onFormChange({ ...form, siteName: event.target.value })} />
+          </label>
+          <label className="overview-feature audit-summary-card">
             <strong>Room</strong>
-            <span>{rack.roomName}</span>
-          </div>
-          <div className="overview-feature">
+            <input value={form.roomName} onChange={(event) => onFormChange({ ...form, roomName: event.target.value })} />
+          </label>
+          <label className="overview-feature audit-summary-card">
+            <strong>Rack Name</strong>
+            <input value={form.rackName} onChange={(event) => onFormChange({ ...form, rackName: event.target.value })} />
+          </label>
+          <label className="overview-feature audit-summary-card">
             <strong>Rack Height</strong>
-            <span>{rack.totalUnits}U</span>
-          </div>
-          <div className="overview-feature">
+            <input
+              min={1}
+              type="number"
+              value={form.totalUnits}
+              onChange={(event) => onFormChange({ ...form, totalUnits: Number(event.target.value) })}
+            />
+          </label>
+          <label className="overview-feature audit-summary-card full-width">
             <strong>Notes</strong>
-            <span>{rack.notes || "No notes yet."}</span>
-          </div>
+            <textarea rows={3} value={form.notes ?? ""} onChange={(event) => onFormChange({ ...form, notes: event.target.value })} />
+          </label>
         </div>
       ) : (
-        <div className="empty-state">
-          No audit open. Please select an audit from the overview or create a new one.
-        </div>
+        <div className="empty-state">No audit open. Please select an audit from the overview or create a new one.</div>
       )}
     </section>
   );
