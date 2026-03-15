@@ -31,6 +31,11 @@ export interface RackFaceCapacityStats {
   tone: RackFaceCapacityTone;
 }
 
+export interface RackCapacitySummary {
+  front: RackFaceCapacityStats;
+  rear: RackFaceCapacityStats;
+}
+
 const mountPositionSortOrder: Record<RackMountPosition, number> = {
   full: 0,
   "front-left-outer": 1,
@@ -114,11 +119,11 @@ export function getRackFaceCapacityTone(freePercent: number): RackFaceCapacityTo
     return "good";
   }
 
-  if (freePercent >= 45) {
+  if (freePercent >= 50) {
     return "medium";
   }
 
-  if (freePercent >= 20) {
+  if (freePercent >= 25) {
     return "warning";
   }
 
@@ -157,6 +162,13 @@ export function getRackFaceCapacityStats(rackUnits: number, devices: RackDevice[
     usedPercent,
     freePercent,
     tone: getRackFaceCapacityTone(freePercent)
+  };
+}
+
+export function getRackCapacitySummary(rackUnits: number, devices: RackDevice[]): RackCapacitySummary {
+  return {
+    front: getRackFaceCapacityStats(rackUnits, devices, "front"),
+    rear: getRackFaceCapacityStats(rackUnits, devices, "rear")
   };
 }
 

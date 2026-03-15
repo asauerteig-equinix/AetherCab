@@ -1,7 +1,15 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { formatAuditDateTime, getAuditStatusLabel } from "../shared/audits.js";
-import { getEndUnit, getMountPositionFace, getRackMountPositionLabel, isVerticalPduMountPosition } from "../shared/rack.js";
+import {
+  getEndUnit,
+  getMountPositionFace,
+  getRackCapacitySummary,
+  getRackMountPositionLabel,
+  isVerticalPduMountPosition,
+  type RackFaceCapacityStats,
+  type RackFaceCapacityTone
+} from "../shared/rack.js";
 import type { AuditExportDetail, DeviceIconKey, RackDetail, RackDevice, RackFace, RackMountPosition } from "../shared/types.js";
 
 type PdfDocument = InstanceType<typeof PDFDocument>;
@@ -18,7 +26,12 @@ const excelPalette = {
   textPrimary: "FF18232D",
   textSecondary: "FF546372",
   deviceFill: "FFDDE6ED",
-  deviceBorder: "FF96A8B7"
+  deviceBorder: "FF96A8B7",
+  capacityTrack: "FFE7EDF2",
+  capacityGood: "FF3BA55D",
+  capacityMedium: "FF86B94F",
+  capacityWarning: "FFDE9646",
+  capacityCritical: "FFD45A4C"
 } as const;
 
 const pdfPalette = {
@@ -33,7 +46,12 @@ const pdfPalette = {
   textPrimary: "#18232d",
   textSecondary: "#546372",
   deviceFill: "#dde6ed",
-  deviceBorder: "#96a8b7"
+  deviceBorder: "#96a8b7",
+  capacityTrack: "#e7edf2",
+  capacityGood: "#3ba55d",
+  capacityMedium: "#86b94f",
+  capacityWarning: "#de9646",
+  capacityCritical: "#d45a4c"
 } as const;
 
 const pdfPageOptions = {
@@ -319,6 +337,73 @@ function styleExcelMeta(cell: ExcelJS.Cell): void {
   cell.alignment = { vertical: "middle", horizontal: "left" };
 }
 
+function getExcelCapacityFill(tone: RackFaceCapacityTone): string {
+  switch (tone) {
+    case "good":
+      return excelPalette.capacityGood;
+    case "medium":
+      return excelPalette.capacityMedium;
+    case "warning":
+      return excelPalette.capacityWarning;
+    default:
+      return excelPalette.capacityCritical;
+  }
+}
+
+function getPdfCapacityFill(tone: RackFaceCapacityTone): string {
+  switch (tone) {
+    case "good":
+      return pdfPalette.capacityGood;
+    case "medium":
+      return pdfPalette.capacityMedium;
+    case "warning":
+      return pdfPalette.capacityWarning;
+    default:
+      return pdfPalette.capacityCritical;
+  }
+}
+
+function capacityLabel(stats: RackFaceCapacityStats): string {
+  return `${faceLabel(stats.face)} free ${stats.freePercent}%`;
+}
+
+function capacityBarSegments(freePercent: number, segmentCount: number): number {
+  return Math.max(0, Math.min(segmentCount, Math.ceil((freePercent / 100) * segmentCount)));
+}
+
+function drawExcelCapacityBar(
+  worksheet: ExcelJS.Worksheet,
+  rowIndex: number,
+  labelStartColumn: number,
+  labelEndColumn: number,
+  barStartColumn: number,
+  barEndColumn: number,
+  stats: RackFaceCapacityStats
+): void {
+  worksheet.mergeCells(rowIndex, labelStartColumn, rowIndex, labelEndColumn);
+  const labelCell = worksheet.getCell(rowIndex, labelStartColumn);
+  labelCell.value = capacityLabel(stats);
+  labelCell.font = { name: "Bahnschrift", size: 9, bold: true, color: { argb: excelPalette.textPrimary } };
+  labelCell.alignment = { vertical: "middle", horizontal: "left" };
+  labelCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFFF" } };
+  labelCell.border = createThinBorder(excelPalette.slotLine);
+
+  const segmentCount = barEndColumn - barStartColumn + 1;
+  const filledSegments = capacityBarSegments(stats.freePercent, segmentCount);
+  for (let columnIndex = barStartColumn; columnIndex <= barEndColumn; columnIndex += 1) {
+    const cell = worksheet.getCell(rowIndex, columnIndex);
+    cell.value = "";
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: {
+        argb: columnIndex - barStartColumn < filledSegments ? getExcelCapacityFill(stats.tone) : excelPalette.capacityTrack
+      }
+    };
+    cell.border = createThinBorder(excelPalette.slotLine);
+  }
+}
+
 function columnHeaderLabel(column: Partial<ExcelJS.Column>): string {
   if (typeof column.header === "string") {
     return column.header;
@@ -501,6 +586,7 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, audit: AuditExportDetai
   });
 
   audit.racks.forEach((rack) => {
+    const capacitySummary = getRackCapacitySummary(rack.totalUnits, rack.devices);
     const rackRow = worksheet.addRow({
       site: "",
       room: "",
@@ -514,6 +600,11 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, audit: AuditExportDetai
     rackCell.alignment = { vertical: "middle", horizontal: "left" };
     rackCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: excelPalette.panelBackground } };
     rackCell.border = createThinBorder(excelPalette.panelBorder);
+
+    const capacityRow = worksheet.addRow([]);
+    capacityRow.height = 18;
+    drawExcelCapacityBar(worksheet, capacityRow.number, 1, 2, 3, 8, capacitySummary.front);
+    drawExcelCapacityBar(worksheet, capacityRow.number, 9, 10, 11, 16, capacitySummary.rear);
 
     const rackDevices = installedDevices(rack);
     const groups = groupDevicesForExport(rackDevices);
@@ -593,6 +684,7 @@ function buildRackViewSheet(workbook: ExcelJS.Workbook, audit: AuditExportDetail
   const worksheet = workbook.addWorksheet(safeSheetName(`Rack ${rack.name}`, usedNames), {
     properties: { tabColor: { argb: excelPalette.accentStrong } }
   });
+  const capacitySummary = getRackCapacitySummary(rack.totalUnits, rack.devices);
 
   worksheet.views = [{ showGridLines: false }];
   worksheet.properties.defaultRowHeight = 22;
@@ -608,14 +700,43 @@ function buildRackViewSheet(workbook: ExcelJS.Workbook, audit: AuditExportDetail
   worksheet.getCell("A3").value = audit.notes ? `Notes: ${audit.notes}` : "Notes: -";
   styleExcelMeta(worksheet.getCell("A3"));
 
-  drawExcelRackFace(worksheet, rack, "front", 1, 5);
-  drawExcelRackFace(worksheet, rack, "rear", 10, 5);
+  worksheet.getRow(4).height = 18;
+  drawExcelCapacityBar(worksheet, 4, 1, 2, 3, 9, capacitySummary.front);
+  drawExcelCapacityBar(worksheet, 4, 10, 11, 12, 18, capacitySummary.rear);
+
+  drawExcelRackFace(worksheet, rack, "front", 1, 6);
+  drawExcelRackFace(worksheet, rack, "rear", 10, 6);
 }
 
 function drawPdfPageBackground(pdf: PdfDocument): void {
   pdf.save();
   pdf.rect(0, 0, pdf.page.width, pdf.page.height).fill(pdfPalette.pageBackground);
   pdf.restore();
+}
+
+function drawPdfCapacityBar(pdf: PdfDocument, x: number, y: number, width: number, stats: RackFaceCapacityStats): void {
+  const labelWidth = 84;
+  const valueWidth = 34;
+  const barGap = 10;
+  const barWidth = Math.max(52, width - labelWidth - valueWidth - barGap * 2);
+  const barHeight = 10;
+  const fillWidth = Math.max(0, Math.min(barWidth, Math.round((stats.freePercent / 100) * barWidth)));
+
+  pdf.fillColor(pdfPalette.textSecondary).fontSize(8.2).text(faceLabel(stats.face), x, y + 1, {
+    width: labelWidth
+  });
+
+  pdf.save();
+  pdf.roundedRect(x + labelWidth + barGap, y, barWidth, barHeight, 999).fill(pdfPalette.capacityTrack);
+  if (fillWidth > 0) {
+    pdf.roundedRect(x + labelWidth + barGap, y, fillWidth, barHeight, 999).fill(getPdfCapacityFill(stats.tone));
+  }
+  pdf.restore();
+
+  pdf.fillColor(pdfPalette.textPrimary).fontSize(8.6).text(`${stats.freePercent}% free`, x + labelWidth + barGap + barWidth + barGap, y, {
+    width: valueWidth,
+    align: "right"
+  });
 }
 
 function drawPdfHeader(pdf: PdfDocument, audit: AuditExportDetail, title: string, subtitle: string, rack?: RackDetail): void {
@@ -657,6 +778,14 @@ function drawPdfHeader(pdf: PdfDocument, audit: AuditExportDetail, title: string
     width: headerWidth,
     ellipsis: true
   });
+
+  if (rack) {
+    const capacitySummary = getRackCapacitySummary(rack.totalUnits, rack.devices);
+    drawPdfCapacityBar(pdf, headerX, 65, (headerWidth - 14) / 2, capacitySummary.front);
+    drawPdfCapacityBar(pdf, headerX + (headerWidth / 2) + 7, 65, (headerWidth - 14) / 2, capacitySummary.rear);
+    pdf.y = 84;
+    return;
+  }
 
   pdf.y = 72;
 }

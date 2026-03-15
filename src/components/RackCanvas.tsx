@@ -4,6 +4,7 @@ import {
   getAnchoredStartUnit,
   getEndUnit,
   getMountPositionFace,
+  getRackCapacitySummary,
   getRackMountPositionLabel,
   getRackMountPositionShortLabel,
   getVerticalPduMountPositionsForFace,
@@ -30,6 +31,10 @@ interface PreviewPlacement {
 }
 
 const slotHeight = 28;
+
+function getCapacityClassName(tone: "good" | "medium" | "warning" | "critical"): string {
+  return `rack-capacity-meter ${tone}`;
+}
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(Math.max(value, minimum), maximum);
@@ -200,6 +205,7 @@ export function RackCanvas({
   );
   const facePduLanePositions = getVerticalPduMountPositionsForFace(activeRackFace);
   const reservePduColumns = pduGuideVisible || placedDevices.some((device) => isVerticalPduMountPosition(device.mountPosition));
+  const capacitySummary = getRackCapacitySummary(rack.totalUnits, rack.devices);
 
   useEffect(() => {
     const rackUnits = rackUnitsRef.current;
@@ -383,9 +389,22 @@ export function RackCanvas({
   return (
     <section className="panel rack-panel">
       <div className="panel-header">
-        <div>
+        <div className="rack-panel-heading">
           <p className="eyebrow">Rack Editor</p>
           <h2>Rack View</h2>
+          <div className="rack-capacity-summary" aria-label="Available rack space by side">
+            {[capacitySummary.front, capacitySummary.rear].map((stats) => (
+              <div className="rack-capacity-card" key={stats.face}>
+                <div className="rack-capacity-copy">
+                  <span>{stats.face === "front" ? "Front free" : "Rear free"}</span>
+                  <strong>{`${stats.freePercent}%`}</strong>
+                </div>
+                <div className={getCapacityClassName(stats.tone)}>
+                  <span style={{ width: `${stats.freePercent}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
         <div className="rack-toolbar">
           <span className="toolbar-label">View</span>
