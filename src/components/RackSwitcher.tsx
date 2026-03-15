@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { formatAuditDateTime, getAuditStatusLabel } from "../../shared/audits";
 import type { AuditDetail, AuditUpdateInput } from "../../shared/types";
 
 interface RackSwitcherProps {
@@ -14,6 +15,8 @@ function toAuditForm(audit: AuditDetail): AuditUpdateInput {
     siteName: audit.siteName,
     roomName: audit.roomName,
     auditName: audit.name,
+    salesOrder: audit.salesOrder ?? "",
+    status: audit.status,
     notes: audit.notes ?? ""
   };
 }
@@ -55,6 +58,9 @@ export function RackSwitcher({ audit, form, saving, onFormChange, onSave }: Rack
             <p className="audit-summary-inline">
               <strong>{audit.siteName}</strong>
               <span>{audit.roomName}</span>
+              <span>{`SO ${audit.salesOrder ?? "-"}`}</span>
+              <span>{getAuditStatusLabel(audit.status)}</span>
+              <span>{formatAuditDateTime(audit.createdAt)}</span>
               <span>
                 {audit.rackCount} rack{audit.rackCount === 1 ? "" : "s"}
               </span>
@@ -94,8 +100,12 @@ export function RackSwitcher({ audit, form, saving, onFormChange, onSave }: Rack
 
             <div className="audit-edit-grid clean">
               <label className="audit-edit-field plain">
-                <span>Audit Name</span>
+                <span>Kundenname / Systemname</span>
                 <input value={form.auditName} onChange={(event) => onFormChange({ ...form, auditName: event.target.value })} />
+              </label>
+              <label className="audit-edit-field plain">
+                <span>Sales Order</span>
+                <input value={form.salesOrder} onChange={(event) => onFormChange({ ...form, salesOrder: event.target.value })} />
               </label>
               <label className="audit-edit-field plain">
                 <span>Site</span>
@@ -104,6 +114,17 @@ export function RackSwitcher({ audit, form, saving, onFormChange, onSave }: Rack
               <label className="audit-edit-field plain">
                 <span>Room</span>
                 <input value={form.roomName} onChange={(event) => onFormChange({ ...form, roomName: event.target.value })} />
+              </label>
+              <label className="audit-edit-field plain">
+                <span>Status</span>
+                <select
+                  value={form.status}
+                  onChange={(event) => onFormChange({ ...form, status: event.target.value as AuditUpdateInput["status"] })}
+                >
+                  <option value="created">Erstellt</option>
+                  <option value="in-progress">In Bearbeitung</option>
+                  <option value="completed">Abgeschlossen</option>
+                </select>
               </label>
               <label className="audit-edit-field plain full-width">
                 <span>Notes</span>

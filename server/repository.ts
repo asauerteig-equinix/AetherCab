@@ -33,6 +33,9 @@ interface AuditSummaryRow {
   room_name: string;
   site_id: number;
   site_name: string;
+  sales_order: string | null;
+  status: AuditSummary["status"];
+  created_at: string;
   notes: string | null;
   rack_count: string | number;
 }
@@ -50,6 +53,9 @@ interface RackDetailRow extends RackSummaryRow {
   room_name: string;
   site_id: number;
   site_name: string;
+  sales_order: string | null;
+  status: AuditSummary["status"];
+  created_at: string;
   audit_notes: string | null;
 }
 
@@ -95,6 +101,9 @@ function mapAuditSummary(row: AuditSummaryRow): AuditSummary {
     roomName: row.room_name,
     siteId: row.site_id,
     siteName: row.site_name,
+    salesOrder: row.sales_order,
+    status: row.status,
+    createdAt: row.created_at,
     notes: row.notes,
     rackCount: Number(row.rack_count)
   };
@@ -239,6 +248,9 @@ async function getRackBase(rackId: number): Promise<RackDetailRow | null> {
         racks.name,
         racks.total_units,
         audits.name AS audit_name,
+        audits.sales_order,
+        audits.status,
+        audits.created_at,
         audits.notes AS audit_notes,
         rooms.id AS room_id,
         rooms.name AS room_name,
@@ -279,6 +291,9 @@ export async function listAudits(): Promise<AuditSummary[]> {
       SELECT
         audits.id,
         audits.name,
+        audits.sales_order,
+        audits.status,
+        audits.created_at,
         audits.notes,
         rooms.id AS room_id,
         rooms.name AS room_name,
@@ -303,6 +318,9 @@ export async function getAudit(auditId: number): Promise<AuditDetail | null> {
       SELECT
         audits.id,
         audits.name,
+        audits.sales_order,
+        audits.status,
+        audits.created_at,
         audits.notes,
         rooms.id AS room_id,
         rooms.name AS room_name,
@@ -389,10 +407,11 @@ export async function createAudit(input: AuditCreateInput): Promise<AuditDetail>
   const siteName = input.siteName.trim();
   const roomName = input.roomName.trim();
   const auditName = input.auditName.trim();
+  const salesOrder = input.salesOrder.trim();
   const initialRackName = input.initialRackName.trim();
 
-  if (!siteName || !roomName || !auditName || !initialRackName) {
-    throw new Error("Site, room, audit name and initial rack name are required.");
+  if (!siteName || !roomName || !auditName || !salesOrder || !initialRackName) {
+    throw new Error("Site, room, customer/system name, sales order and initial rack name are required.");
   }
 
   if (input.initialRackUnits < 1) {
@@ -404,11 +423,11 @@ export async function createAudit(input: AuditCreateInput): Promise<AuditDetail>
 
   const auditResult = await pool.query<{ id: number }>(
     `
-      INSERT INTO audits (room_id, name, notes)
-      VALUES ($1, $2, $3)
+      INSERT INTO audits (room_id, name, sales_order, status, notes)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING id
     `,
-    [roomId, auditName, input.notes?.trim() || null]
+    [roomId, auditName, salesOrder, input.status, input.notes?.trim() || null]
   );
   const auditId = auditResult.rows[0].id;
 
@@ -432,9 +451,10 @@ export async function updateAudit(auditId: number, input: AuditUpdateInput): Pro
   const siteName = input.siteName.trim();
   const roomName = input.roomName.trim();
   const auditName = input.auditName.trim();
+  const salesOrder = input.salesOrder.trim();
 
-  if (!siteName || !roomName || !auditName) {
-    throw new Error("Site, room and audit name are required.");
+  if (!siteName || !roomName || !auditName || !salesOrder) {
+    throw new Error("Site, room, customer/system name and sales order are required.");
   }
 
   const existingAudit = await getAudit(auditId);
@@ -448,10 +468,10 @@ export async function updateAudit(auditId: number, input: AuditUpdateInput): Pro
   await pool.query(
     `
       UPDATE audits
-      SET room_id = $1, name = $2, notes = $3
-      WHERE id = $4
+      SET room_id = $1, name = $2, sales_order = $3, status = $4, notes = $5
+      WHERE id = $6
     `,
-    [roomId, auditName, input.notes?.trim() || null, auditId]
+    [roomId, auditName, salesOrder, input.status, input.notes?.trim() || null, auditId]
   );
 
   await pool.query("UPDATE racks SET room_id = $1 WHERE audit_id = $2", [roomId, auditId]);

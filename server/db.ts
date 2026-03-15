@@ -48,7 +48,10 @@ export async function initializeDatabase(): Promise<void> {
       id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
       room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
+      sales_order TEXT,
+      status TEXT NOT NULL DEFAULT 'created' CHECK (status IN ('created', 'in-progress', 'completed')),
       notes TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(room_id, name)
     );
 
@@ -96,6 +99,38 @@ export async function initializeDatabase(): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+  `);
+
+  await pool.query(`
+    ALTER TABLE audits
+    ADD COLUMN IF NOT EXISTS sales_order TEXT
+  `);
+
+  await pool.query(`
+    ALTER TABLE audits
+    ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'created'
+  `);
+
+  await pool.query(`
+    ALTER TABLE audits
+    DROP CONSTRAINT IF EXISTS audits_status_check
+  `);
+
+  await pool.query(`
+    ALTER TABLE audits
+    ADD CONSTRAINT audits_status_check
+    CHECK (status IN ('created', 'in-progress', 'completed'))
+  `);
+
+  await pool.query(`
+    ALTER TABLE audits
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  `);
+
+  await pool.query(`
+    UPDATE audits
+    SET status = 'created'
+    WHERE status IS NULL OR status = ''
   `);
 
   await pool.query(`
@@ -314,14 +349,14 @@ async function seedDatabase(): Promise<void> {
   const roomId = roomResult.rows[0].id;
 
   const auditResult = await pool.query<{ id: number }>(
-    "INSERT INTO audits (room_id, name, notes) VALUES ($1, $2, $3) RETURNING id",
-    [roomId, "Audit A1", "Seed audit for the initial editor"]
+    "INSERT INTO audits (room_id, name, sales_order, status, notes) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+    [roomId, "Demo Customer / System", "SO-10001", "created", "Seed audit for the initial editor"]
   );
   const auditId = auditResult.rows[0].id;
 
   const rackResult = await pool.query<{ id: number }>(
     "INSERT INTO racks (audit_id, room_id, name, total_units, notes) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-    [auditId, roomId, "Rack A1", 42, null]
+    [auditId, roomId, "Rack A1", 47, null]
   );
   const rackId = rackResult.rows[0].id;
 

@@ -234,11 +234,11 @@ async function bootstrap(): Promise<void> {
 
   const port = Number(process.env.PORT ?? 5500);
   app.listen(port, () => {
-    console.log(`AetherCab server listening on http://localhost:${port}`);
+    console.log(`Aether C.A.D server listening on http://localhost:${port}`);
   });
 }
 
 void bootstrap().catch((error) => {
-  console.error("Failed to start AetherCab", error);
+  console.error("Failed to start Aether C.A.D", error);
   process.exit(1);
 });

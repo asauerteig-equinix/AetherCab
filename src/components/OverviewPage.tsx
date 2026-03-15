@@ -1,4 +1,5 @@
 import type { AuditCreateInput, AuditSummary } from "../../shared/types";
+import { formatAuditDateTime, getAuditStatusLabel } from "../../shared/audits";
 
 interface OverviewPageProps {
   audits: AuditSummary[];
@@ -27,7 +28,9 @@ export function OverviewPage({
       return true;
     }
 
-    return [audit.name, audit.siteName, audit.roomName, audit.notes ?? ""].some((value) => value.toLowerCase().includes(query));
+    return [audit.name, audit.siteName, audit.roomName, audit.salesOrder ?? "", audit.notes ?? ""].some((value) =>
+      value.toLowerCase().includes(query)
+    );
   });
 
   return (
@@ -58,7 +61,7 @@ export function OverviewPage({
 
         <label className="search-field">
           Search
-          <input value={searchValue} onChange={(event) => onSearchChange(event.target.value)} placeholder="Audit, site, or room" />
+          <input value={searchValue} onChange={(event) => onSearchChange(event.target.value)} placeholder="Kunde, Sales Order, Site oder Room" />
         </label>
 
         <div className="overview-audit-list">
@@ -75,6 +78,9 @@ export function OverviewPage({
                   <span>
                     {audit.rackCount} rack{audit.rackCount === 1 ? "" : "s"}
                   </span>
+                  <span>{`Sales Order: ${audit.salesOrder ?? "-"}`}</span>
+                  <span>{`Status: ${getAuditStatusLabel(audit.status)}`}</span>
+                  <span>{formatAuditDateTime(audit.createdAt)}</span>
                   <span>{audit.notes || "No notes yet."}</span>
                 </div>
                 <button className="primary-button" onClick={() => onOpenAudit(audit.id)} type="button">
@@ -111,11 +117,29 @@ export function OverviewPage({
             />
           </label>
           <label>
-            Audit Name
+            Kundenname / Systemname
             <input
               value={createForm.auditName}
               onChange={(event) => onCreateFormChange({ ...createForm, auditName: event.target.value })}
             />
+          </label>
+          <label>
+            Sales Order
+            <input
+              value={createForm.salesOrder}
+              onChange={(event) => onCreateFormChange({ ...createForm, salesOrder: event.target.value })}
+            />
+          </label>
+          <label>
+            Status
+            <select
+              value={createForm.status}
+              onChange={(event) => onCreateFormChange({ ...createForm, status: event.target.value as AuditCreateInput["status"] })}
+            >
+              <option value="created">Erstellt</option>
+              <option value="in-progress">In Bearbeitung</option>
+              <option value="completed">Abgeschlossen</option>
+            </select>
           </label>
           <label>
             First Rack

@@ -87,12 +87,24 @@ a {
 }
 
 .app-brand {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
   justify-self: center;
+  color: var(--accent-strong);
+}
+
+.app-brand strong {
   font-size: 1.05rem;
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--accent-strong);
+}
+
+.app-brand span {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
 }
 
 .nav-link,

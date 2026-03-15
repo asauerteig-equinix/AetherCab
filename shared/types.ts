@@ -1,6 +1,7 @@
 export type PlacementType = "rack" | "spare";
 export type RackFace = "front" | "rear";
 export type TemplateMountStyle = "full" | "vertical-pdu";
+export type AuditStatus = "created" | "in-progress" | "completed";
 export type DeviceIconKey =
   | "generic-device"
   | "server"
@@ -37,6 +38,9 @@ export interface AuditSummary {
   roomName: string;
   siteId: number;
   siteName: string;
+  salesOrder: string | null;
+  status: AuditStatus;
+  createdAt: string;
   notes: string | null;
   rackCount: number;
 }
@@ -128,6 +132,8 @@ export interface AuditCreateInput {
   siteName: string;
   roomName: string;
   auditName: string;
+  salesOrder: string;
+  status: AuditStatus;
   initialRackName: string;
   initialRackUnits: number;
   notes?: string | null;
@@ -142,6 +148,8 @@ export interface AuditUpdateInput {
   siteName: string;
   roomName: string;
   auditName: string;
+  salesOrder: string;
+  status: AuditStatus;
   notes?: string | null;
 }
 

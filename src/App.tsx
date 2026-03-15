@@ -30,8 +30,10 @@ const initialAuditCreateForm: AuditCreateInput = {
   siteName: "",
   roomName: "",
   auditName: "",
+  salesOrder: "",
+  status: "created",
   initialRackName: "",
-  initialRackUnits: 42,
+  initialRackUnits: 47,
   notes: ""
 };
 
@@ -39,17 +41,19 @@ const initialAuditUpdateForm: AuditUpdateInput = {
   siteName: "",
   roomName: "",
   auditName: "",
+  salesOrder: "",
+  status: "created",
   notes: ""
 };
 
 const initialRackCreateForm: RackCreateInput = {
   rackName: "",
-  totalUnits: 42
+  totalUnits: 47
 };
 
 const initialRackUpdateForm: RackUpdateInput = {
   rackName: "",
-  totalUnits: 42
+  totalUnits: 47
 };
 
 const initialTemplateForm: DeviceTemplateInput = {
@@ -68,6 +72,8 @@ function toAuditUpdateForm(audit: AuditDetail): AuditUpdateInput {
     siteName: audit.siteName,
     roomName: audit.roomName,
     auditName: audit.name,
+    salesOrder: audit.salesOrder ?? "",
+    status: audit.status,
     notes: audit.notes ?? ""
   };
 }
@@ -773,7 +779,10 @@ export default function App() {
             Admin
           </button>
         </div>
-        <div className="app-brand">AetherCab</div>
+        <div className="app-brand">
+          <strong>Aether C.A.D</strong>
+          <span>Customer Audit Documentation</span>
+        </div>
         <div aria-hidden="true" className="app-nav-spacer" />
       </nav>
 

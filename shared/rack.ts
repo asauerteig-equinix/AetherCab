@@ -15,6 +15,21 @@ export const rearVerticalPduMountPositions: RackMountPosition[] = [
 ];
 
 export const verticalPduMountPositions: RackMountPosition[] = [...frontVerticalPduMountPositions, ...rearVerticalPduMountPositions];
+export const verticalPduLaneCapacityWeight = 0.1;
+export const fullRackFaceCapacityWeight = 1;
+export const verticalPduLaneCountPerFace = 4;
+
+export type RackFaceCapacityTone = "good" | "medium" | "warning" | "critical";
+
+export interface RackFaceCapacityStats {
+  face: RackFace;
+  totalCapacity: number;
+  usedCapacity: number;
+  freeCapacity: number;
+  usedPercent: number;
+  freePercent: number;
+  tone: RackFaceCapacityTone;
+}
 
 const mountPositionSortOrder: Record<RackMountPosition, number> = {
   full: 0,
@@ -92,6 +107,57 @@ export function getRackMountPositionShortLabel(mountPosition: RackMountPosition)
 
 export function getEndUnit(startUnit: number, heightU: number): number {
   return startUnit + heightU - 1;
+}
+
+export function getRackFaceCapacityTone(freePercent: number): RackFaceCapacityTone {
+  if (freePercent >= 70) {
+    return "good";
+  }
+
+  if (freePercent >= 45) {
+    return "medium";
+  }
+
+  if (freePercent >= 20) {
+    return "warning";
+  }
+
+  return "critical";
+}
+
+export function getRackFaceCapacityStats(rackUnits: number, devices: RackDevice[], face: RackFace): RackFaceCapacityStats {
+  const totalCapacity = rackUnits * (fullRackFaceCapacityWeight + verticalPduLaneCountPerFace * verticalPduLaneCapacityWeight);
+
+  const usedCapacity = devices.reduce((sum, device) => {
+    if (device.placementType !== "rack" || device.startUnit === null) {
+      return sum;
+    }
+
+    if (isVerticalPduMountPosition(device.mountPosition)) {
+      return getMountPositionFace(device.mountPosition) === face ? sum + device.heightU * verticalPduLaneCapacityWeight : sum;
+    }
+
+    if (device.blocksBothFaces || device.rackFace === face) {
+      return sum + device.heightU * fullRackFaceCapacityWeight;
+    }
+
+    return sum;
+  }, 0);
+
+  const clampedUsedCapacity = Math.min(totalCapacity, Math.max(0, usedCapacity));
+  const freeCapacity = Math.max(0, totalCapacity - clampedUsedCapacity);
+  const freePercent = Math.max(0, Math.min(100, Math.floor((freeCapacity / totalCapacity) * 100)));
+  const usedPercent = Math.max(0, Math.min(100, 100 - freePercent));
+
+  return {
+    face,
+    totalCapacity,
+    usedCapacity: clampedUsedCapacity,
+    freeCapacity,
+    usedPercent,
+    freePercent,
+    tone: getRackFaceCapacityTone(freePercent)
+  };
 }
 
 export function validateRackPlacement(

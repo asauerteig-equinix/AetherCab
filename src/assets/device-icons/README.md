@@ -1,4 +1,4 @@
-Device icon drafts for AetherCab.
+Device icon drafts for Aether C.A.D.
 
 Files:
 - `generic-device.svg`

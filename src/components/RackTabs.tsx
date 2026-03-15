@@ -17,7 +17,7 @@ interface RackTabsProps {
 
 const defaultRackCreateForm: RackCreateInput = {
   rackName: "",
-  totalUnits: 42
+  totalUnits: 47
 };
 
 export function RackTabs({

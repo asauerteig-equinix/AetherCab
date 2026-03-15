@@ -1,5 +1,6 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
+import { formatAuditDateTime, getAuditStatusLabel } from "../shared/audits.js";
 import { getEndUnit, getMountPositionFace, getRackMountPositionLabel, isVerticalPduMountPosition } from "../shared/rack.js";
 import type { AuditExportDetail, DeviceIconKey, RackDetail, RackDevice, RackFace, RackMountPosition } from "../shared/types.js";
 
@@ -40,6 +41,9 @@ const pdfPageOptions = {
   size: "A4",
   layout: "landscape"
 } as const;
+
+const appBrandName = "Aether C.A.D";
+const appBrandSlogan = "Customer Audit Documentation";
 
 function drawPdfDeviceIcon(pdf: PdfDocument, iconKey: DeviceIconKey | null | undefined, x: number, y: number, size: number): void {
   const key = iconKey ?? "generic-device";
@@ -473,13 +477,13 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, audit: AuditExportDetai
 
   worksheet.mergeCells("A1:P1");
   const titleCell = worksheet.getCell("A1");
-  titleCell.value = "AetherCab Inventory Export";
+  titleCell.value = `${appBrandName} Inventory Export`;
   titleCell.font = { name: "Bahnschrift", size: 16, bold: true, color: { argb: excelPalette.textPrimary } };
   titleCell.alignment = { vertical: "middle", horizontal: "left" };
 
   worksheet.mergeCells("A2:P2");
   const metaCell = worksheet.getCell("A2");
-  metaCell.value = `${audit.siteName} | ${audit.roomName} | ${audit.name} | ${audit.rackCount} rack${audit.rackCount === 1 ? "" : "s"}`;
+  metaCell.value = `${audit.siteName} | ${audit.roomName} | ${audit.name} | SO: ${audit.salesOrder ?? "-"} | ${getAuditStatusLabel(audit.status)} | ${formatAuditDateTime(audit.createdAt)} | ${audit.rackCount} rack${audit.rackCount === 1 ? "" : "s"}`;
   styleExcelMeta(metaCell);
 
   worksheet.mergeCells("A3:P3");
@@ -505,7 +509,7 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, audit: AuditExportDetai
     });
     worksheet.mergeCells(`A${rackRow.number}:P${rackRow.number}`);
     const rackCell = worksheet.getCell(`A${rackRow.number}`);
-    rackCell.value = `Rack: ${rack.name} (${rack.totalUnits}U)`;
+    rackCell.value = `Rack: ${rack.name} (${rack.totalUnits}U) | SO: ${audit.salesOrder ?? "-"} | ${getAuditStatusLabel(audit.status)}`;
     rackCell.font = { name: "Bahnschrift", size: 10, bold: true, color: { argb: excelPalette.accentStrong } };
     rackCell.alignment = { vertical: "middle", horizontal: "left" };
     rackCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: excelPalette.panelBackground } };
@@ -594,10 +598,10 @@ function buildRackViewSheet(workbook: ExcelJS.Workbook, audit: AuditExportDetail
   worksheet.properties.defaultRowHeight = 22;
 
   worksheet.mergeCells("A1:R1");
-  styleExcelTitle(worksheet.getCell("A1"), "AetherCab Rack View");
+  styleExcelTitle(worksheet.getCell("A1"), `${appBrandName} Rack View`);
 
   worksheet.mergeCells("A2:R2");
-  worksheet.getCell("A2").value = `${audit.siteName} | ${audit.roomName} | ${audit.name} | ${rack.name} | ${rack.totalUnits}U`;
+  worksheet.getCell("A2").value = `${audit.siteName} | ${audit.roomName} | ${audit.name} | SO: ${audit.salesOrder ?? "-"} | ${getAuditStatusLabel(audit.status)} | ${formatAuditDateTime(audit.createdAt)} | ${rack.name} | ${rack.totalUnits}U`;
   styleExcelMeta(worksheet.getCell("A2"));
 
   worksheet.mergeCells("A3:R3");
@@ -618,8 +622,25 @@ function drawPdfHeader(pdf: PdfDocument, audit: AuditExportDetail, title: string
   const headerX = 36;
   const headerWidth = pdf.page.width - 72;
   const metaParts = rack
-    ? [audit.siteName, audit.roomName, audit.name, rack.name, `${rack.totalUnits}U`]
-    : [audit.siteName, audit.roomName, audit.name, `${audit.rackCount} rack${audit.rackCount === 1 ? "" : "s"}`];
+    ? [
+        audit.siteName,
+        audit.roomName,
+        audit.name,
+        `SO: ${audit.salesOrder ?? "-"}`,
+        getAuditStatusLabel(audit.status),
+        formatAuditDateTime(audit.createdAt),
+        rack.name,
+        `${rack.totalUnits}U`
+      ]
+    : [
+        audit.siteName,
+        audit.roomName,
+        audit.name,
+        `SO: ${audit.salesOrder ?? "-"}`,
+        getAuditStatusLabel(audit.status),
+        formatAuditDateTime(audit.createdAt),
+        `${audit.rackCount} rack${audit.rackCount === 1 ? "" : "s"}`
+      ];
 
   if (audit.notes) {
     metaParts.push(`Notes: ${audit.notes}`);
@@ -958,8 +979,8 @@ function startPdfInventoryPage(pdf: PdfDocument, audit: AuditExportDetail, rack:
   drawPdfHeader(
     pdf,
     audit,
-    "AetherCab Device List",
-    continuation ? `Structured inventory list continued for ${rack.name}` : "Structured inventory list",
+    `${appBrandName} Device List`,
+    continuation ? `${appBrandSlogan} | continued for ${rack.name}` : appBrandSlogan,
     rack
   );
 }
@@ -996,7 +1017,7 @@ export async function buildExcelExport(audit: AuditExportDetail): Promise<Buffer
   const workbook = new ExcelJS.Workbook();
   const usedSheetNames = new Set<string>(["Inventory List"]);
 
-  workbook.creator = "AetherCab";
+  workbook.creator = appBrandName;
   workbook.created = new Date();
   workbook.modified = new Date();
 
@@ -1033,7 +1054,7 @@ export function buildPdfExport(audit: AuditExportDetail): Promise<Buffer> {
       }
 
       drawPdfPageBackground(pdf);
-      drawPdfHeader(pdf, audit, "AetherCab Rack View", "Visual rack documentation", rack);
+      drawPdfHeader(pdf, audit, `${appBrandName} Rack View`, appBrandSlogan, rack);
       drawPdfRackFace(pdf, rack, "front", 42, 86, 340);
       drawPdfRackFace(pdf, rack, "rear", 430, 86, 340);
 
