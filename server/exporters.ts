@@ -841,7 +841,7 @@ function getPdfRackFaceLayoutForFace(
   fullWidth: number;
 } {
   const labelWidth = 28;
-  const calloutWidth = 66;
+  const calloutWidth = 94;
   const calloutGap = 6;
   const leftCalloutWidth = leftPduMountPositions.length > 0 ? calloutWidth : 0;
   const rightCalloutWidth = rightPduMountPositions.length > 0 ? calloutWidth : 0;
@@ -903,9 +903,9 @@ function drawPdfPduCallouts(
   }
 
   const sideOrder: Array<"left" | "right"> = ["left", "right"];
-  const lineHeight = 7;
+  const lineHeight = 7.4;
   const calloutGap = 6;
-  const calloutPadding = 5;
+  const calloutPadding = 6;
   const calloutStartY = rackY + 10;
 
   sideOrder.forEach((side) => {
@@ -943,6 +943,7 @@ function drawPdfPduCallouts(
           .fontSize(lineIndex === 0 ? 6.4 : 5.8)
           .text(line, calloutX + calloutPadding, calloutY + calloutPadding + lineIndex * lineHeight, {
             width: calloutWidth - calloutPadding * 2,
+            lineBreak: false,
             ellipsis: true
           });
       });
@@ -999,7 +1000,7 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
     const fontSize = isPdu ? 5.8 : device.heightU === 1 ? 6.2 : device.heightU === 2 ? 6.8 : 7.2;
     const lineHeight = fontSize + 1.5;
     const textBlockHeight = lines.length * lineHeight;
-    const startTextY = topY + Math.max(3, (height - textBlockHeight) / 2);
+    const startTextY = isPdu || device.heightU > 1 ? topY + 4 : topY + Math.max(3, (height - textBlockHeight) / 2);
 
     pdf.save();
     pdf.roundedRect(frame.x, topY, frame.width, height, isPdu ? 6 : 8).fill(pdfPalette.deviceFill);
@@ -1011,13 +1012,15 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
     pdf.restore();
 
     if (showIcon) {
-      drawPdfDeviceIcon(pdf, device.iconKey, frame.x + innerPadding, topY + Math.max(3, (height - iconSize) / 2), iconSize);
+      const iconY = device.heightU > 1 ? topY + 4 : topY + Math.max(3, (height - iconSize) / 2);
+      drawPdfDeviceIcon(pdf, device.iconKey, frame.x + innerPadding, iconY, iconSize);
     }
 
     if (!isPdu) {
       lines.forEach((line, index) => {
         pdf.fillColor(index === 0 ? pdfPalette.textPrimary : pdfPalette.textSecondary).fontSize(fontSize).text(line, textX + 2, startTextY + index * lineHeight, {
           width: textWidth - 4,
+          lineBreak: false,
           ellipsis: true
         });
       });
