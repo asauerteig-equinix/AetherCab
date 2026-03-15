@@ -1,19 +1,18 @@
-import type { FormEvent } from "react";
-import type { RackCreateInput, RackSummary } from "../../shared/types";
+import type { AuditCreateInput, AuditSummary } from "../../shared/types";
 
 interface OverviewPageProps {
-  racks: RackSummary[];
+  audits: AuditSummary[];
   searchValue: string;
-  createForm: RackCreateInput;
+  createForm: AuditCreateInput;
   templateCount: number;
   onSearchChange(next: string): void;
-  onOpenAudit(rackId: number): void;
-  onCreateFormChange(next: RackCreateInput): void;
-  onCreateAudit(event: FormEvent<HTMLFormElement>): void;
+  onOpenAudit(auditId: number): void;
+  onCreateFormChange(next: AuditCreateInput): void;
+  onCreateAudit(): Promise<void>;
 }
 
 export function OverviewPage({
-  racks,
+  audits,
   searchValue,
   createForm,
   templateCount,
@@ -23,31 +22,31 @@ export function OverviewPage({
   onCreateAudit
 }: OverviewPageProps) {
   const query = searchValue.trim().toLowerCase();
-  const visibleRacks = racks.filter((rack) => {
+  const visibleAudits = audits.filter((audit) => {
     if (!query) {
       return true;
     }
 
-    return [rack.name, rack.siteName, rack.roomName].some((value) => value.toLowerCase().includes(query));
+    return [audit.name, audit.siteName, audit.roomName, audit.notes ?? ""].some((value) => value.toLowerCase().includes(query));
   });
 
   return (
     <main className="overview-grid">
       <section className="panel overview-panel overview-panel-primary">
         <p className="eyebrow">Start</p>
-        <h2>Find or create audits first, then edit with focus</h2>
+        <h2>Open one audit and switch between all related racks there</h2>
         <p className="hero-copy">
-          The overview is the main entry point for the team. Existing audits can be listed, filtered, and opened here,
-          while the rack workspace stays focused on a single audit at a time.
+          The overview stays focused on finding or creating audits. Once an audit is open, all racks inside it can be managed
+          directly in the rack workspace.
         </p>
         <div className="overview-stats-inline">
           <div className="overview-stat-card">
-            <strong>{racks.length}</strong>
+            <strong>{audits.length}</strong>
             <span>saved audits</span>
           </div>
           <div className="overview-stat-card">
             <strong>{templateCount}</strong>
-            <span>Device Templates</span>
+            <span>device templates</span>
           </div>
         </div>
       </section>
@@ -58,7 +57,7 @@ export function OverviewPage({
             <p className="eyebrow">Audit Overview</p>
             <h2>Existing audits</h2>
           </div>
-          <span className="muted">{visibleRacks.length} visible</span>
+          <span className="muted">{visibleAudits.length} visible</span>
         </div>
 
         <label className="search-field">
@@ -67,19 +66,22 @@ export function OverviewPage({
         </label>
 
         <div className="overview-audit-list">
-          {visibleRacks.length === 0 ? (
+          {visibleAudits.length === 0 ? (
             <div className="empty-state">No audits match the current search.</div>
           ) : (
-            visibleRacks.map((rack) => (
-              <article className="overview-audit-card" key={rack.id}>
+            visibleAudits.map((audit) => (
+              <article className="overview-audit-card" key={audit.id}>
                 <div>
-                  <strong>{rack.name}</strong>
+                  <strong>{audit.name}</strong>
                   <span>
-                    {rack.siteName} / {rack.roomName}
+                    {audit.siteName} / {audit.roomName}
                   </span>
-                  <span>{rack.totalUnits}U</span>
+                  <span>
+                    {audit.rackCount} rack{audit.rackCount === 1 ? "" : "s"}
+                  </span>
+                  <span>{audit.notes || "No notes yet."}</span>
                 </div>
-                <button className="primary-button" onClick={() => onOpenAudit(rack.id)} type="button">
+                <button className="primary-button" onClick={() => onOpenAudit(audit.id)} type="button">
                   Open
                 </button>
               </article>
@@ -91,7 +93,13 @@ export function OverviewPage({
       <section className="panel overview-panel">
         <p className="eyebrow">New Audit</p>
         <h2>Create audit</h2>
-        <form className="create-rack-form overview-create-form" onSubmit={onCreateAudit}>
+        <form
+          className="create-rack-form overview-create-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void onCreateAudit();
+          }}
+        >
           <label>
             Site
             <input
@@ -109,17 +117,24 @@ export function OverviewPage({
           <label>
             Audit Name
             <input
-              value={createForm.rackName}
-              onChange={(event) => onCreateFormChange({ ...createForm, rackName: event.target.value })}
+              value={createForm.auditName}
+              onChange={(event) => onCreateFormChange({ ...createForm, auditName: event.target.value })}
             />
           </label>
           <label>
-            Units
+            First Rack
+            <input
+              value={createForm.initialRackName}
+              onChange={(event) => onCreateFormChange({ ...createForm, initialRackName: event.target.value })}
+            />
+          </label>
+          <label>
+            Rack Units
             <input
               min={1}
               type="number"
-              value={createForm.totalUnits}
-              onChange={(event) => onCreateFormChange({ ...createForm, totalUnits: Number(event.target.value) })}
+              value={createForm.initialRackUnits}
+              onChange={(event) => onCreateFormChange({ ...createForm, initialRackUnits: Number(event.target.value) })}
             />
           </label>
           <label>

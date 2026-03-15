@@ -343,6 +343,10 @@ a {
   color: var(--text-secondary);
 }
 
+.overview-audit-card strong {
+  font-size: 1rem;
+}
+
 .overview-create-form {
   margin-top: 12px;
   padding-top: 0;
@@ -463,9 +467,7 @@ a {
 .audit-summary-notes {
   font-size: 0.86rem;
   color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.35;
 }
 
 .audit-summary-hint {
@@ -487,7 +489,7 @@ a {
   width: min(680px, 100%);
   max-height: min(86vh, 760px);
   overflow: auto;
-  padding: 18px;
+  padding: 20px;
   background:
     linear-gradient(180deg, rgba(120, 144, 166, 0.08), rgba(255, 255, 255, 0.98) 32%),
     rgba(248, 250, 252, 0.98);
@@ -522,6 +524,10 @@ a {
   gap: 12px;
 }
 
+.audit-edit-grid.clean {
+  gap: 14px;
+}
+
 .audit-edit-field {
   display: grid;
   gap: 7px;
@@ -529,6 +535,13 @@ a {
   border: 1px solid var(--line-soft);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.72);
+}
+
+.audit-edit-field.plain {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 .audit-edit-field span {
@@ -553,6 +566,77 @@ a {
   border-top: 1px solid var(--line-soft);
 }
 
+.rack-tabs-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.rack-tabs-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: start;
+}
+
+.rack-tabs-header h2 {
+  font-size: 1.12rem;
+}
+
+.rack-tabs-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: end;
+}
+
+.rack-tab-list {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rack-tab {
+  display: grid;
+  gap: 4px;
+  min-width: 132px;
+  padding: 12px 14px;
+  text-align: left;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  color: var(--text-primary);
+  transition:
+    transform 140ms ease,
+    border-color 140ms ease,
+    background 140ms ease;
+}
+
+.rack-tab:hover {
+  transform: translateY(-1px);
+  border-color: var(--line-strong);
+  background: var(--surface-soft-strong);
+}
+
+.rack-tab strong {
+  font-size: 0.9rem;
+}
+
+.rack-tab span {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.rack-edit-modal {
+  width: min(560px, 100%);
+}
+
+.rack-edit-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.4;
+}
+
 .template-card[draggable="true"],
 .rack-device {
   cursor: grab;
@@ -573,6 +657,7 @@ a {
 .rack-list-item,
 .template-card,
 .spare-card,
+.rack-tab,
 .ghost-button,
 .create-rack-form button {
   border: 1px solid var(--line-soft);
@@ -597,6 +682,7 @@ a {
 .rack-list-item:hover,
 .template-card:hover,
 .spare-card:hover,
+.rack-tab:hover,
 .ghost-button:hover,
 .create-rack-form button:hover,
 .rack-device:hover {
@@ -658,6 +744,14 @@ textarea {
 .ghost-button,
 .template-actions button {
   padding: 10px 14px;
+}
+
+.ghost-button.danger {
+  color: #8b3f33;
+}
+
+.ghost-button.danger:disabled {
+  color: var(--text-quiet);
 }
 
 .template-card {
@@ -1043,6 +1137,14 @@ textarea {
 
   .audit-summary-actions {
     flex-wrap: wrap;
+  }
+
+  .rack-tabs-header {
+    flex-direction: column;
+  }
+
+  .rack-tabs-actions {
+    justify-content: start;
   }
 }
 

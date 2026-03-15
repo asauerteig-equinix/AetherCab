@@ -2,16 +2,19 @@ import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import { getAnchoredStartUnit, getMountPositionFace, getRackMountPositionLabel } from "../shared/rack";
 import type {
+  AuditCreateInput,
+  AuditDetail,
+  AuditSummary,
+  AuditUpdateInput,
   DeviceTemplate,
   DeviceTemplateInput,
-  RackFace,
-  RackMountPosition,
   RackCreateInput,
   RackDetail,
   RackDevice,
   RackDeviceInput,
-  RackUpdateInput,
-  RackSummary
+  RackFace,
+  RackMountPosition,
+  RackUpdateInput
 } from "../shared/types";
 import { api } from "./api";
 import { AdminTemplatesPage } from "./components/AdminTemplatesPage";
@@ -20,21 +23,32 @@ import { OverviewPage } from "./components/OverviewPage";
 import { Palette } from "./components/Palette";
 import { RackCanvas } from "./components/RackCanvas";
 import { RackSwitcher } from "./components/RackSwitcher";
+import { RackTabs } from "./components/RackTabs";
 
-const initialRackCreateForm: RackCreateInput = {
+const initialAuditCreateForm: AuditCreateInput = {
   siteName: "",
   roomName: "",
-  rackName: "",
-  totalUnits: 42,
+  auditName: "",
+  initialRackName: "",
+  initialRackUnits: 42,
   notes: ""
 };
 
-const initialRackUpdateForm: RackUpdateInput = {
+const initialAuditUpdateForm: AuditUpdateInput = {
   siteName: "",
   roomName: "",
-  rackName: "",
-  totalUnits: 42,
+  auditName: "",
   notes: ""
+};
+
+const initialRackCreateForm: RackCreateInput = {
+  rackName: "",
+  totalUnits: 42
+};
+
+const initialRackUpdateForm: RackUpdateInput = {
+  rackName: "",
+  totalUnits: 42
 };
 
 const initialTemplateForm: DeviceTemplateInput = {
@@ -46,6 +60,22 @@ const initialTemplateForm: DeviceTemplateInput = {
   defaultHeightU: 1,
   blocksBothFaces: false
 };
+
+function toAuditUpdateForm(audit: AuditDetail): AuditUpdateInput {
+  return {
+    siteName: audit.siteName,
+    roomName: audit.roomName,
+    auditName: audit.name,
+    notes: audit.notes ?? ""
+  };
+}
+
+function toRackUpdateForm(rack: RackDetail): RackUpdateInput {
+  return {
+    rackName: rack.name,
+    totalUnits: rack.totalUnits
+  };
+}
 
 function templateToRackDevice(
   template: DeviceTemplate,
@@ -73,7 +103,9 @@ function templateToRackDevice(
 
 export default function App() {
   const [currentPath, setCurrentPath] = useState(() => window.location.pathname);
-  const [racks, setRacks] = useState<RackSummary[]>([]);
+  const [audits, setAudits] = useState<AuditSummary[]>([]);
+  const [activeAuditId, setActiveAuditId] = useState<number | null>(null);
+  const [auditDetail, setAuditDetail] = useState<AuditDetail | null>(null);
   const [activeRackId, setActiveRackId] = useState<number | null>(null);
   const [rackDetail, setRackDetail] = useState<RackDetail | null>(null);
   const [templates, setTemplates] = useState<DeviceTemplate[]>([]);
@@ -83,9 +115,11 @@ export default function App() {
   const [message, setMessage] = useState("Loading workspace...");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [createForm, setCreateForm] = useState<RackCreateInput>(initialRackCreateForm);
-  const [templateForm, setTemplateForm] = useState<DeviceTemplateInput>(initialTemplateForm);
+  const [createAuditForm, setCreateAuditForm] = useState<AuditCreateInput>(initialAuditCreateForm);
+  const [auditForm, setAuditForm] = useState<AuditUpdateInput>(initialAuditUpdateForm);
+  const [newRackForm, setNewRackForm] = useState<RackCreateInput>(initialRackCreateForm);
   const [rackForm, setRackForm] = useState<RackUpdateInput>(initialRackUpdateForm);
+  const [templateForm, setTemplateForm] = useState<DeviceTemplateInput>(initialTemplateForm);
 
   useEffect(() => {
     void loadInitialData();
@@ -103,9 +137,41 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (activeAuditId !== null) {
+      void loadAudit(activeAuditId);
+      return;
+    }
+
+    setAuditDetail(null);
+    setRackDetail(null);
+    setActiveRackId(null);
+  }, [activeAuditId]);
+
+  useEffect(() => {
+    if (!auditDetail) {
+      return;
+    }
+
+    if (auditDetail.racks.length === 0) {
+      setActiveRackId(null);
+      setRackDetail(null);
+      return;
+    }
+
+    setActiveRackId((currentRackId) =>
+      currentRackId !== null && auditDetail.racks.some((rack) => rack.id === currentRackId) ? currentRackId : auditDetail.racks[0].id
+    );
+  }, [auditDetail]);
+
+  useEffect(() => {
     if (activeRackId !== null) {
       void loadRack(activeRackId);
+      return;
     }
+
+    setRackDetail(null);
+    setRackForm(initialRackUpdateForm);
+    setSelectedDeviceId(null);
   }, [activeRackId]);
 
   useEffect(() => {
@@ -131,18 +197,27 @@ export default function App() {
     setCurrentPath(path);
   }
 
-  function openAudit(rackId: number) {
-    setActiveRackId(rackId);
+  function openAudit(auditId: number) {
+    setSelectedDeviceId(null);
+    setActiveRackFace("front");
+    setActiveRackId(null);
+    setActiveAuditId(auditId);
     navigate("/audits");
+  }
+
+  function selectRack(rackId: number) {
+    setSelectedDeviceId(null);
+    setActiveRackFace("front");
+    setActiveRackId(rackId);
   }
 
   async function loadInitialData() {
     try {
-      const [rackList, templateList] = await Promise.all([api.listRacks(), api.listTemplates()]);
-      setRacks(rackList);
+      const [auditList, templateList] = await Promise.all([api.listAudits(), api.listTemplates()]);
+      setAudits(auditList);
       setTemplates(templateList);
-      if (rackList.length > 0) {
-        setActiveRackId(rackList[0].id);
+      if (auditList.length > 0) {
+        setActiveAuditId((currentAuditId) => currentAuditId ?? auditList[0].id);
       } else {
         setMessage("Create the first audit to start documenting racks.");
       }
@@ -156,32 +231,63 @@ export default function App() {
     setTemplates(await api.listTemplates());
   }
 
-  async function loadRack(rackId: number) {
+  async function refreshAuditList(selectAuditId?: number | null) {
+    const auditList = await api.listAudits();
+    setAudits(auditList);
+
+    if (selectAuditId !== undefined) {
+      setActiveAuditId(selectAuditId);
+      return;
+    }
+
+    if (auditList.length === 0) {
+      setActiveAuditId(null);
+      return;
+    }
+
+    setActiveAuditId((currentAuditId) =>
+      currentAuditId !== null && auditList.some((audit) => audit.id === currentAuditId) ? currentAuditId : auditList[0].id
+    );
+  }
+
+  async function loadAudit(auditId: number) {
     try {
-      const detail = await api.getRack(rackId);
-      setRackDetail(detail);
-      setRackForm({
-        siteName: detail.siteName,
-        roomName: detail.roomName,
-        rackName: detail.name,
-        totalUnits: detail.totalUnits,
-        notes: detail.notes ?? ""
-      });
-      setSelectedDeviceId((current) => (current && detail.devices.some((device) => device.id === current) ? current : null));
-      setMessage(`${detail.name} is open for editing.`);
+      const detail = await api.getAudit(auditId);
+      setAuditDetail(detail);
+      setAuditForm(toAuditUpdateForm(detail));
+      setMessage(`${detail.name} is open with ${detail.racks.length} rack${detail.racks.length === 1 ? "" : "s"}.`);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Audit could not be loaded.");
     }
   }
 
-  async function refreshRackList(selectRackId?: number) {
-    const rackList = await api.listRacks();
-    setRacks(rackList);
-    if (selectRackId !== undefined) {
-      setActiveRackId(selectRackId);
-    } else if (activeRackId === null && rackList.length > 0) {
-      setActiveRackId(rackList[0].id);
+  async function refreshActiveAudit(nextRackId?: number | null) {
+    if (activeAuditId === null) {
+      return null;
+    }
+
+    const detail = await api.getAudit(activeAuditId);
+    setAuditDetail(detail);
+    setAuditForm(toAuditUpdateForm(detail));
+
+    if (nextRackId !== undefined) {
+      setActiveRackId(nextRackId);
+    }
+
+    return detail;
+  }
+
+  async function loadRack(rackId: number) {
+    try {
+      const detail = await api.getRack(rackId);
+      setRackDetail(detail);
+      setRackForm(toRackUpdateForm(detail));
+      setNewRackForm((current) => ({ ...current, totalUnits: current.totalUnits || detail.totalUnits }));
+      setSelectedDeviceId((current) => (current && detail.devices.some((device) => device.id === current) ? current : null));
+      setError(null);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Rack could not be loaded.");
     }
   }
 
@@ -196,7 +302,8 @@ export default function App() {
     try {
       const template = JSON.parse(templatePayload) as DeviceTemplate;
       const targetMountPosition = template.mountStyle === "vertical-pdu" ? mountPosition : "full";
-      const targetRackFace = template.mountStyle === "vertical-pdu" ? (getMountPositionFace(targetMountPosition) ?? activeRackFace) : activeRackFace;
+      const targetRackFace =
+        template.mountStyle === "vertical-pdu" ? (getMountPositionFace(targetMountPosition) ?? activeRackFace) : activeRackFace;
 
       if (template.mountStyle === "vertical-pdu" && mountPosition === "full") {
         setError("Vertical PDUs can only be dropped onto one of the visible PDU lanes.");
@@ -318,6 +425,26 @@ export default function App() {
     }
   }
 
+  async function handleAuditUpdate() {
+    if (activeAuditId === null) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const updatedAudit = await api.updateAudit(activeAuditId, auditForm);
+      setAuditDetail(updatedAudit);
+      setAuditForm(toAuditUpdateForm(updatedAudit));
+      await refreshAuditList(activeAuditId);
+      setMessage(`${updatedAudit.name} was updated.`);
+      setError(null);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Audit details could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleRackUpdate() {
     if (activeRackId === null) {
       return;
@@ -327,36 +454,84 @@ export default function App() {
       setSaving(true);
       const updatedRack = await api.updateRack(activeRackId, rackForm);
       setRackDetail(updatedRack);
-      setRackForm({
-        siteName: updatedRack.siteName,
-        roomName: updatedRack.roomName,
-        rackName: updatedRack.name,
-        totalUnits: updatedRack.totalUnits,
-        notes: updatedRack.notes ?? ""
-      });
-      await refreshRackList(activeRackId);
+      setRackForm(toRackUpdateForm(updatedRack));
+      await refreshActiveAudit(activeRackId);
+      await refreshAuditList(activeAuditId);
       setMessage(`${updatedRack.name} was updated.`);
       setError(null);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Audit details could not be saved.");
+      setError(saveError instanceof Error ? saveError.message : "Rack details could not be saved.");
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleCreateRack(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function handleDeleteRack() {
+    if (!auditDetail || activeRackId === null) {
+      return;
+    }
+
+    const currentRack = auditDetail.racks.find((rack) => rack.id === activeRackId);
+    if (!currentRack || auditDetail.racks.length <= 1) {
+      return;
+    }
+
+    const shouldDelete = window.confirm(`Delete rack "${currentRack.name}" from audit "${auditDetail.name}"?`);
+    if (!shouldDelete) {
+      return;
+    }
 
     try {
       setSaving(true);
-      const rack = await api.createRack(createForm);
-      await refreshRackList(rack.id);
-      setCreateForm(initialRackCreateForm);
-      setMessage(`${rack.name} was created.`);
+      const nextRackId = auditDetail.racks.find((rack) => rack.id !== activeRackId)?.id ?? null;
+      await api.deleteRack(activeRackId);
+      setSelectedDeviceId(null);
+      await refreshActiveAudit(nextRackId);
+      await refreshAuditList(activeAuditId);
+      setMessage(`${currentRack.name} was removed from the audit.`);
+      setError(null);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Rack could not be deleted.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleCreateAudit() {
+    try {
+      setSaving(true);
+      const audit = await api.createAudit(createAuditForm);
+      setCreateAuditForm(initialAuditCreateForm);
+      setAuditDetail(audit);
+      setAuditForm(toAuditUpdateForm(audit));
+      setActiveAuditId(audit.id);
+      setActiveRackId(audit.racks[0]?.id ?? null);
+      await refreshAuditList(audit.id);
+      setMessage(`${audit.name} was created.`);
       setError(null);
       navigate("/audits");
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Audit could not be created.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleCreateRack() {
+    if (activeAuditId === null) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const rack = await api.createRack(activeAuditId, newRackForm);
+      setNewRackForm({ ...initialRackCreateForm, totalUnits: rack.totalUnits });
+      await refreshActiveAudit(rack.id);
+      await refreshAuditList(activeAuditId);
+      setMessage(`${rack.name} was added to ${auditDetail?.name ?? "the audit"}.`);
+      setError(null);
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Rack could not be created.");
     } finally {
       setSaving(false);
     }
@@ -416,23 +591,24 @@ export default function App() {
           <div className="hero-primary">
             <p className="hero-kicker">AetherCab</p>
             <p className="hero-copy">
-              Rack inventory with a clear workflow: create or open an audit first, then edit it with focus.
+              One audit can now document multiple racks. Keep the audit metadata compact at the top and switch racks directly
+              inside the editor.
             </p>
           </div>
           <RackSwitcher
-            rack={rackDetail}
-            form={rackForm}
+            audit={auditDetail}
+            form={auditForm}
             saving={saving}
-            onFormChange={setRackForm}
-            onSave={handleRackUpdate}
+            onFormChange={setAuditForm}
+            onSave={handleAuditUpdate}
             onBackToOverview={() => navigate("/")}
           />
           <div className="hero-actions">
             <span className="status-pill">{saving ? "Saving database changes" : message}</span>
-            {rackDetail ? (
+            {auditDetail ? (
               <div className="export-actions">
-                <a href={api.excelExportUrl(rackDetail.id)}>Export Excel</a>
-                <a href={api.pdfExportUrl(rackDetail.id)}>Export PDF</a>
+                <a href={api.excelExportUrl(auditDetail.id)}>Export Excel</a>
+                <a href={api.pdfExportUrl(auditDetail.id)}>Export PDF</a>
               </div>
             ) : null}
           </div>
@@ -443,15 +619,15 @@ export default function App() {
 
       {currentPath === "/" ? (
         <OverviewPage
-          racks={racks}
+          audits={audits}
           searchValue={auditSearch}
-          createForm={createForm}
+          createForm={createAuditForm}
           templateCount={templates.length}
           onSearchChange={setAuditSearch}
           onOpenAudit={openAudit}
-          onCreateFormChange={setCreateForm}
-          onCreateAudit={(event) => {
-            void handleCreateRack(event);
+          onCreateFormChange={setCreateAuditForm}
+          onCreateAudit={() => {
+            void handleCreateAudit();
           }}
         />
       ) : currentPath === "/admin" ? (
@@ -469,6 +645,20 @@ export default function App() {
       ) : (
         <main className="workspace-grid">
           <div className="editor-column">
+            <RackTabs
+              audit={auditDetail}
+              activeRackId={activeRackId}
+              rackForm={rackForm}
+              newRackForm={newRackForm}
+              saving={saving}
+              onSelectRack={selectRack}
+              onRackFormChange={setRackForm}
+              onSaveRack={handleRackUpdate}
+              onNewRackFormChange={setNewRackForm}
+              onCreateRack={handleCreateRack}
+              onDeleteRack={handleDeleteRack}
+            />
+
             {rackDetail ? (
               <RackCanvas
                 rack={rackDetail}
@@ -486,8 +676,8 @@ export default function App() {
             ) : (
               <section className="panel empty-state-panel">
                 <p className="eyebrow">Audit Editor</p>
-                <h2>No audit open</h2>
-                <p>Please select an audit from the overview or create a new one.</p>
+                <h2>No rack selected</h2>
+                <p>Please select or create a rack inside the active audit.</p>
               </section>
             )}
           </div>

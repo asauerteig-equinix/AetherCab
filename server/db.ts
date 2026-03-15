@@ -44,13 +44,22 @@ export async function initializeDatabase(): Promise<void> {
       UNIQUE(site_id, name)
     );
 
+    CREATE TABLE IF NOT EXISTS audits (
+      id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      notes TEXT,
+      UNIQUE(room_id, name)
+    );
+
     CREATE TABLE IF NOT EXISTS racks (
       id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      audit_id INTEGER REFERENCES audits(id) ON DELETE CASCADE,
       room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       total_units INTEGER NOT NULL,
       notes TEXT,
-      UNIQUE(room_id, name)
+      UNIQUE(audit_id, name)
     );
 
     CREATE TABLE IF NOT EXISTS device_templates (
@@ -84,6 +93,27 @@ export async function initializeDatabase(): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+  `);
+
+  await pool.query(`
+    ALTER TABLE racks
+    ADD COLUMN IF NOT EXISTS audit_id INTEGER
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE constraint_name = 'racks_audit_id_fkey'
+          AND table_name = 'racks'
+      ) THEN
+        ALTER TABLE racks
+        ADD CONSTRAINT racks_audit_id_fkey
+        FOREIGN KEY (audit_id) REFERENCES audits(id) ON DELETE CASCADE;
+      END IF;
+    END $$;
   `);
 
   await pool.query(`
@@ -145,6 +175,50 @@ export async function initializeDatabase(): Promise<void> {
     WHERE mount_position IS NULL
   `);
 
+  await pool.query(`
+    INSERT INTO audits (room_id, name, notes)
+    SELECT racks.room_id, racks.name, racks.notes
+    FROM racks
+    WHERE racks.audit_id IS NULL
+    ON CONFLICT (room_id, name) DO NOTHING
+  `);
+
+  await pool.query(`
+    ALTER TABLE racks
+    DROP CONSTRAINT IF EXISTS racks_room_id_name_key
+  `);
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE constraint_name = 'racks_audit_id_name_key'
+          AND table_name = 'racks'
+      ) THEN
+        ALTER TABLE racks
+        ADD CONSTRAINT racks_audit_id_name_key UNIQUE (audit_id, name);
+      END IF;
+    END $$;
+  `);
+
+  await pool.query(`
+    UPDATE racks
+    SET audit_id = audits.id
+    FROM audits
+    WHERE racks.audit_id IS NULL
+      AND audits.room_id = racks.room_id
+      AND audits.name = racks.name
+  `);
+
+  await pool.query(`
+    UPDATE racks
+    SET room_id = audits.room_id
+    FROM audits
+    WHERE racks.audit_id = audits.id
+  `);
+
   await seedDatabase();
 }
 
@@ -165,8 +239,8 @@ async function seedDatabase(): Promise<void> {
     `
   );
 
-  const rackCountResult = await pool.query<{ count: string }>("SELECT COUNT(*) AS count FROM racks");
-  if (Number(rackCountResult.rows[0]?.count ?? 0) > 0) {
+  const auditCountResult = await pool.query<{ count: string }>("SELECT COUNT(*) AS count FROM audits");
+  if (Number(auditCountResult.rows[0]?.count ?? 0) > 0) {
     return;
   }
 
@@ -182,9 +256,15 @@ async function seedDatabase(): Promise<void> {
   );
   const roomId = roomResult.rows[0].id;
 
+  const auditResult = await pool.query<{ id: number }>(
+    "INSERT INTO audits (room_id, name, notes) VALUES ($1, $2, $3) RETURNING id",
+    [roomId, "Audit A1", "Seed audit for the initial editor"]
+  );
+  const auditId = auditResult.rows[0].id;
+
   const rackResult = await pool.query<{ id: number }>(
-    "INSERT INTO racks (room_id, name, total_units, notes) VALUES ($1, $2, $3, $4) RETURNING id",
-    [roomId, "Rack A1", 42, "Seed rack for the initial editor"]
+    "INSERT INTO racks (audit_id, room_id, name, total_units, notes) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+    [auditId, roomId, "Rack A1", 42, null]
   );
   const rackId = rackResult.rows[0].id;
 

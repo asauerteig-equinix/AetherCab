@@ -1,18 +1,30 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import type { DeviceTemplateInput, RackCreateInput, RackDeviceInput, RackUpdateInput } from "../shared/types.js";
+import type {
+  AuditCreateInput,
+  AuditUpdateInput,
+  DeviceTemplateInput,
+  RackCreateInput,
+  RackDeviceInput,
+  RackUpdateInput
+} from "../shared/types.js";
 import { initializeDatabase } from "./db.js";
 import { buildExcelExport, buildPdfExport } from "./exporters.js";
 import {
-  createRack,
+  createAudit,
+  createRackInAudit,
   createRackDevice,
   createDeviceTemplate,
+  deleteRack,
   deleteRackDevice,
   deleteDeviceTemplate,
+  getAudit,
+  getAuditExportDetail,
   getRack,
+  listAudits,
   listDeviceTemplates,
-  listRacks,
+  updateAudit,
   updateRack,
   updateRackDevice
 } from "./repository.js";
@@ -38,16 +50,43 @@ async function bootstrap(): Promise<void> {
   });
 
   app.get(
-    "/api/racks",
+    "/api/audits",
     asyncRoute(async (_request, response) => {
-      response.json(await listRacks());
+      response.json(await listAudits());
     })
   );
 
   app.post(
-    "/api/racks",
+    "/api/audits",
     asyncRoute(async (request, response) => {
-      response.status(201).json(await createRack(request.body as RackCreateInput));
+      response.status(201).json(await createAudit(request.body as AuditCreateInput));
+    })
+  );
+
+  app.get(
+    "/api/audits/:auditId",
+    asyncRoute(async (request, response) => {
+      const audit = await getAudit(Number(request.params.auditId));
+      if (!audit) {
+        response.status(404).json({ error: "Audit not found" });
+        return;
+      }
+
+      response.json(audit);
+    })
+  );
+
+  app.put(
+    "/api/audits/:auditId",
+    asyncRoute(async (request, response) => {
+      response.json(await updateAudit(Number(request.params.auditId), request.body as AuditUpdateInput));
+    })
+  );
+
+  app.post(
+    "/api/audits/:auditId/racks",
+    asyncRoute(async (request, response) => {
+      response.status(201).json(await createRackInAudit(Number(request.params.auditId), request.body as RackCreateInput));
     })
   );
 
@@ -68,6 +107,14 @@ async function bootstrap(): Promise<void> {
     "/api/racks/:rackId",
     asyncRoute(async (request, response) => {
       response.json(await updateRack(Number(request.params.rackId), request.body as RackUpdateInput));
+    })
+  );
+
+  app.delete(
+    "/api/racks/:rackId",
+    asyncRoute(async (request, response) => {
+      await deleteRack(Number(request.params.rackId));
+      response.status(204).send();
     })
   );
 
@@ -122,33 +169,33 @@ async function bootstrap(): Promise<void> {
   );
 
   app.get(
-    "/api/racks/:rackId/export.xlsx",
+    "/api/audits/:auditId/export.xlsx",
     asyncRoute(async (request, response) => {
-      const rack = await getRack(Number(request.params.rackId));
-      if (!rack) {
-        response.status(404).json({ error: "Rack not found" });
+      const audit = await getAuditExportDetail(Number(request.params.auditId));
+      if (!audit) {
+        response.status(404).json({ error: "Audit not found" });
         return;
       }
 
-      const file = await buildExcelExport(rack);
+      const file = await buildExcelExport(audit);
       response.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-      response.setHeader("Content-Disposition", `attachment; filename="${rack.name}-inventory.xlsx"`);
+      response.setHeader("Content-Disposition", `attachment; filename="${audit.name}-inventory.xlsx"`);
       response.send(file);
     })
   );
 
   app.get(
-    "/api/racks/:rackId/export.pdf",
+    "/api/audits/:auditId/export.pdf",
     asyncRoute(async (request, response) => {
-      const rack = await getRack(Number(request.params.rackId));
-      if (!rack) {
-        response.status(404).json({ error: "Rack not found" });
+      const audit = await getAuditExportDetail(Number(request.params.auditId));
+      if (!audit) {
+        response.status(404).json({ error: "Audit not found" });
         return;
       }
 
-      const file = await buildPdfExport(rack);
+      const file = await buildPdfExport(audit);
       response.setHeader("Content-Type", "application/pdf");
-      response.setHeader("Content-Disposition", `attachment; filename="${rack.name}-documentation.pdf"`);
+      response.setHeader("Content-Disposition", `attachment; filename="${audit.name}-documentation.pdf"`);
       response.send(file);
     })
   );

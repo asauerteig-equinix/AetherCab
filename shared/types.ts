@@ -12,15 +12,23 @@ export type RackMountPosition =
   | "rear-right-inner"
   | "rear-right-outer";
 
-export interface RackSummary {
+export interface AuditSummary {
   id: number;
   name: string;
-  totalUnits: number;
   roomId: number;
   roomName: string;
   siteId: number;
   siteName: string;
   notes: string | null;
+  rackCount: number;
+}
+
+export interface RackSummary {
+  id: number;
+  auditId: number;
+  auditName: string;
+  name: string;
+  totalUnits: number;
 }
 
 export interface DeviceTemplate {
@@ -68,6 +76,14 @@ export interface RackDetail extends RackSummary {
   devices: RackDevice[];
 }
 
+export interface AuditDetail extends AuditSummary {
+  racks: RackSummary[];
+}
+
+export interface AuditExportDetail extends AuditSummary {
+  racks: RackDetail[];
+}
+
 export interface RackDeviceInput {
   placementType: PlacementType;
   rackFace: RackFace | null;
@@ -84,18 +100,28 @@ export interface RackDeviceInput {
   storageLocation?: string | null;
 }
 
-export interface RackCreateInput {
+export interface AuditCreateInput {
   siteName: string;
   roomName: string;
+  auditName: string;
+  initialRackName: string;
+  initialRackUnits: number;
+  notes?: string | null;
+}
+
+export interface RackCreateInput {
   rackName: string;
   totalUnits: number;
+}
+
+export interface AuditUpdateInput {
+  siteName: string;
+  roomName: string;
+  auditName: string;
   notes?: string | null;
 }
 
 export interface RackUpdateInput {
-  siteName: string;
-  roomName: string;
   rackName: string;
   totalUnits: number;
-  notes?: string | null;
 }

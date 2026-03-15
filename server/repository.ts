@@ -1,5 +1,10 @@
 import { findOverlaps, getMountPositionFace, sortRackDevices, validateRackPlacement } from "../shared/rack.js";
 import type {
+  AuditCreateInput,
+  AuditDetail,
+  AuditExportDetail,
+  AuditSummary,
+  AuditUpdateInput,
   DeviceTemplate,
   DeviceTemplateInput,
   RackCreateInput,
@@ -7,20 +12,36 @@ import type {
   RackDevice,
   RackDeviceInput,
   RackFace,
-  RackUpdateInput,
-  RackSummary
+  RackSummary,
+  RackUpdateInput
 } from "../shared/types.js";
 import { pool } from "./db.js";
 
-interface RackSummaryRow {
+interface AuditSummaryRow {
   id: number;
   name: string;
-  total_units: number;
   room_id: number;
   room_name: string;
   site_id: number;
   site_name: string;
   notes: string | null;
+  rack_count: string | number;
+}
+
+interface RackSummaryRow {
+  id: number;
+  audit_id: number;
+  audit_name: string;
+  name: string;
+  total_units: number;
+}
+
+interface RackDetailRow extends RackSummaryRow {
+  room_id: number;
+  room_name: string;
+  site_id: number;
+  site_name: string;
+  audit_notes: string | null;
 }
 
 interface RackDeviceRow {
@@ -54,16 +75,26 @@ interface DeviceTemplateRow {
   blocks_both_faces: boolean;
 }
 
-function mapRackSummary(row: RackSummaryRow): RackSummary {
+function mapAuditSummary(row: AuditSummaryRow): AuditSummary {
   return {
     id: row.id,
     name: row.name,
-    totalUnits: row.total_units,
     roomId: row.room_id,
     roomName: row.room_name,
     siteId: row.site_id,
     siteName: row.site_name,
-    notes: row.notes
+    notes: row.notes,
+    rackCount: Number(row.rack_count)
+  };
+}
+
+function mapRackSummary(row: RackSummaryRow): RackSummary {
+  return {
+    id: row.id,
+    auditId: row.audit_id,
+    auditName: row.audit_name,
+    name: row.name,
+    totalUnits: row.total_units
   };
 }
 
@@ -132,62 +163,6 @@ function normalizeDeviceInput(input: RackDeviceInput): RackDeviceInput {
   return normalized;
 }
 
-async function validateRackDevice(rackId: number, input: RackDeviceInput, currentDeviceId?: number): Promise<void> {
-  const rack = await getRack(rackId);
-  if (!rack) {
-    throw new Error("Rack not found.");
-  }
-
-  const placementIssues = validateRackPlacement(input, rack.totalUnits);
-  if (placementIssues.length > 0) {
-    throw new Error(placementIssues.join(" "));
-  }
-
-  const overlaps = findOverlaps(input, rack.devices, currentDeviceId);
-  if (overlaps.length > 0) {
-    throw new Error("Device placement overlaps an existing rack device.");
-  }
-}
-
-export async function listRacks(): Promise<RackSummary[]> {
-  const result = await pool.query<RackSummaryRow>(`
-    SELECT
-      racks.id,
-      racks.name,
-      racks.total_units,
-      racks.notes,
-      rooms.id AS room_id,
-      rooms.name AS room_name,
-      sites.id AS site_id,
-      sites.name AS site_name
-    FROM racks
-    INNER JOIN rooms ON rooms.id = racks.room_id
-    INNER JOIN sites ON sites.id = rooms.site_id
-    ORDER BY sites.name, rooms.name, racks.name
-  `);
-
-  return result.rows.map(mapRackSummary);
-}
-
-export async function listDeviceTemplates(): Promise<DeviceTemplate[]> {
-  const result = await pool.query<DeviceTemplateRow>(`
-    SELECT id, template_type, mount_style, name, manufacturer, model, default_height_u, blocks_both_faces
-    FROM device_templates
-    ORDER BY template_type, default_height_u, name
-  `);
-
-  return result.rows.map((row) => ({
-    id: row.id,
-    templateType: row.template_type,
-    mountStyle: row.mount_style,
-    name: row.name,
-    manufacturer: row.manufacturer,
-    model: row.model,
-    defaultHeightU: row.default_height_u,
-    blocksBothFaces: row.blocks_both_faces
-  }));
-}
-
 function normalizeTemplateInput(input: DeviceTemplateInput): DeviceTemplateInput {
   const normalized: DeviceTemplateInput = {
     templateType: input.templateType.trim().toLowerCase(),
@@ -212,6 +187,376 @@ function normalizeTemplateInput(input: DeviceTemplateInput): DeviceTemplateInput
   }
 
   return normalized;
+}
+
+async function getOrCreateSiteId(siteName: string): Promise<number> {
+  const result = await pool.query<{ id: number }>(
+    `
+      INSERT INTO sites (name)
+      VALUES ($1)
+      ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+      RETURNING id
+    `,
+    [siteName]
+  );
+  return result.rows[0].id;
+}
+
+async function getOrCreateRoomId(siteId: number, roomName: string): Promise<number> {
+  const result = await pool.query<{ id: number }>(
+    `
+      INSERT INTO rooms (site_id, name)
+      VALUES ($1, $2)
+      ON CONFLICT (site_id, name) DO UPDATE SET name = EXCLUDED.name
+      RETURNING id
+    `,
+    [siteId, roomName]
+  );
+  return result.rows[0].id;
+}
+
+async function getRackBase(rackId: number): Promise<RackDetailRow | null> {
+  const result = await pool.query<RackDetailRow>(
+    `
+      SELECT
+        racks.id,
+        racks.audit_id,
+        racks.name,
+        racks.total_units,
+        audits.name AS audit_name,
+        audits.notes AS audit_notes,
+        rooms.id AS room_id,
+        rooms.name AS room_name,
+        sites.id AS site_id,
+        sites.name AS site_name
+      FROM racks
+      INNER JOIN audits ON audits.id = racks.audit_id
+      INNER JOIN rooms ON rooms.id = audits.room_id
+      INNER JOIN sites ON sites.id = rooms.site_id
+      WHERE racks.id = $1
+    `,
+    [rackId]
+  );
+
+  return result.rows[0] ?? null;
+}
+
+async function validateRackDevice(rackId: number, input: RackDeviceInput, currentDeviceId?: number): Promise<void> {
+  const rack = await getRack(rackId);
+  if (!rack) {
+    throw new Error("Rack not found.");
+  }
+
+  const placementIssues = validateRackPlacement(input, rack.totalUnits);
+  if (placementIssues.length > 0) {
+    throw new Error(placementIssues.join(" "));
+  }
+
+  const overlaps = findOverlaps(input, rack.devices, currentDeviceId);
+  if (overlaps.length > 0) {
+    throw new Error("Device placement overlaps an existing rack device.");
+  }
+}
+
+export async function listAudits(): Promise<AuditSummary[]> {
+  const result = await pool.query<AuditSummaryRow>(
+    `
+      SELECT
+        audits.id,
+        audits.name,
+        audits.notes,
+        rooms.id AS room_id,
+        rooms.name AS room_name,
+        sites.id AS site_id,
+        sites.name AS site_name,
+        COUNT(racks.id) AS rack_count
+      FROM audits
+      INNER JOIN rooms ON rooms.id = audits.room_id
+      INNER JOIN sites ON sites.id = rooms.site_id
+      LEFT JOIN racks ON racks.audit_id = audits.id
+      GROUP BY audits.id, rooms.id, sites.id
+      ORDER BY sites.name, rooms.name, audits.name
+    `
+  );
+
+  return result.rows.map(mapAuditSummary);
+}
+
+export async function getAudit(auditId: number): Promise<AuditDetail | null> {
+  const auditResult = await pool.query<AuditSummaryRow>(
+    `
+      SELECT
+        audits.id,
+        audits.name,
+        audits.notes,
+        rooms.id AS room_id,
+        rooms.name AS room_name,
+        sites.id AS site_id,
+        sites.name AS site_name,
+        COUNT(racks.id) AS rack_count
+      FROM audits
+      INNER JOIN rooms ON rooms.id = audits.room_id
+      INNER JOIN sites ON sites.id = rooms.site_id
+      LEFT JOIN racks ON racks.audit_id = audits.id
+      WHERE audits.id = $1
+      GROUP BY audits.id, rooms.id, sites.id
+    `,
+    [auditId]
+  );
+
+  const auditRow = auditResult.rows[0];
+  if (!auditRow) {
+    return null;
+  }
+
+  const racksResult = await pool.query<RackSummaryRow>(
+    `
+      SELECT
+        racks.id,
+        racks.audit_id,
+        audits.name AS audit_name,
+        racks.name,
+        racks.total_units
+      FROM racks
+      INNER JOIN audits ON audits.id = racks.audit_id
+      WHERE racks.audit_id = $1
+      ORDER BY racks.name
+    `,
+    [auditId]
+  );
+
+  return {
+    ...mapAuditSummary(auditRow),
+    racks: racksResult.rows.map(mapRackSummary)
+  };
+}
+
+export async function getAuditExportDetail(auditId: number): Promise<AuditExportDetail | null> {
+  const audit = await getAudit(auditId);
+  if (!audit) {
+    return null;
+  }
+
+  const rackDetails = await Promise.all(audit.racks.map((rack) => getRack(rack.id)));
+  return {
+    ...audit,
+    racks: rackDetails.filter((rack): rack is RackDetail => rack !== null)
+  };
+}
+
+export async function getRack(rackId: number): Promise<RackDetail | null> {
+  const rackBase = await getRackBase(rackId);
+  if (!rackBase) {
+    return null;
+  }
+
+  const deviceResult = await pool.query<RackDeviceRow>(
+    `
+      SELECT *
+      FROM rack_devices
+      WHERE rack_id = $1
+      ORDER BY placement_type, start_unit DESC NULLS LAST, name
+    `,
+    [rackId]
+  );
+
+  return {
+    id: rackBase.id,
+    auditId: rackBase.audit_id,
+    auditName: rackBase.audit_name,
+    name: rackBase.name,
+    totalUnits: rackBase.total_units,
+    devices: sortRackDevices(deviceResult.rows.map(mapRackDevice))
+  };
+}
+
+export async function createAudit(input: AuditCreateInput): Promise<AuditDetail> {
+  const siteName = input.siteName.trim();
+  const roomName = input.roomName.trim();
+  const auditName = input.auditName.trim();
+  const initialRackName = input.initialRackName.trim();
+
+  if (!siteName || !roomName || !auditName || !initialRackName) {
+    throw new Error("Site, room, audit name and initial rack name are required.");
+  }
+
+  if (input.initialRackUnits < 1) {
+    throw new Error("Rack must have at least 1U.");
+  }
+
+  const siteId = await getOrCreateSiteId(siteName);
+  const roomId = await getOrCreateRoomId(siteId, roomName);
+
+  const auditResult = await pool.query<{ id: number }>(
+    `
+      INSERT INTO audits (room_id, name, notes)
+      VALUES ($1, $2, $3)
+      RETURNING id
+    `,
+    [roomId, auditName, input.notes?.trim() || null]
+  );
+  const auditId = auditResult.rows[0].id;
+
+  await pool.query(
+    `
+      INSERT INTO racks (audit_id, room_id, name, total_units, notes)
+      VALUES ($1, $2, $3, $4, NULL)
+    `,
+    [auditId, roomId, initialRackName, input.initialRackUnits]
+  );
+
+  const audit = await getAudit(auditId);
+  if (!audit) {
+    throw new Error("Failed to load created audit.");
+  }
+
+  return audit;
+}
+
+export async function updateAudit(auditId: number, input: AuditUpdateInput): Promise<AuditDetail> {
+  const siteName = input.siteName.trim();
+  const roomName = input.roomName.trim();
+  const auditName = input.auditName.trim();
+
+  if (!siteName || !roomName || !auditName) {
+    throw new Error("Site, room and audit name are required.");
+  }
+
+  const existingAudit = await getAudit(auditId);
+  if (!existingAudit) {
+    throw new Error("Audit not found.");
+  }
+
+  const siteId = await getOrCreateSiteId(siteName);
+  const roomId = await getOrCreateRoomId(siteId, roomName);
+
+  await pool.query(
+    `
+      UPDATE audits
+      SET room_id = $1, name = $2, notes = $3
+      WHERE id = $4
+    `,
+    [roomId, auditName, input.notes?.trim() || null, auditId]
+  );
+
+  await pool.query("UPDATE racks SET room_id = $1 WHERE audit_id = $2", [roomId, auditId]);
+
+  const updatedAudit = await getAudit(auditId);
+  if (!updatedAudit) {
+    throw new Error("Failed to load updated audit.");
+  }
+
+  return updatedAudit;
+}
+
+export async function createRackInAudit(auditId: number, input: RackCreateInput): Promise<RackDetail> {
+  const audit = await getAudit(auditId);
+  if (!audit) {
+    throw new Error("Audit not found.");
+  }
+
+  const rackName = input.rackName.trim();
+  if (!rackName) {
+    throw new Error("Rack name is required.");
+  }
+
+  if (input.totalUnits < 1) {
+    throw new Error("Rack must have at least 1U.");
+  }
+
+  const result = await pool.query<{ id: number }>(
+    `
+      INSERT INTO racks (audit_id, room_id, name, total_units, notes)
+      VALUES ($1, $2, $3, $4, NULL)
+      RETURNING id
+    `,
+    [auditId, audit.roomId, rackName, input.totalUnits]
+  );
+
+  const rack = await getRack(result.rows[0].id);
+  if (!rack) {
+    throw new Error("Failed to load created rack.");
+  }
+
+  return rack;
+}
+
+export async function updateRack(rackId: number, input: RackUpdateInput): Promise<RackDetail> {
+  const rackName = input.rackName.trim();
+  if (!rackName) {
+    throw new Error("Rack name is required.");
+  }
+
+  if (input.totalUnits < 1) {
+    throw new Error("Rack must have at least 1U.");
+  }
+
+  const existingRack = await getRack(rackId);
+  if (!existingRack) {
+    throw new Error("Rack not found.");
+  }
+
+  const highestOccupiedUnit = existingRack.devices.reduce((highest, device) => {
+    if (device.placementType !== "rack" || device.startUnit === null) {
+      return highest;
+    }
+
+    return Math.max(highest, device.startUnit + device.heightU - 1);
+  }, 0);
+
+  if (input.totalUnits < highestOccupiedUnit) {
+    throw new Error(`Rack height cannot be reduced below ${highestOccupiedUnit}U because devices are already placed there.`);
+  }
+
+  await pool.query(
+    `
+      UPDATE racks
+      SET name = $1, total_units = $2
+      WHERE id = $3
+    `,
+    [rackName, input.totalUnits, rackId]
+  );
+
+  const updatedRack = await getRack(rackId);
+  if (!updatedRack) {
+    throw new Error("Failed to load updated rack.");
+  }
+
+  return updatedRack;
+}
+
+export async function deleteRack(rackId: number): Promise<void> {
+  const auditResult = await pool.query<{ audit_id: number }>("SELECT audit_id FROM racks WHERE id = $1", [rackId]);
+  const auditId = auditResult.rows[0]?.audit_id;
+  if (!auditId) {
+    throw new Error("Rack not found.");
+  }
+
+  const rackCountResult = await pool.query<{ count: string }>("SELECT COUNT(*) AS count FROM racks WHERE audit_id = $1", [auditId]);
+  if (Number(rackCountResult.rows[0]?.count ?? 0) <= 1) {
+    throw new Error("An audit must contain at least one rack.");
+  }
+
+  await pool.query("DELETE FROM racks WHERE id = $1", [rackId]);
+}
+
+export async function listDeviceTemplates(): Promise<DeviceTemplate[]> {
+  const result = await pool.query<DeviceTemplateRow>(`
+    SELECT id, template_type, mount_style, name, manufacturer, model, default_height_u, blocks_both_faces
+    FROM device_templates
+    ORDER BY template_type, default_height_u, name
+  `);
+
+  return result.rows.map((row) => ({
+    id: row.id,
+    templateType: row.template_type,
+    mountStyle: row.mount_style,
+    name: row.name,
+    manufacturer: row.manufacturer,
+    model: row.model,
+    defaultHeightU: row.default_height_u,
+    blocksBothFaces: row.blocks_both_faces
+  }));
 }
 
 export async function createDeviceTemplate(input: DeviceTemplateInput): Promise<DeviceTemplate> {
@@ -252,168 +597,6 @@ export async function deleteDeviceTemplate(templateId: number): Promise<void> {
   if ((result.rowCount ?? 0) === 0) {
     throw new Error("Device template not found.");
   }
-}
-
-export async function getRack(rackId: number): Promise<RackDetail | null> {
-  const rackResult = await pool.query<RackSummaryRow>(
-    `
-      SELECT
-        racks.id,
-        racks.name,
-        racks.total_units,
-        racks.notes,
-        rooms.id AS room_id,
-        rooms.name AS room_name,
-        sites.id AS site_id,
-        sites.name AS site_name
-      FROM racks
-      INNER JOIN rooms ON rooms.id = racks.room_id
-      INNER JOIN sites ON sites.id = rooms.site_id
-      WHERE racks.id = $1
-    `,
-    [rackId]
-  );
-
-  const rackRow = rackResult.rows[0];
-  if (!rackRow) {
-    return null;
-  }
-
-  const deviceResult = await pool.query<RackDeviceRow>(
-    `
-      SELECT *
-      FROM rack_devices
-      WHERE rack_id = $1
-      ORDER BY placement_type, start_unit DESC NULLS LAST, name
-    `,
-    [rackId]
-  );
-
-  return {
-    ...mapRackSummary(rackRow),
-    devices: sortRackDevices(deviceResult.rows.map(mapRackDevice))
-  };
-}
-
-export async function createRack(input: RackCreateInput): Promise<RackSummary> {
-  const siteName = input.siteName.trim();
-  const roomName = input.roomName.trim();
-  const rackName = input.rackName.trim();
-
-  if (!siteName || !roomName || !rackName) {
-    throw new Error("Site, room and rack names are required.");
-  }
-
-  if (input.totalUnits < 1) {
-    throw new Error("Rack must have at least 1U.");
-  }
-
-  const siteResult = await pool.query<{ id: number }>(
-    `
-      INSERT INTO sites (name)
-      VALUES ($1)
-      ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
-      RETURNING id
-    `,
-    [siteName]
-  );
-  const siteId = siteResult.rows[0].id;
-
-  const roomResult = await pool.query<{ id: number }>(
-    `
-      INSERT INTO rooms (site_id, name)
-      VALUES ($1, $2)
-      ON CONFLICT (site_id, name) DO UPDATE SET name = EXCLUDED.name
-      RETURNING id
-    `,
-    [siteId, roomName]
-  );
-  const roomId = roomResult.rows[0].id;
-
-  const rackResult = await pool.query<{ id: number }>(
-    `
-      INSERT INTO racks (room_id, name, total_units, notes)
-      VALUES ($1, $2, $3, $4)
-      RETURNING id
-    `,
-    [roomId, rackName, input.totalUnits, input.notes?.trim() || null]
-  );
-
-  const rack = await getRack(rackResult.rows[0].id);
-  if (!rack) {
-    throw new Error("Failed to load created rack.");
-  }
-
-  return rack;
-}
-
-export async function updateRack(rackId: number, input: RackUpdateInput): Promise<RackDetail> {
-  const siteName = input.siteName.trim();
-  const roomName = input.roomName.trim();
-  const rackName = input.rackName.trim();
-
-  if (!siteName || !roomName || !rackName) {
-    throw new Error("Site, room and rack names are required.");
-  }
-
-  if (input.totalUnits < 1) {
-    throw new Error("Rack must have at least 1U.");
-  }
-
-  const existingRack = await getRack(rackId);
-  if (!existingRack) {
-    throw new Error("Rack not found.");
-  }
-
-  const highestOccupiedUnit = existingRack.devices.reduce((highest, device) => {
-    if (device.placementType !== "rack" || device.startUnit === null) {
-      return highest;
-    }
-
-    return Math.max(highest, device.startUnit + device.heightU - 1);
-  }, 0);
-
-  if (input.totalUnits < highestOccupiedUnit) {
-    throw new Error(`Rack height cannot be reduced below ${highestOccupiedUnit}U because devices are already placed there.`);
-  }
-
-  const siteResult = await pool.query<{ id: number }>(
-    `
-      INSERT INTO sites (name)
-      VALUES ($1)
-      ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
-      RETURNING id
-    `,
-    [siteName]
-  );
-  const siteId = siteResult.rows[0].id;
-
-  const roomResult = await pool.query<{ id: number }>(
-    `
-      INSERT INTO rooms (site_id, name)
-      VALUES ($1, $2)
-      ON CONFLICT (site_id, name) DO UPDATE SET name = EXCLUDED.name
-      RETURNING id
-    `,
-    [siteId, roomName]
-  );
-  const roomId = roomResult.rows[0].id;
-
-  await pool.query(
-    `
-      UPDATE racks
-      SET room_id = $1, name = $2, total_units = $3, notes = $4
-      WHERE id = $5
-    `,
-    [roomId, rackName, input.totalUnits, input.notes?.trim() || null, rackId]
-  );
-
-  const updatedRack = await getRack(rackId);
-  if (!updatedRack) {
-    throw new Error("Failed to load updated rack.");
-  }
-
-  return updatedRack;
 }
 
 export async function createRackDevice(rackId: number, input: RackDeviceInput): Promise<RackDevice> {

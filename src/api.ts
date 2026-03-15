@@ -1,4 +1,8 @@
 import type {
+  AuditCreateInput,
+  AuditDetail,
+  AuditSummary,
+  AuditUpdateInput,
   DeviceTemplate,
   DeviceTemplateInput,
   RackCreateInput,
@@ -6,7 +10,6 @@ import type {
   RackDevice,
   RackDeviceInput,
   RackUpdateInput,
-  RackSummary
 } from "../shared/types";
 
 async function request<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
@@ -31,14 +34,32 @@ async function request<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  listRacks(): Promise<RackSummary[]> {
-    return request("/api/racks");
+  listAudits(): Promise<AuditSummary[]> {
+    return request("/api/audits");
   },
-  createRack(payload: RackCreateInput): Promise<RackSummary> {
-    return request("/api/racks", {
+  createAudit(payload: AuditCreateInput): Promise<AuditDetail> {
+    return request("/api/audits", {
       method: "POST",
       body: JSON.stringify(payload)
     });
+  },
+  getAudit(auditId: number): Promise<AuditDetail> {
+    return request(`/api/audits/${auditId}`);
+  },
+  updateAudit(auditId: number, payload: AuditUpdateInput): Promise<AuditDetail> {
+    return request(`/api/audits/${auditId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+  },
+  createRack(auditId: number, payload: RackCreateInput): Promise<RackDetail> {
+    return request(`/api/audits/${auditId}/racks`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  },
+  getRack(rackId: number): Promise<RackDetail> {
+    return request(`/api/racks/${rackId}`);
   },
   updateRack(rackId: number, payload: RackUpdateInput): Promise<RackDetail> {
     return request(`/api/racks/${rackId}`, {
@@ -46,8 +67,10 @@ export const api = {
       body: JSON.stringify(payload)
     });
   },
-  getRack(rackId: number): Promise<RackDetail> {
-    return request(`/api/racks/${rackId}`);
+  deleteRack(rackId: number): Promise<void> {
+    return request(`/api/racks/${rackId}`, {
+      method: "DELETE"
+    });
   },
   listTemplates(): Promise<DeviceTemplate[]> {
     return request("/api/device-templates");
@@ -80,10 +103,10 @@ export const api = {
       method: "DELETE"
     });
   },
-  excelExportUrl(rackId: number): string {
-    return `/api/racks/${rackId}/export.xlsx`;
+  excelExportUrl(auditId: number): string {
+    return `/api/audits/${auditId}/export.xlsx`;
   },
-  pdfExportUrl(rackId: number): string {
-    return `/api/racks/${rackId}/export.pdf`;
+  pdfExportUrl(auditId: number): string {
+    return `/api/audits/${auditId}/export.pdf`;
   }
 };

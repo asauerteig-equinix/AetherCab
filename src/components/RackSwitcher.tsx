@@ -1,29 +1,28 @@
 import { useState } from "react";
-import type { RackDetail, RackUpdateInput } from "../../shared/types";
+import type { AuditDetail, AuditUpdateInput } from "../../shared/types";
 
 interface RackSwitcherProps {
-  rack: RackDetail | null;
-  form: RackUpdateInput;
+  audit: AuditDetail | null;
+  form: AuditUpdateInput;
   saving: boolean;
-  onFormChange(next: RackUpdateInput): void;
+  onFormChange(next: AuditUpdateInput): void;
   onSave(): Promise<void>;
   onBackToOverview(): void;
 }
 
-function toRackForm(rack: RackDetail): RackUpdateInput {
+function toAuditForm(audit: AuditDetail): AuditUpdateInput {
   return {
-    siteName: rack.siteName,
-    roomName: rack.roomName,
-    rackName: rack.name,
-    totalUnits: rack.totalUnits,
-    notes: rack.notes ?? ""
+    siteName: audit.siteName,
+    roomName: audit.roomName,
+    auditName: audit.name,
+    notes: audit.notes ?? ""
   };
 }
 
-export function RackSwitcher({ rack, form, saving, onFormChange, onSave, onBackToOverview }: RackSwitcherProps) {
+export function RackSwitcher({ audit, form, saving, onFormChange, onSave, onBackToOverview }: RackSwitcherProps) {
   const [editorOpen, setEditorOpen] = useState(false);
 
-  if (!rack) {
+  if (!audit) {
     return (
       <section className="audit-summary compact">
         <div className="empty-state">No audit open. Please select an audit from the overview or create a new one.</div>
@@ -37,7 +36,7 @@ export function RackSwitcher({ rack, form, saving, onFormChange, onSave, onBackT
   }
 
   function handleCancel() {
-    onFormChange(toRackForm(rack));
+    onFormChange(toAuditForm(audit));
     setEditorOpen(false);
   }
 
@@ -48,18 +47,20 @@ export function RackSwitcher({ rack, form, saving, onFormChange, onSave, onBackT
           <div
             className="audit-summary-surface"
             onDoubleClick={() => {
-              onFormChange(toRackForm(rack));
+              onFormChange(toAuditForm(audit));
               setEditorOpen(true);
             }}
           >
             <p className="eyebrow">Active Audit</p>
-            <h2>{rack.name}</h2>
+            <h2>{audit.name}</h2>
             <p className="audit-summary-inline">
-              <strong>{rack.siteName}</strong>
-              <span>{rack.roomName}</span>
-              <span>{rack.totalUnits}U</span>
+              <strong>{audit.siteName}</strong>
+              <span>{audit.roomName}</span>
+              <span>
+                {audit.rackCount} rack{audit.rackCount === 1 ? "" : "s"}
+              </span>
             </p>
-            <p className="audit-summary-notes">{rack.notes || "No notes yet."}</p>
+            <p className="audit-summary-notes">{audit.notes || "No notes yet."}</p>
             <p className="audit-summary-hint">Double-click to edit audit details.</p>
           </div>
           <button className="ghost-button" onClick={onBackToOverview} type="button">
@@ -88,38 +89,28 @@ export function RackSwitcher({ rack, form, saving, onFormChange, onSave, onBackT
             <div className="audit-edit-topbar">
               <div className="audit-edit-heading">
                 <p className="eyebrow">Edit Audit</p>
-                <h2 id="audit-edit-title">{rack.name}</h2>
-                <p className="audit-edit-copy">Update the audit metadata without leaving the rack editor.</p>
+                <h2 id="audit-edit-title">{audit.name}</h2>
+                <p className="audit-edit-copy">Update the shared metadata for all racks in this audit.</p>
               </div>
               <button className="ghost-button" disabled={saving} onClick={handleCancel} type="button">
                 Close
               </button>
             </div>
 
-            <div className="audit-edit-grid">
-              <label className="audit-edit-field">
+            <div className="audit-edit-grid clean">
+              <label className="audit-edit-field plain">
+                <span>Audit Name</span>
+                <input value={form.auditName} onChange={(event) => onFormChange({ ...form, auditName: event.target.value })} />
+              </label>
+              <label className="audit-edit-field plain">
                 <span>Site</span>
                 <input value={form.siteName} onChange={(event) => onFormChange({ ...form, siteName: event.target.value })} />
               </label>
-              <label className="audit-edit-field">
+              <label className="audit-edit-field plain">
                 <span>Room</span>
                 <input value={form.roomName} onChange={(event) => onFormChange({ ...form, roomName: event.target.value })} />
               </label>
-              <label className="audit-edit-field">
-                <span>Rack Name</span>
-                <input value={form.rackName} onChange={(event) => onFormChange({ ...form, rackName: event.target.value })} />
-              </label>
-              <label className="audit-edit-field">
-                <span>Rack Height</span>
-                <input
-                  min={1}
-                  type="number"
-                  value={form.totalUnits}
-                  onChange={(event) => onFormChange({ ...form, totalUnits: Number(event.target.value) })}
-                />
-                <small>Can only be reduced if no placed devices would exceed the new height.</small>
-              </label>
-              <label className="audit-edit-field full-width">
+              <label className="audit-edit-field plain full-width">
                 <span>Notes</span>
                 <textarea rows={4} value={form.notes ?? ""} onChange={(event) => onFormChange({ ...form, notes: event.target.value })} />
               </label>

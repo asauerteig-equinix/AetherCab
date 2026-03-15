@@ -1,13 +1,7 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
-import {
-  getEndUnit,
-  getMountPositionFace,
-  getRackMountPositionLabel,
-  getVerticalPduMountPositionsForFace,
-  isVerticalPduMountPosition
-} from "../shared/rack.js";
-import type { RackDetail, RackDevice, RackFace, RackMountPosition } from "../shared/types.js";
+import { getEndUnit, getMountPositionFace, getRackMountPositionLabel, isVerticalPduMountPosition } from "../shared/rack.js";
+import type { AuditExportDetail, RackDetail, RackDevice, RackFace, RackMountPosition } from "../shared/types.js";
 
 type PdfDocument = InstanceType<typeof PDFDocument>;
 
@@ -47,8 +41,8 @@ const pdfPageOptions = {
   layout: "landscape"
 } as const;
 
-function installedDevices(detail: RackDetail): RackDevice[] {
-  return detail.devices.filter((device) => device.placementType === "rack" && device.startUnit !== null);
+function installedDevices(rack: RackDetail): RackDevice[] {
+  return rack.devices.filter((device) => device.placementType === "rack" && device.startUnit !== null);
 }
 
 function faceLabel(face: RackFace): string {
@@ -113,10 +107,6 @@ function faceSortValue(device: RackDevice): number {
   return device.rackFace === "rear" ? 1 : 0;
 }
 
-function sortDevices(devices: RackDevice[]): RackDevice[] {
-  return [...devices].sort(compareSortedDevices);
-}
-
 function compareSortedDevices(left: RackDevice, right: RackDevice): number {
   const faceDelta = faceSortValue(left) - faceSortValue(right);
   if (faceDelta !== 0) {
@@ -134,6 +124,10 @@ function compareSortedDevices(left: RackDevice, right: RackDevice): number {
   }
 
   return left.name.localeCompare(right.name);
+}
+
+function sortDevices(devices: RackDevice[]): RackDevice[] {
+  return [...devices].sort(compareSortedDevices);
 }
 
 function deviceExportGroup(device: RackDevice): string {
@@ -165,18 +159,19 @@ function sortDevicesForGroupedExport(devices: RackDevice[]): RackDevice[] {
 
 function groupDevicesForExport(devices: RackDevice[]): Array<{ label: string; devices: RackDevice[] }> {
   const orderedGroups = ["Rack Devices", "Front PDUs", "Rear PDUs"] as const;
+  const sortedDevices = sortDevicesForGroupedExport(devices);
 
   return orderedGroups
     .map((label) => ({
       label,
-      devices: sortDevicesForGroupedExport(devices).filter((device) => deviceExportGroup(device) === label)
+      devices: sortedDevices.filter((device) => deviceExportGroup(device) === label)
     }))
     .filter((group) => group.devices.length > 0);
 }
 
-function visibleDevicesForFace(detail: RackDetail, face: RackFace): RackDevice[] {
+function visibleDevicesForFace(rack: RackDetail, face: RackFace): RackDevice[] {
   return sortDevices(
-    installedDevices(detail).filter((device) => {
+    installedDevices(rack).filter((device) => {
       if (device.blocksBothFaces) {
         return true;
       }
@@ -239,7 +234,7 @@ function getExcelFaceSpan(): number {
   return 9;
 }
 
-function getExcelDeviceRange(face: RackFace, startColumn: number, mountPosition: RackMountPosition): { startColumn: number; endColumn: number } {
+function getExcelDeviceRange(startColumn: number, mountPosition: RackMountPosition): { startColumn: number; endColumn: number } {
   if (isVerticalPduMountPosition(mountPosition)) {
     const laneColumnMap = {
       "front-left-outer": startColumn + 1,
@@ -256,17 +251,10 @@ function getExcelDeviceRange(face: RackFace, startColumn: number, mountPosition:
     return { startColumn: laneColumn, endColumn: laneColumn };
   }
 
-  void face;
   return { startColumn: startColumn + 3, endColumn: startColumn + 6 };
 }
 
-function drawExcelRackFace(
-  worksheet: ExcelJS.Worksheet,
-  detail: RackDetail,
-  face: RackFace,
-  startColumn: number,
-  startRow: number
-): void {
+function drawExcelRackFace(worksheet: ExcelJS.Worksheet, rack: RackDetail, face: RackFace, startColumn: number, startRow: number): void {
   const faceSpan = getExcelFaceSpan();
 
   worksheet.mergeCells(startRow, startColumn, startRow, startColumn + faceSpan - 1);
@@ -276,7 +264,7 @@ function drawExcelRackFace(
   headerCell.alignment = { vertical: "middle", horizontal: "center" };
 
   const rackStartRow = startRow + 2;
-  const rackDevices = visibleDevicesForFace(detail, face);
+  const rackDevices = visibleDevicesForFace(rack, face);
 
   worksheet.getColumn(startColumn).width = 8;
   worksheet.getColumn(startColumn + 1).width = 5.2;
@@ -288,8 +276,8 @@ function drawExcelRackFace(
   worksheet.getColumn(startColumn + 7).width = 5.2;
   worksheet.getColumn(startColumn + 8).width = 5.2;
 
-  for (let unit = detail.totalUnits; unit >= 1; unit -= 1) {
-    const rowIndex = rackStartRow + (detail.totalUnits - unit);
+  for (let unit = rack.totalUnits; unit >= 1; unit -= 1) {
+    const rowIndex = rackStartRow + (rack.totalUnits - unit);
     const row = worksheet.getRow(rowIndex);
     row.height = 22;
 
@@ -315,9 +303,9 @@ function drawExcelRackFace(
   rackDevices.forEach((device) => {
     const startUnit = device.startUnit ?? 1;
     const endUnit = getEndUnit(startUnit, device.heightU);
-    const topRow = rackStartRow + (detail.totalUnits - endUnit);
+    const topRow = rackStartRow + (rack.totalUnits - endUnit);
     const bottomRow = topRow + device.heightU - 1;
-    const deviceRange = getExcelDeviceRange(face, startColumn, device.mountPosition);
+    const deviceRange = getExcelDeviceRange(startColumn, device.mountPosition);
 
     worksheet.mergeCells(topRow, deviceRange.startColumn, bottomRow, deviceRange.endColumn);
     applyExcelRangeBorder(worksheet, topRow, bottomRow, deviceRange.startColumn, deviceRange.endColumn, excelPalette.deviceBorder);
@@ -338,7 +326,7 @@ function drawExcelRackFace(
     deviceCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: excelPalette.deviceFill } };
   });
 
-  const footerRow = rackStartRow + detail.totalUnits;
+  const footerRow = rackStartRow + rack.totalUnits;
   worksheet.mergeCells(footerRow, startColumn, footerRow, startColumn + faceSpan - 1);
   const footerCell = worksheet.getCell(footerRow, startColumn);
   footerCell.value = `-- ${faceLabel(face)} --`;
@@ -346,7 +334,7 @@ function drawExcelRackFace(
   footerCell.alignment = { vertical: "middle", horizontal: "center" };
 }
 
-function buildInventorySheet(workbook: ExcelJS.Workbook, detail: RackDetail): void {
+function buildInventorySheet(workbook: ExcelJS.Workbook, audit: AuditExportDetail): void {
   const worksheet = workbook.addWorksheet("Inventory List", {
     properties: { tabColor: { argb: excelPalette.accent } },
     views: [{ state: "frozen", ySplit: 5 }]
@@ -355,7 +343,8 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, detail: RackDetail): vo
   worksheet.columns = [
     { header: "Site", key: "site", width: 18 },
     { header: "Room", key: "room", width: 18 },
-    { header: "Audit", key: "rack", width: 18 },
+    { header: "Audit", key: "audit", width: 20 },
+    { header: "Rack", key: "rack", width: 18 },
     { header: "Group", key: "group", width: 16 },
     { header: "Start U", key: "startUnit", width: 10 },
     { header: "End U", key: "endUnit", width: 10 },
@@ -370,76 +359,122 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, detail: RackDetail): vo
     { header: "Notes", key: "notes", width: 28 }
   ];
 
-  worksheet.mergeCells("A1:O1");
+  worksheet.mergeCells("A1:P1");
   const titleCell = worksheet.getCell("A1");
   titleCell.value = "AetherCab Inventory Export";
-  titleCell.font = { name: "Bahnschrift", size: 16, bold: true, color: { argb: "FF2B2520" } };
+  titleCell.font = { name: "Bahnschrift", size: 16, bold: true, color: { argb: excelPalette.textPrimary } };
   titleCell.alignment = { vertical: "middle", horizontal: "left" };
-  worksheet.mergeCells("A2:O2");
-  const metaCell = worksheet.getCell("A2");
-  metaCell.value = `${detail.siteName} | ${detail.roomName} | ${detail.name} | ${detail.totalUnits}U`;
-  metaCell.font = { name: "Bahnschrift", size: 10, color: { argb: "FF4C433B" } };
-  metaCell.alignment = { vertical: "middle", horizontal: "left" };
 
-  worksheet.mergeCells("A3:O3");
+  worksheet.mergeCells("A2:P2");
+  const metaCell = worksheet.getCell("A2");
+  metaCell.value = `${audit.siteName} | ${audit.roomName} | ${audit.name} | ${audit.rackCount} rack${audit.rackCount === 1 ? "" : "s"}`;
+  styleExcelMeta(metaCell);
+
+  worksheet.mergeCells("A3:P3");
   const notesCell = worksheet.getCell("A3");
-  notesCell.value = detail.notes ? `Notes: ${detail.notes}` : "Notes: -";
-  notesCell.font = { name: "Bahnschrift", size: 10, color: { argb: "FF4C433B" } };
-  notesCell.alignment = { vertical: "middle", horizontal: "left" };
+  notesCell.value = audit.notes ? `Notes: ${audit.notes}` : "Notes: -";
+  styleExcelMeta(notesCell);
 
   const headerRow = worksheet.getRow(5);
   headerRow.values = [null, ...worksheet.columns.map((column) => columnHeaderLabel(column))];
   headerRow.height = 22;
   headerRow.eachCell((cell) => {
-    cell.font = { name: "Bahnschrift", size: 10, bold: true, color: { argb: "FF2B2520" } };
+    cell.font = { name: "Bahnschrift", size: 10, bold: true, color: { argb: excelPalette.textPrimary } };
     cell.alignment = { vertical: "middle", horizontal: "left" };
     cell.border = createThinBorder("FFD6D0C9");
   });
 
-  groupDevicesForExport(installedDevices(detail)).forEach((group) => {
-    const groupRow = worksheet.addRow({
+  audit.racks.forEach((rack) => {
+    const rackRow = worksheet.addRow({
       site: "",
       room: "",
-      rack: "",
-      group: group.label
+      audit: "",
+      rack: `${rack.name} (${rack.totalUnits}U)`
     });
-    worksheet.mergeCells(`A${groupRow.number}:O${groupRow.number}`);
-    const groupCell = worksheet.getCell(`A${groupRow.number}`);
-    groupCell.value = group.label;
-    groupCell.font = { name: "Bahnschrift", size: 10, bold: true, color: { argb: excelPalette.accentStrong } };
-    groupCell.alignment = { vertical: "middle", horizontal: "left" };
-    groupCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: excelPalette.panelBackground } };
-    groupCell.border = createThinBorder(excelPalette.panelBorder);
+    worksheet.mergeCells(`A${rackRow.number}:P${rackRow.number}`);
+    const rackCell = worksheet.getCell(`A${rackRow.number}`);
+    rackCell.value = `Rack: ${rack.name} (${rack.totalUnits}U)`;
+    rackCell.font = { name: "Bahnschrift", size: 10, bold: true, color: { argb: excelPalette.accentStrong } };
+    rackCell.alignment = { vertical: "middle", horizontal: "left" };
+    rackCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: excelPalette.panelBackground } };
+    rackCell.border = createThinBorder(excelPalette.panelBorder);
 
-    group.devices.forEach((device) => {
-      const row = worksheet.addRow({
-        site: detail.siteName,
-        room: detail.roomName,
-        rack: detail.name,
-        group: group.label,
-        startUnit: device.startUnit,
-        endUnit: getEndUnit(device.startUnit ?? 1, device.heightU),
-        heightU: device.heightU,
-        rackFace: deviceFaceLabel(device),
-        mountPosition: deviceMountLabel(device),
-        name: device.name,
-        manufacturer: device.manufacturer,
-        model: device.model,
-        hostname: device.hostname ?? "",
-        serialNumber: device.serialNumber ?? "",
-        notes: device.notes ?? ""
+    const rackDevices = installedDevices(rack);
+    const groups = groupDevicesForExport(rackDevices);
+    if (groups.length === 0) {
+      const emptyRow = worksheet.addRow({
+        site: audit.siteName,
+        room: audit.roomName,
+        audit: audit.name,
+        rack: rack.name,
+        group: "No devices documented"
       });
-      row.eachCell((cell) => {
-        cell.font = { name: "Bahnschrift", size: 10, color: { argb: "FF2B2520" } };
-        cell.alignment = { vertical: "top", horizontal: "left", wrapText: true };
+      emptyRow.eachCell((cell) => {
+        cell.font = { name: "Bahnschrift", size: 10, color: { argb: excelPalette.textSecondary } };
+        cell.alignment = { vertical: "middle", horizontal: "left" };
         cell.border = createThinBorder("FFE0DBD4");
+      });
+      return;
+    }
+
+    groups.forEach((group) => {
+      const groupRow = worksheet.addRow({
+        group: group.label
+      });
+      worksheet.mergeCells(`A${groupRow.number}:P${groupRow.number}`);
+      const groupCell = worksheet.getCell(`A${groupRow.number}`);
+      groupCell.value = group.label;
+      groupCell.font = { name: "Bahnschrift", size: 10, bold: true, color: { argb: excelPalette.accentStrong } };
+      groupCell.alignment = { vertical: "middle", horizontal: "left" };
+      groupCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF8FAFC" } };
+      groupCell.border = createThinBorder(excelPalette.slotLine);
+
+      group.devices.forEach((device) => {
+        const row = worksheet.addRow({
+          site: audit.siteName,
+          room: audit.roomName,
+          audit: audit.name,
+          rack: rack.name,
+          group: group.label,
+          startUnit: device.startUnit,
+          endUnit: getEndUnit(device.startUnit ?? 1, device.heightU),
+          heightU: device.heightU,
+          rackFace: deviceFaceLabel(device),
+          mountPosition: deviceMountLabel(device),
+          name: device.name,
+          manufacturer: device.manufacturer,
+          model: device.model,
+          hostname: device.hostname ?? "",
+          serialNumber: device.serialNumber ?? "",
+          notes: device.notes ?? ""
+        });
+        row.eachCell((cell) => {
+          cell.font = { name: "Bahnschrift", size: 10, color: { argb: excelPalette.textPrimary } };
+          cell.alignment = { vertical: "top", horizontal: "left", wrapText: true };
+          cell.border = createThinBorder("FFE0DBD4");
+        });
       });
     });
   });
 }
 
-function buildRackViewSheet(workbook: ExcelJS.Workbook, detail: RackDetail): void {
-  const worksheet = workbook.addWorksheet("Rack View", {
+function safeSheetName(base: string, usedNames: Set<string>): string {
+  const normalizedBase = base.replace(/[\\/*?:[\]]/g, " ").trim() || "Rack";
+  let candidate = normalizedBase.slice(0, 31);
+  let counter = 2;
+
+  while (usedNames.has(candidate)) {
+    const suffix = ` ${counter}`;
+    candidate = `${normalizedBase.slice(0, Math.max(1, 31 - suffix.length))}${suffix}`;
+    counter += 1;
+  }
+
+  usedNames.add(candidate);
+  return candidate;
+}
+
+function buildRackViewSheet(workbook: ExcelJS.Workbook, audit: AuditExportDetail, rack: RackDetail, usedNames: Set<string>): void {
+  const worksheet = workbook.addWorksheet(safeSheetName(`Rack ${rack.name}`, usedNames), {
     properties: { tabColor: { argb: excelPalette.accentStrong } }
   });
 
@@ -448,17 +483,17 @@ function buildRackViewSheet(workbook: ExcelJS.Workbook, detail: RackDetail): voi
 
   worksheet.mergeCells("A1:R1");
   styleExcelTitle(worksheet.getCell("A1"), "AetherCab Rack View");
+
   worksheet.mergeCells("A2:R2");
-  worksheet.getCell("A2").value = `${detail.siteName} | ${detail.roomName} | ${detail.name}`;
+  worksheet.getCell("A2").value = `${audit.siteName} | ${audit.roomName} | ${audit.name} | ${rack.name} | ${rack.totalUnits}U`;
   styleExcelMeta(worksheet.getCell("A2"));
 
   worksheet.mergeCells("A3:R3");
-  worksheet.getCell("A3").value = detail.notes ? `Notes: ${detail.notes}` : "Notes: -";
+  worksheet.getCell("A3").value = audit.notes ? `Notes: ${audit.notes}` : "Notes: -";
   styleExcelMeta(worksheet.getCell("A3"));
 
-  drawExcelRackFace(worksheet, detail, "front", 1, 5);
-  drawExcelRackFace(worksheet, detail, "rear", 10, 5);
-
+  drawExcelRackFace(worksheet, rack, "front", 1, 5);
+  drawExcelRackFace(worksheet, rack, "rear", 10, 5);
 }
 
 function drawPdfPageBackground(pdf: PdfDocument): void {
@@ -467,14 +502,21 @@ function drawPdfPageBackground(pdf: PdfDocument): void {
   pdf.restore();
 }
 
-function drawPdfHeader(pdf: PdfDocument, detail: RackDetail, title: string, subtitle: string): void {
+function drawPdfHeader(pdf: PdfDocument, audit: AuditExportDetail, title: string, subtitle: string, rack?: RackDetail): void {
   pdf.fillColor(pdfPalette.textPrimary).fontSize(20).text(title, 36, 32);
   pdf.fillColor(pdfPalette.textSecondary).fontSize(11).text(subtitle, 36, 58);
-  pdf.text(`${detail.siteName} | ${detail.roomName} | ${detail.name} | ${detail.totalUnits}U`, 36, 74);
 
-  if (detail.notes) {
-    pdf.text(`Notes: ${detail.notes}`, 36, 90, { width: pdf.page.width - 72 });
+  const meta = rack
+    ? `${audit.siteName} | ${audit.roomName} | ${audit.name} | ${rack.name} | ${rack.totalUnits}U`
+    : `${audit.siteName} | ${audit.roomName} | ${audit.name} | ${audit.rackCount} rack${audit.rackCount === 1 ? "" : "s"}`;
+
+  pdf.text(meta, 36, 74);
+
+  if (audit.notes) {
+    pdf.text(`Notes: ${audit.notes}`, 36, 90, { width: pdf.page.width - 72 });
   }
+
+  pdf.y = 122;
 }
 
 function getPdfRackDeviceFrame(
@@ -513,21 +555,14 @@ function getPdfRackDeviceFrame(
   return { x: rackX + 8, width: rackWidth - 16 };
 }
 
-function drawPdfRackFace(
-  pdf: PdfDocument,
-  detail: RackDetail,
-  face: RackFace,
-  x: number,
-  y: number,
-  width: number
-): void {
+function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: number, y: number, width: number): void {
   const labelWidth = 42;
   const rackWidth = width - labelWidth;
   const rackX = x + labelWidth;
-  const unitHeight = Math.max(8, Math.min(10, Math.floor((pdf.page.height - y - 90) / detail.totalUnits)));
-  const rackHeight = unitHeight * detail.totalUnits;
+  const unitHeight = Math.max(8, Math.min(10, Math.floor((pdf.page.height - y - 90) / rack.totalUnits)));
+  const rackHeight = unitHeight * rack.totalUnits;
   const innerPadding = 8;
-  const devices = visibleDevicesForFace(detail, face);
+  const devices = visibleDevicesForFace(rack, face);
   const reservePduColumns = devices.some((device) => isVerticalPduMountPosition(device.mountPosition));
 
   pdf.fillColor(pdfPalette.accentStrong).fontSize(9).text(`-- ${faceLabel(face)} --`, x, y - 20, { width, align: "center" });
@@ -537,17 +572,8 @@ function drawPdfRackFace(
   pdf.roundedRect(rackX, y, rackWidth, rackHeight, 10).lineWidth(1).strokeColor(pdfPalette.panelBorder).stroke();
   pdf.restore();
 
-  if (devices.some((device) => isVerticalPduMountPosition(device.mountPosition))) {
-    getVerticalPduMountPositionsForFace(face).forEach((mountPosition) => {
-      const laneFrame = getPdfRackDeviceFrame(true, rackX, rackWidth, mountPosition);
-      pdf.save();
-      pdf.roundedRect(laneFrame.x, y + 2, laneFrame.width, rackHeight - 4, 6).fillOpacity(0.18).fill(pdfPalette.accent);
-      pdf.restore();
-    });
-  }
-
-  for (let unit = detail.totalUnits; unit >= 1; unit -= 1) {
-    const rowY = y + (detail.totalUnits - unit) * unitHeight;
+  for (let unit = rack.totalUnits; unit >= 1; unit -= 1) {
+    const rowY = y + (rack.totalUnits - unit) * unitHeight;
 
     pdf.save();
     pdf.rect(rackX, rowY, rackWidth, unitHeight).fill(pdfPalette.slotBackground);
@@ -563,7 +589,7 @@ function drawPdfRackFace(
   devices.forEach((device) => {
     const startUnit = device.startUnit ?? 1;
     const endUnit = getEndUnit(startUnit, device.heightU);
-    const topY = y + (detail.totalUnits - endUnit) * unitHeight + 1;
+    const topY = y + (rack.totalUnits - endUnit) * unitHeight + 1;
     const height = Math.max(unitHeight * device.heightU - 2, unitHeight - 2);
     const frame = getPdfRackDeviceFrame(reservePduColumns, rackX, rackWidth, device.mountPosition);
     const textX = frame.x + innerPadding;
@@ -598,40 +624,33 @@ function drawPdfRackFace(
   });
 }
 
-function ensurePdfTextSpace(pdf: PdfDocument, neededHeight = 36): void {
-  if (pdf.y + neededHeight <= pdf.page.height - 36) {
-    return;
-  }
-
-  pdf.addPage(pdfPageOptions);
-  drawPdfPageBackground(pdf);
+function ensurePdfTextSpace(pdf: PdfDocument, neededHeight = 36): boolean {
+  return pdf.y + neededHeight <= pdf.page.height - 36;
 }
 
 function drawPdfTextSectionTitle(pdf: PdfDocument, title: string): void {
-  ensurePdfTextSpace(pdf, 28);
-  pdf.moveDown(0.5);
+  pdf.moveDown(0.35);
   pdf.fillColor(pdfPalette.accentStrong).fontSize(13).text(title);
-  pdf.moveDown(0.25);
+  pdf.moveDown(0.2);
 }
 
-function drawPdfInventoryGroupLabel(pdf: PdfDocument, title: string): void {
-  ensurePdfTextSpace(pdf, 24);
-  pdf.moveDown(0.35);
+function drawPdfGroupLabel(pdf: PdfDocument, title: string): void {
+  pdf.moveDown(0.2);
   pdf.fillColor(pdfPalette.accentStrong).fontSize(11).text(title);
-  pdf.moveDown(0.15);
+  pdf.moveDown(0.1);
 }
 
 function drawPdfInventoryTableHeader(pdf: PdfDocument): void {
-  ensurePdfTextSpace(pdf, 24);
   const x = 36;
   const y = pdf.y;
   const columns = [
-    { label: "Pos", width: 58 },
-    { label: "Face", width: 54 },
-    { label: "Mount", width: 124 },
-    { label: "Name", width: 146 },
-    { label: "Model", width: 152 },
-    { label: "Details", width: 190 }
+    { label: "Rack", width: 92 },
+    { label: "Pos", width: 56 },
+    { label: "Face", width: 52 },
+    { label: "Mount", width: 110 },
+    { label: "Name", width: 130 },
+    { label: "Model", width: 118 },
+    { label: "Details", width: 212 }
   ] as const;
 
   let columnX = x;
@@ -650,8 +669,7 @@ function drawPdfInventoryTableHeader(pdf: PdfDocument): void {
   pdf.y = y + 18;
 }
 
-function drawPdfInventoryRow(pdf: PdfDocument, device: RackDevice): void {
-  ensurePdfTextSpace(pdf, 20);
+function drawPdfInventoryRow(pdf: PdfDocument, rack: RackDetail, device: RackDevice): void {
   const x = 36;
   const y = pdf.y;
   const details = [
@@ -663,6 +681,7 @@ function drawPdfInventoryRow(pdf: PdfDocument, device: RackDevice): void {
     .filter(Boolean)
     .join(" | ");
   const values = [
+    rack.name,
     devicePositionLabel(device),
     deviceFaceLabel(device),
     deviceMountLabel(device),
@@ -670,7 +689,7 @@ function drawPdfInventoryRow(pdf: PdfDocument, device: RackDevice): void {
     `${device.manufacturer} ${device.model}`.trim(),
     details
   ];
-  const columns = [58, 54, 124, 146, 152, 190];
+  const columns = [92, 56, 52, 110, 130, 118, 212];
 
   let columnX = x;
   values.forEach((value, index) => {
@@ -679,7 +698,7 @@ function drawPdfInventoryRow(pdf: PdfDocument, device: RackDevice): void {
     pdf.rect(columnX, y, width, 20).fill("#ffffff");
     pdf.rect(columnX, y, width, 20).lineWidth(0.5).strokeColor(pdfPalette.slotLine).stroke();
     pdf.restore();
-    pdf.fillColor(index < 4 ? pdfPalette.textPrimary : pdfPalette.textSecondary).fontSize(8.1).text(value, columnX + 4, y + 5, {
+    pdf.fillColor(index < 5 ? pdfPalette.textPrimary : pdfPalette.textSecondary).fontSize(8.1).text(value, columnX + 4, y + 5, {
       width: width - 8,
       ellipsis: true
     });
@@ -689,47 +708,69 @@ function drawPdfInventoryRow(pdf: PdfDocument, device: RackDevice): void {
   pdf.y = y + 20;
 }
 
-function drawPdfGroupedInventory(pdf: PdfDocument, detail: RackDetail): void {
-  const groups = groupDevicesForExport(installedDevices(detail));
+function startPdfInventoryPage(pdf: PdfDocument, audit: AuditExportDetail): void {
+  pdf.addPage(pdfPageOptions);
+  drawPdfPageBackground(pdf);
+  drawPdfHeader(pdf, audit, "AetherCab Device List", "Structured inventory list for all racks in this audit");
+  drawPdfTextSectionTitle(pdf, "Installed Devices");
+}
 
-  if (groups.length === 0) {
+function drawPdfGroupedInventory(pdf: PdfDocument, audit: AuditExportDetail): void {
+  const racksWithDevices = audit.racks.filter((rack) => installedDevices(rack).length > 0);
+
+  if (racksWithDevices.length === 0) {
     pdf.fillColor(pdfPalette.textSecondary).fontSize(10).text("No installed devices documented.");
     return;
   }
 
-  groups.forEach((group) => {
-    drawPdfInventoryGroupLabel(pdf, group.label);
-    drawPdfInventoryTableHeader(pdf);
+  racksWithDevices.forEach((rack, rackIndex) => {
+    if (!ensurePdfTextSpace(pdf, rackIndex === 0 ? 28 : 34)) {
+      startPdfInventoryPage(pdf, audit);
+    }
 
-    group.devices.forEach((device) => {
-      if (pdf.y + 24 > pdf.page.height - 36) {
-        pdf.addPage(pdfPageOptions);
-        drawPdfPageBackground(pdf);
-        drawPdfHeader(pdf, detail, "AetherCab Device List", "Structured inventory list for this rack");
-        pdf.moveDown(4);
-        drawPdfInventoryGroupLabel(pdf, group.label);
-        drawPdfInventoryTableHeader(pdf);
+    drawPdfGroupLabel(pdf, `Rack: ${rack.name} (${rack.totalUnits}U)`);
+
+    groupDevicesForExport(installedDevices(rack)).forEach((group) => {
+      if (!ensurePdfTextSpace(pdf, 42)) {
+        startPdfInventoryPage(pdf, audit);
+        drawPdfGroupLabel(pdf, `Rack: ${rack.name} (${rack.totalUnits}U)`);
       }
 
-      drawPdfInventoryRow(pdf, device);
+      drawPdfGroupLabel(pdf, group.label);
+      drawPdfInventoryTableHeader(pdf);
+
+      group.devices.forEach((device) => {
+        if (!ensurePdfTextSpace(pdf, 22)) {
+          startPdfInventoryPage(pdf, audit);
+          drawPdfGroupLabel(pdf, `Rack: ${rack.name} (${rack.totalUnits}U)`);
+          drawPdfGroupLabel(pdf, group.label);
+          drawPdfInventoryTableHeader(pdf);
+        }
+
+        drawPdfInventoryRow(pdf, rack, device);
+      });
     });
   });
 }
 
-export async function buildExcelExport(detail: RackDetail): Promise<Buffer> {
+export async function buildExcelExport(audit: AuditExportDetail): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
+  const usedSheetNames = new Set<string>(["Inventory List"]);
+
   workbook.creator = "AetherCab";
   workbook.created = new Date();
   workbook.modified = new Date();
 
-  buildInventorySheet(workbook, detail);
-  buildRackViewSheet(workbook, detail);
+  buildInventorySheet(workbook, audit);
+  audit.racks.forEach((rack) => {
+    buildRackViewSheet(workbook, audit, rack, usedSheetNames);
+  });
 
   const workbookBuffer = await workbook.xlsx.writeBuffer();
   return Buffer.isBuffer(workbookBuffer) ? workbookBuffer : Buffer.from(workbookBuffer);
 }
 
-export function buildPdfExport(detail: RackDetail): Promise<Buffer> {
+export function buildPdfExport(audit: AuditExportDetail): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const pdf = new PDFDocument(pdfPageOptions);
     const chunks: Buffer[] = [];
@@ -747,18 +788,19 @@ export function buildPdfExport(detail: RackDetail): Promise<Buffer> {
     pdf.on("end", () => resolve(Buffer.concat(chunks)));
     pdf.on("error", reject);
 
-    drawPdfPageBackground(pdf);
-    drawPdfHeader(pdf, detail, "AetherCab Rack View", "Visual rack documentation");
-    drawPdfRackFace(pdf, detail, "front", 42, 124, 340);
-    drawPdfRackFace(pdf, detail, "rear", 430, 124, 340);
+    audit.racks.forEach((rack, index) => {
+      if (index > 0) {
+        pdf.addPage(pdfPageOptions);
+      }
 
-    pdf.addPage(pdfPageOptions);
-    drawPdfPageBackground(pdf);
-    drawPdfHeader(pdf, detail, "AetherCab Device List", "Structured inventory list for this rack");
-    pdf.moveDown(4);
+      drawPdfPageBackground(pdf);
+      drawPdfHeader(pdf, audit, "AetherCab Rack View", "Visual rack documentation", rack);
+      drawPdfRackFace(pdf, rack, "front", 42, 124, 340);
+      drawPdfRackFace(pdf, rack, "rear", 430, 124, 340);
+    });
 
-    drawPdfTextSectionTitle(pdf, "Installed Devices");
-    drawPdfGroupedInventory(pdf, detail);
+    startPdfInventoryPage(pdf, audit);
+    drawPdfGroupedInventory(pdf, audit);
 
     pdf.end();
   });
