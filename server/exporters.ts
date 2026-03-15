@@ -1029,7 +1029,7 @@ function drawPdfPduCallouts(
 }
 
 function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: number, y: number, width: number): void {
-  const unitHeight = Math.max(8, Math.min(11, Math.floor((pdf.page.height - y - 82) / rack.totalUnits)));
+  const unitHeight = Math.max(8, Math.min(11, Math.floor((pdf.page.height - y - 52) / rack.totalUnits)));
   const rackHeight = unitHeight * rack.totalUnits;
   const innerPadding = 8;
   const devices = visibleDevicesForFace(rack, face);
@@ -1079,10 +1079,17 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
     const textX = frame.x + innerPadding + (showIcon ? iconSize + 6 : 0);
     const textWidth = frame.width - innerPadding * 2 - (showIcon ? iconSize + 6 : 0);
     const lines = deviceVisualLines(device);
-    const fontSize = isPdu ? 5.8 : device.heightU === 1 ? 6.2 : device.heightU === 2 ? 6.8 : 7.2;
-    const lineHeight = fontSize + 1.5;
+    const baseFontSize = isPdu ? 5.8 : device.heightU === 1 ? 6.2 : device.heightU === 2 ? 6.8 : 7.2;
+    const minimumFontSize = isPdu ? 5.2 : device.heightU === 1 ? 4.8 : 5.2;
+    const verticalPadding = isPdu ? 3 : device.heightU === 1 ? 1.5 : 2.5;
+    const availableTextHeight = Math.max(4, height - verticalPadding * 2);
+    const fontSize = Math.min(
+      baseFontSize,
+      Math.max(minimumFontSize, (availableTextHeight - Math.max(0, lines.length - 1) * 1.2) / lines.length)
+    );
+    const lineHeight = fontSize + 1.2;
     const textBlockHeight = lines.length * lineHeight;
-    const startTextY = isPdu || device.heightU > 1 ? topY + 4 : topY + Math.max(3, (height - textBlockHeight) / 2);
+    const startTextY = isPdu ? topY + 3 : topY + Math.max(verticalPadding, (height - textBlockHeight) / 2);
 
     pdf.save();
     pdf
@@ -1117,7 +1124,7 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
     pdf.restore();
 
     if (showIcon) {
-      const iconY = device.heightU > 1 ? topY + 4 : topY + Math.max(3, (height - iconSize) / 2);
+      const iconY = device.heightU > 1 ? topY + Math.max(2, verticalPadding) : topY + Math.max(2, (height - iconSize) / 2);
       drawPdfDeviceIcon(pdf, device.iconKey, frame.x + innerPadding, iconY, iconSize);
     }
 
@@ -1366,8 +1373,8 @@ export function buildPdfExport(audit: AuditExportDetail): Promise<Buffer> {
         { x: frontLayout.rackX, width: frontLayout.rackWidth, stats: capacitySummary.front },
         { x: rearLayout.rackX, width: rearLayout.rackWidth, stats: capacitySummary.rear }
       ]);
-      drawPdfRackFace(pdf, rack, "front", frontX, rackStartY + 2, frontWidth);
-      drawPdfRackFace(pdf, rack, "rear", rearX, rackStartY + 2, rearWidth);
+      drawPdfRackFace(pdf, rack, "front", frontX, rackStartY, frontWidth);
+      drawPdfRackFace(pdf, rack, "rear", rearX, rackStartY, rearWidth);
 
       startPdfInventoryPage(pdf, audit, rack);
       drawPdfGroupedInventory(pdf, audit, rack);
