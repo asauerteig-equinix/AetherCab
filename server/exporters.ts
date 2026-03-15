@@ -676,6 +676,32 @@ function getPdfRackDeviceFrame(
   return { x: rackX + 8, width: rackWidth - 16 };
 }
 
+function getPdfRackFaceLayout(x: number, width: number): {
+  labelX: number;
+  labelWidth: number;
+  leftCalloutX: number;
+  calloutWidth: number;
+  rackX: number;
+  rackWidth: number;
+  rightCalloutX: number;
+} {
+  const labelWidth = 28;
+  const calloutWidth = 66;
+  const calloutGap = 6;
+  const rackX = x + labelWidth + calloutWidth + calloutGap;
+  const rackWidth = width - labelWidth - calloutWidth * 2 - calloutGap * 2;
+
+  return {
+    labelX: x,
+    labelWidth,
+    leftCalloutX: x + labelWidth,
+    calloutWidth,
+    rackX,
+    rackWidth,
+    rightCalloutX: rackX + rackWidth + calloutGap
+  };
+}
+
 function getPdfPduCalloutSide(mountPosition: RackMountPosition): "left" | "right" {
   return mountPosition.includes("-left-") ? "left" : "right";
 }
@@ -683,12 +709,15 @@ function getPdfPduCalloutSide(mountPosition: RackMountPosition): "left" | "right
 function drawPdfPduCallouts(
   pdf: PdfDocument,
   devices: RackDevice[],
-  rackX: number,
+  leftCalloutX: number,
+  rightCalloutX: number,
   rackY: number,
-  rackWidth: number,
+  calloutWidth: number,
   unitHeight: number,
   rackUnits: number,
-  reservePduColumns: boolean
+  reservePduColumns: boolean,
+  rackX: number,
+  rackWidth: number
 ): void {
   const pduDevices = devices.filter((device) => isVerticalPduMountPosition(device.mountPosition));
   if (pduDevices.length === 0) {
@@ -696,11 +725,10 @@ function drawPdfPduCallouts(
   }
 
   const sideOrder: Array<"left" | "right"> = ["left", "right"];
-  const calloutWidth = 94;
   const lineHeight = 7;
   const calloutGap = 6;
   const calloutPadding = 5;
-  const calloutStartY = rackY + 8;
+  const calloutStartY = rackY + 10;
 
   sideOrder.forEach((side) => {
     const sideDevices = pduDevices
@@ -717,7 +745,7 @@ function drawPdfPduCallouts(
       const anchorY = topY + height / 2;
       const lines = deviceVisualLines(device);
       const calloutHeight = lines.length * lineHeight + calloutPadding * 2;
-      const calloutX = side === "left" ? rackX + 8 : rackX + rackWidth - calloutWidth - 8;
+      const calloutX = side === "left" ? leftCalloutX : rightCalloutX;
       const calloutY = calloutStartY + index * (calloutHeight + calloutGap);
       const lineStartX = side === "left" ? calloutX + calloutWidth : calloutX;
       const lineStartY = calloutY + calloutHeight / 2;
@@ -745,10 +773,8 @@ function drawPdfPduCallouts(
 }
 
 function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: number, y: number, width: number): void {
-  const labelWidth = 42;
-  const rackWidth = width - labelWidth;
-  const rackX = x + labelWidth;
-  const unitHeight = Math.max(8, Math.min(10, Math.floor((pdf.page.height - y - 90) / rack.totalUnits)));
+  const layout = getPdfRackFaceLayout(x, width);
+  const unitHeight = Math.max(8, Math.min(11, Math.floor((pdf.page.height - y - 82) / rack.totalUnits)));
   const rackHeight = unitHeight * rack.totalUnits;
   const innerPadding = 8;
   const devices = visibleDevicesForFace(rack, face);
@@ -757,20 +783,20 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
   pdf.fillColor(pdfPalette.accentStrong).fontSize(9).text(`-- ${faceLabel(face)} --`, x, y - 20, { width, align: "center" });
 
   pdf.save();
-  pdf.roundedRect(rackX, y, rackWidth, rackHeight, 10).fill(pdfPalette.panelBackground);
-  pdf.roundedRect(rackX, y, rackWidth, rackHeight, 10).lineWidth(1).strokeColor(pdfPalette.panelBorder).stroke();
+  pdf.roundedRect(layout.rackX, y, layout.rackWidth, rackHeight, 10).fill(pdfPalette.panelBackground);
+  pdf.roundedRect(layout.rackX, y, layout.rackWidth, rackHeight, 10).lineWidth(1).strokeColor(pdfPalette.panelBorder).stroke();
   pdf.restore();
 
   for (let unit = rack.totalUnits; unit >= 1; unit -= 1) {
     const rowY = y + (rack.totalUnits - unit) * unitHeight;
 
     pdf.save();
-    pdf.rect(rackX, rowY, rackWidth, unitHeight).fill(pdfPalette.slotBackground);
-    pdf.rect(rackX, rowY, rackWidth, unitHeight).lineWidth(0.5).strokeColor(pdfPalette.slotLine).stroke();
+    pdf.rect(layout.rackX, rowY, layout.rackWidth, unitHeight).fill(pdfPalette.slotBackground);
+    pdf.rect(layout.rackX, rowY, layout.rackWidth, unitHeight).lineWidth(0.5).strokeColor(pdfPalette.slotLine).stroke();
     pdf.restore();
 
-    pdf.fillColor(pdfPalette.slotLabel).fontSize(7).text(`${unit}U`, x, rowY + 3, {
-      width: labelWidth - 8,
+    pdf.fillColor(pdfPalette.slotLabel).fontSize(7).text(`${unit}U`, layout.labelX, rowY + 3, {
+      width: layout.labelWidth - 6,
       align: "right"
     });
   }
@@ -780,7 +806,7 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
     const endUnit = getEndUnit(startUnit, device.heightU);
     const topY = y + (rack.totalUnits - endUnit) * unitHeight + 1;
     const height = Math.max(unitHeight * device.heightU - 2, unitHeight - 2);
-    const frame = getPdfRackDeviceFrame(reservePduColumns, rackX, rackWidth, device.mountPosition);
+    const frame = getPdfRackDeviceFrame(reservePduColumns, layout.rackX, layout.rackWidth, device.mountPosition);
     const iconSize = Math.min(14, Math.max(8, Math.min(height - 6, frame.width * 0.22)));
     const isPdu = isVerticalPduMountPosition(device.mountPosition);
     const showIcon = frame.width >= 24 && height >= 12 && !isPdu;
@@ -815,7 +841,19 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
     }
   });
 
-  drawPdfPduCallouts(pdf, devices, rackX, y, rackWidth, unitHeight, rack.totalUnits, reservePduColumns);
+  drawPdfPduCallouts(
+    pdf,
+    devices,
+    layout.leftCalloutX,
+    layout.rightCalloutX,
+    y,
+    layout.calloutWidth,
+    unitHeight,
+    rack.totalUnits,
+    reservePduColumns,
+    layout.rackX,
+    layout.rackWidth
+  );
 
   const footerY = y + rackHeight + 4;
   pdf.fillColor(pdfPalette.accentStrong).fontSize(9).text(`-- ${faceLabel(face)} --`, x, footerY, {
@@ -830,7 +868,11 @@ function ensurePdfTextSpace(pdf: PdfDocument, neededHeight = 36): boolean {
 
 function drawPdfGroupLabel(pdf: PdfDocument, title: string): void {
   pdf.moveDown(0.2);
-  pdf.fillColor(pdfPalette.accentStrong).fontSize(11).text(title);
+  const currentY = pdf.y;
+  pdf.fillColor(pdfPalette.accentStrong).fontSize(11).text(title, 36, currentY, {
+    width: pdf.page.width - 72,
+    align: "left"
+  });
   pdf.moveDown(0.1);
 }
 
