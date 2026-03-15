@@ -484,6 +484,14 @@ export async function updateAudit(auditId: number, input: AuditUpdateInput): Pro
   return updatedAudit;
 }
 
+export async function deleteAudit(auditId: number): Promise<void> {
+  const result = await pool.query<{ id: number }>("DELETE FROM audits WHERE id = $1 RETURNING id", [auditId]);
+
+  if (result.rows.length === 0) {
+    throw new Error("Audit not found.");
+  }
+}
+
 export async function createRackInAudit(auditId: number, input: RackCreateInput): Promise<RackDetail> {
   const audit = await getAudit(auditId);
   if (!audit) {

@@ -52,6 +52,11 @@ export const api = {
       body: JSON.stringify(payload)
     });
   },
+  deleteAudit(auditId: number): Promise<void> {
+    return request(`/api/audits/${auditId}`, {
+      method: "DELETE"
+    });
+  },
   createRack(auditId: number, payload: RackCreateInput): Promise<RackDetail> {
     return request(`/api/audits/${auditId}/racks`, {
       method: "POST",

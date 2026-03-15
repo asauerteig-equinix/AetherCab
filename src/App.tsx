@@ -620,6 +620,32 @@ export default function App() {
     }
   }
 
+  async function handleDeleteAudit() {
+    if (activeAuditId === null || auditDetail === null) {
+      return;
+    }
+
+    const deletedAuditName = auditDetail.name;
+
+    try {
+      setSaving(true);
+      await api.deleteAudit(activeAuditId);
+      setSelectedDeviceId(null);
+      setAuditDetail(null);
+      setRackDetail(null);
+      setActiveRackId(null);
+      setActiveAuditId(null);
+      await refreshAuditList(null);
+      setMessage(`${deletedAuditName} was deleted.`);
+      setError(null);
+      navigate("/");
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Audit could not be deleted.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleRackUpdate() {
     if (activeRackId === null) {
       return;
@@ -794,6 +820,9 @@ export default function App() {
             saving={saving}
             onFormChange={setAuditForm}
             onSave={handleAuditUpdate}
+            onDeleteAudit={() => {
+              void handleDeleteAudit();
+            }}
           />
           <div className="hero-actions">
             <span className="status-pill">{saving ? "Saving database changes" : message}</span>

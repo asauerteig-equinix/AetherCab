@@ -16,6 +16,7 @@ import {
   createRackInAudit,
   createRackDevice,
   createDeviceTemplate,
+  deleteAudit,
   deleteRack,
   deleteRackDevice,
   deleteDeviceTemplate,
@@ -81,6 +82,14 @@ async function bootstrap(): Promise<void> {
     "/api/audits/:auditId",
     asyncRoute(async (request, response) => {
       response.json(await updateAudit(Number(request.params.auditId), request.body as AuditUpdateInput));
+    })
+  );
+
+  app.delete(
+    "/api/audits/:auditId",
+    asyncRoute(async (request, response) => {
+      await deleteAudit(Number(request.params.auditId));
+      response.status(204).send();
     })
   );
 

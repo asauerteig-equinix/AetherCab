@@ -8,6 +8,7 @@ interface RackSwitcherProps {
   saving: boolean;
   onFormChange(next: AuditUpdateInput): void;
   onSave(): Promise<void>;
+  onDeleteAudit(): Promise<void> | void;
 }
 
 function toAuditForm(audit: AuditDetail): AuditUpdateInput {
@@ -21,8 +22,10 @@ function toAuditForm(audit: AuditDetail): AuditUpdateInput {
   };
 }
 
-export function RackSwitcher({ audit, form, saving, onFormChange, onSave }: RackSwitcherProps) {
+export function RackSwitcher({ audit, form, saving, onFormChange, onSave, onDeleteAudit }: RackSwitcherProps) {
   const [editorOpen, setEditorOpen] = useState(false);
+  const [deleteSalesOrderInput, setDeleteSalesOrderInput] = useState("");
+  const [deleteConfirmed, setDeleteConfirmed] = useState(false);
 
   if (!audit) {
     return (
@@ -37,9 +40,18 @@ export function RackSwitcher({ audit, form, saving, onFormChange, onSave }: Rack
     setEditorOpen(false);
   }
 
+  async function handleDelete() {
+    await onDeleteAudit();
+    setEditorOpen(false);
+    setDeleteSalesOrderInput("");
+    setDeleteConfirmed(false);
+  }
+
   function handleCancel() {
     onFormChange(toAuditForm(audit));
     setEditorOpen(false);
+    setDeleteSalesOrderInput("");
+    setDeleteConfirmed(false);
   }
 
   return (
@@ -51,6 +63,8 @@ export function RackSwitcher({ audit, form, saving, onFormChange, onSave }: Rack
             onDoubleClick={() => {
               onFormChange(toAuditForm(audit));
               setEditorOpen(true);
+              setDeleteSalesOrderInput("");
+              setDeleteConfirmed(false);
             }}
           >
             <p className="eyebrow">Active Audit</p>
@@ -130,6 +144,29 @@ export function RackSwitcher({ audit, form, saving, onFormChange, onSave }: Rack
                 <span>Notes</span>
                 <textarea rows={4} value={form.notes ?? ""} onChange={(event) => onFormChange({ ...form, notes: event.target.value })} />
               </label>
+            </div>
+
+            <div className="audit-delete-section">
+              <div className="audit-delete-copy">
+                <strong>Delete audit</strong>
+                <p>This permanently removes the audit, all racks, all devices and the temporary tray entries.</p>
+              </div>
+              <label className="audit-edit-field plain full-width">
+                <span>Type Sales Order to confirm</span>
+                <input value={deleteSalesOrderInput} onChange={(event) => setDeleteSalesOrderInput(event.target.value)} />
+              </label>
+              <label className="audit-delete-checkbox">
+                <input checked={deleteConfirmed} type="checkbox" onChange={(event) => setDeleteConfirmed(event.target.checked)} />
+                <span>I understand that this deletion is permanent.</span>
+              </label>
+              <button
+                className="ghost-button danger"
+                disabled={saving || deleteSalesOrderInput.trim() !== (audit.salesOrder ?? "") || !deleteConfirmed}
+                onClick={() => void handleDelete()}
+                type="button"
+              >
+                Delete audit permanently
+              </button>
             </div>
 
             <div className="audit-edit-actions">
