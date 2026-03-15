@@ -79,6 +79,12 @@ export async function initializeDatabase(): Promise<void> {
       UNIQUE(name, manufacturer, model)
     );
 
+    CREATE TABLE IF NOT EXISTS device_types (
+      id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      key TEXT NOT NULL UNIQUE,
+      label TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS rack_devices (
       id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
       rack_id INTEGER NOT NULL REFERENCES racks(id) ON DELETE CASCADE,
@@ -179,6 +185,14 @@ export async function initializeDatabase(): Promise<void> {
   await pool.query(`
     ALTER TABLE device_templates
     ADD COLUMN IF NOT EXISTS allow_shared_depth BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS device_types (
+      id INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+      key TEXT NOT NULL UNIQUE,
+      label TEXT NOT NULL
+    )
   `);
 
   await pool.query(`
@@ -292,6 +306,14 @@ export async function initializeDatabase(): Promise<void> {
   `);
 
   await pool.query(`
+    INSERT INTO device_types (key, label)
+    SELECT DISTINCT template_type, INITCAP(REPLACE(template_type, '-', ' '))
+    FROM device_templates
+    WHERE template_type IS NOT NULL AND template_type <> ''
+    ON CONFLICT (key) DO NOTHING
+  `);
+
+  await pool.query(`
     INSERT INTO audits (room_id, name, notes)
     SELECT racks.room_id, racks.name, racks.notes
     FROM racks
@@ -339,6 +361,22 @@ export async function initializeDatabase(): Promise<void> {
 }
 
 async function seedDatabase(): Promise<void> {
+  await pool.query(
+    `
+      INSERT INTO device_types (key, label)
+      VALUES
+        ('server', 'Server'),
+        ('switch-router', 'Switch/Router'),
+        ('patch-panel', 'Patchpanel'),
+        ('storage', 'Storage'),
+        ('ups', 'UPS'),
+        ('pdu', 'PDU'),
+        ('other', 'Other')
+      ON CONFLICT (key) DO UPDATE
+      SET label = EXCLUDED.label
+    `
+  );
+
   await pool.query(
     `
       INSERT INTO device_templates (

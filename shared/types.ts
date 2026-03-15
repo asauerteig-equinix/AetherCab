@@ -53,6 +53,17 @@ export interface RackSummary {
   totalUnits: number;
 }
 
+export interface DeviceType {
+  id: number;
+  key: string;
+  label: string;
+}
+
+export interface DeviceTypeInput {
+  key: string;
+  label: string;
+}
+
 export interface DeviceTemplate {
   id: number;
   templateType: string;

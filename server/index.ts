@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import type {
   AuditCreateInput,
   AuditUpdateInput,
+  DeviceTypeInput,
   DeviceTemplateInput,
   FeedbackInput,
   RackCreateInput,
@@ -15,10 +16,12 @@ import { buildExcelExport, buildPdfExport } from "./exporters.js";
 import { sendFeedbackEmail } from "./feedback.js";
 import {
   createAudit,
+  createDeviceType,
   createRackInAudit,
   createRackDevice,
   createDeviceTemplate,
   deleteAudit,
+  deleteDeviceType,
   deleteRack,
   deleteRackDevice,
   deleteDeviceTemplate,
@@ -26,8 +29,10 @@ import {
   getAuditExportDetail,
   getRack,
   listAudits,
+  listDeviceTypes,
   listDeviceTemplates,
   updateAudit,
+  updateDeviceType,
   updateDeviceTemplate,
   updateRack,
   updateRackDevice
@@ -134,6 +139,35 @@ async function bootstrap(): Promise<void> {
     "/api/racks/:rackId",
     asyncRoute(async (request, response) => {
       await deleteRack(Number(request.params.rackId));
+      response.status(204).send();
+    })
+  );
+
+  app.get(
+    "/api/device-types",
+    asyncRoute(async (_request, response) => {
+      response.json(await listDeviceTypes());
+    })
+  );
+
+  app.post(
+    "/api/device-types",
+    asyncRoute(async (request, response) => {
+      response.status(201).json(await createDeviceType(request.body as DeviceTypeInput));
+    })
+  );
+
+  app.put(
+    "/api/device-types/:deviceTypeId",
+    asyncRoute(async (request, response) => {
+      response.json(await updateDeviceType(Number(request.params.deviceTypeId), request.body as DeviceTypeInput));
+    })
+  );
+
+  app.delete(
+    "/api/device-types/:deviceTypeId",
+    asyncRoute(async (request, response) => {
+      await deleteDeviceType(Number(request.params.deviceTypeId));
       response.status(204).send();
     })
   );

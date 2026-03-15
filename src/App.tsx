@@ -6,6 +6,8 @@ import type {
   AuditDetail,
   AuditSummary,
   AuditUpdateInput,
+  DeviceType,
+  DeviceTypeInput,
   DeviceTemplate,
   DeviceTemplateInput,
   FeedbackInput,
@@ -109,6 +111,11 @@ const initialFeedbackForm: FeedbackInput = {
   auditName: null
 };
 
+const initialDeviceTypeForm: DeviceTypeInput = {
+  key: "",
+  label: ""
+};
+
 function toAuditUpdateForm(audit: AuditDetail): AuditUpdateInput {
   return {
     siteName: audit.siteName,
@@ -162,6 +169,7 @@ export default function App() {
   const [auditDetail, setAuditDetail] = useState<AuditDetail | null>(null);
   const [activeRackId, setActiveRackId] = useState<number | null>(initialLocationState.rackId);
   const [rackDetail, setRackDetail] = useState<RackDetail | null>(null);
+  const [deviceTypes, setDeviceTypes] = useState<DeviceType[]>([]);
   const [templates, setTemplates] = useState<DeviceTemplate[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
   const [activeRackView, setActiveRackView] = useState<RackViewMode>(initialLocationState.rackView);
@@ -174,6 +182,7 @@ export default function App() {
   const [newRackForm, setNewRackForm] = useState<RackCreateInput>(initialRackCreateForm);
   const [rackForm, setRackForm] = useState<RackUpdateInput>(initialRackUpdateForm);
   const [templateForm, setTemplateForm] = useState<DeviceTemplateInput>(initialTemplateForm);
+  const [deviceTypeForm, setDeviceTypeForm] = useState<DeviceTypeInput>(initialDeviceTypeForm);
   const [recentlyDeletedDevice, setRecentlyDeletedDevice] = useState<{ rackId: number; device: RackDevice } | null>(null);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [feedbackForm, setFeedbackForm] = useState<FeedbackInput>(initialFeedbackForm);
@@ -182,9 +191,14 @@ export default function App() {
   useEffect(() => {
     void (async () => {
       try {
-        const [auditList, templateList] = await Promise.all([api.listAudits(), api.listTemplates()]);
+        const [auditList, templateList, deviceTypeList] = await Promise.all([
+          api.listAudits(),
+          api.listTemplates(),
+          api.listDeviceTypes()
+        ]);
         setAudits(auditList);
         setTemplates(templateList);
+        setDeviceTypes(deviceTypeList);
         if (auditList.length === 0) {
           setMessage("Create the first audit to start documenting racks.");
         } else if (initialLocationState.auditId === null) {
@@ -254,6 +268,23 @@ export default function App() {
     setRackDetail(null);
     setActiveRackId(null);
   }, [activeAuditId]);
+
+  useEffect(() => {
+    if (deviceTypes.length === 0) {
+      return;
+    }
+
+    setTemplateForm((current) => {
+      if (deviceTypes.some((deviceType) => deviceType.key === current.templateType)) {
+        return current;
+      }
+
+      return {
+        ...current,
+        templateType: deviceTypes[0].key
+      };
+    });
+  }, [deviceTypes]);
 
   useEffect(() => {
     if (!auditDetail) {
@@ -368,6 +399,10 @@ export default function App() {
 
   async function refreshTemplates() {
     setTemplates(await api.listTemplates());
+  }
+
+  async function refreshDeviceTypes() {
+    setDeviceTypes(await api.listDeviceTypes());
   }
 
   async function refreshAuditList(selectAuditId?: number | null) {
@@ -892,6 +927,25 @@ export default function App() {
     }
   }
 
+  async function handleCreateDeviceType() {
+    try {
+      setSaving(true);
+      const deviceType = await api.createDeviceType(deviceTypeForm);
+      await refreshDeviceTypes();
+      setDeviceTypeForm(initialDeviceTypeForm);
+      setTemplateForm((current) => ({
+        ...current,
+        templateType: current.templateType || deviceType.key
+      }));
+      setMessage(`${deviceType.label} was added as a device type.`);
+      setError(null);
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "Device type could not be created.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleSendFeedback() {
     try {
       setSendingFeedback(true);
@@ -920,6 +974,34 @@ export default function App() {
       setError(null);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : "Template could not be updated.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleUpdateDeviceType(deviceTypeId: number, next: DeviceTypeInput) {
+    try {
+      setSaving(true);
+      const updatedType = await api.updateDeviceType(deviceTypeId, next);
+      await Promise.all([refreshDeviceTypes(), refreshTemplates()]);
+      setMessage(`${updatedType.label} was updated.`);
+      setError(null);
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "Device type could not be updated.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteDeviceType(deviceTypeId: number) {
+    try {
+      setSaving(true);
+      await api.deleteDeviceType(deviceTypeId);
+      await refreshDeviceTypes();
+      setMessage("Device type was deleted.");
+      setError(null);
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Device type could not be deleted.");
     } finally {
       setSaving(false);
     }
@@ -1027,11 +1109,24 @@ export default function App() {
         />
       ) : currentPath === "/admin" ? (
         <AdminTemplatesPage
+          deviceTypes={deviceTypes}
           templates={templates}
+          deviceTypeForm={deviceTypeForm}
           form={templateForm}
+          saving={saving}
+          onDeviceTypeFormChange={setDeviceTypeForm}
           onFormChange={setTemplateForm}
+          onCreateDeviceType={() => {
+            void handleCreateDeviceType();
+          }}
           onCreateTemplate={(event) => {
             void handleCreateTemplate(event);
+          }}
+          onUpdateDeviceType={(deviceTypeId, next) => {
+            void handleUpdateDeviceType(deviceTypeId, next);
+          }}
+          onDeleteDeviceType={(deviceTypeId) => {
+            void handleDeleteDeviceType(deviceTypeId);
           }}
           onUpdateTemplate={(templateId, next) => {
             void handleUpdateTemplate(templateId, next);

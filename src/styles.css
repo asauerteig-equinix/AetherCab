@@ -290,6 +290,13 @@ a {
   margin-top: 22px;
 }
 
+.admin-stack {
+  display: grid;
+  gap: 18px;
+  width: min(1040px, 100%);
+  margin: 22px auto 0;
+}
+
 .overview-panel {
   min-height: 200px;
 }
@@ -346,6 +353,35 @@ a {
   gap: 12px;
 }
 
+.admin-template-groups {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-template-group {
+  display: grid;
+  gap: 12px;
+}
+
+.admin-template-group.orphaned {
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.admin-template-group-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.admin-template-group-header span {
+  color: var(--text-secondary);
+  font-size: 0.84rem;
+}
+
 .overview-audit-card {
   display: flex;
   justify-content: space-between;
@@ -372,6 +408,27 @@ a {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
+}
+
+.admin-device-type-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-device-type-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: rgba(188, 175, 159, 0.04);
+}
+
+.admin-device-type-card > div:first-child {
+  display: grid;
+  gap: 4px;
 }
 
 .overview-audit-card > div {
@@ -414,6 +471,29 @@ a {
   border-top: none;
 }
 
+.admin-create-panel {
+  padding-bottom: 18px;
+}
+
+.admin-create-body {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-mode-toggle {
+  display: inline-flex;
+  gap: 8px;
+  padding: 5px;
+  width: fit-content;
+  border: 1px solid rgba(115, 130, 145, 0.24);
+  border-radius: 14px;
+  background: rgba(232, 238, 244, 0.9);
+}
+
+.compact-admin-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .overview-stats {
   display: grid;
   gap: 14px;
@@ -453,6 +533,10 @@ a {
   align-content: start;
 }
 
+.admin-templates-panel.centered {
+  width: 100%;
+}
+
 .panel {
   border: 1px solid var(--panel-border);
   border-radius: 16px;
@@ -479,6 +563,10 @@ a {
   gap: 16px;
   align-items: start;
   margin-bottom: 18px;
+}
+
+.panel-header.compact {
+  margin-bottom: 10px;
 }
 
 .panel-header h2 {
@@ -1649,6 +1737,10 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .admin-stack {
+    width: 100%;
+  }
+
   .audit-hero {
     grid-template-columns: 1fr;
   }
@@ -1712,6 +1804,10 @@ textarea {
   }
 
   .audit-edit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .compact-admin-form {
     grid-template-columns: 1fr;
   }
 

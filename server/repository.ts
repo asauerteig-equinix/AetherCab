@@ -14,6 +14,8 @@ import type {
   AuditExportDetail,
   AuditSummary,
   AuditUpdateInput,
+  DeviceType,
+  DeviceTypeInput,
   DeviceTemplate,
   DeviceTemplateInput,
   RackCreateInput,
@@ -95,6 +97,12 @@ interface DeviceTemplateRow {
   allow_shared_depth: boolean;
 }
 
+interface DeviceTypeRow {
+  id: number;
+  key: string;
+  label: string;
+}
+
 function mapAuditSummary(row: AuditSummaryRow): AuditSummary {
   return {
     id: row.id,
@@ -143,6 +151,28 @@ function mapRackDevice(row: RackDeviceRow): RackDevice {
     storageLocation: row.storage_location,
     createdAt: row.created_at,
     updatedAt: row.updated_at
+  };
+}
+
+function mapDeviceType(row: DeviceTypeRow): DeviceType {
+  return {
+    id: row.id,
+    key: row.key,
+    label: row.label
+  };
+}
+
+function normalizeDeviceTypeInput(input: DeviceTypeInput): DeviceTypeInput {
+  const key = input.key.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  const label = input.label.trim();
+
+  if (!key || !label) {
+    throw new Error("Device type key and label are required.");
+  }
+
+  return {
+    key,
+    label
   };
 }
 
@@ -281,6 +311,11 @@ async function getRackBase(rackId: number): Promise<RackDetailRow | null> {
   );
 
   return result.rows[0] ?? null;
+}
+
+async function deviceTypeExists(key: string): Promise<boolean> {
+  const result = await pool.query<{ exists: boolean }>("SELECT EXISTS(SELECT 1 FROM device_types WHERE key = $1) AS exists", [key]);
+  return result.rows[0]?.exists ?? false;
 }
 
 async function validateRackDevice(rackId: number, input: RackDeviceInput, currentDeviceId?: number): Promise<void> {
@@ -598,6 +633,72 @@ export async function deleteRack(rackId: number): Promise<void> {
   await pool.query("DELETE FROM racks WHERE id = $1", [rackId]);
 }
 
+export async function listDeviceTypes(): Promise<DeviceType[]> {
+  const result = await pool.query<DeviceTypeRow>(
+    `
+      SELECT id, key, label
+      FROM device_types
+      ORDER BY label, key
+    `
+  );
+
+  return result.rows.map(mapDeviceType);
+}
+
+export async function createDeviceType(input: DeviceTypeInput): Promise<DeviceType> {
+  const normalized = normalizeDeviceTypeInput(input);
+  const result = await pool.query<DeviceTypeRow>(
+    `
+      INSERT INTO device_types (key, label)
+      VALUES ($1, $2)
+      RETURNING id, key, label
+    `,
+    [normalized.key, normalized.label]
+  );
+
+  return mapDeviceType(result.rows[0]);
+}
+
+export async function updateDeviceType(deviceTypeId: number, input: DeviceTypeInput): Promise<DeviceType> {
+  const normalized = normalizeDeviceTypeInput(input);
+  const existingResult = await pool.query<DeviceTypeRow>("SELECT id, key, label FROM device_types WHERE id = $1", [deviceTypeId]);
+  const existing = existingResult.rows[0];
+  if (!existing) {
+    throw new Error("Device type not found.");
+  }
+
+  await pool.query(
+    `
+      UPDATE device_types
+      SET key = $1, label = $2
+      WHERE id = $3
+    `,
+    [normalized.key, normalized.label, deviceTypeId]
+  );
+
+  if (existing.key !== normalized.key) {
+    await pool.query("UPDATE device_templates SET template_type = $1 WHERE template_type = $2", [normalized.key, existing.key]);
+  }
+
+  const updatedResult = await pool.query<DeviceTypeRow>("SELECT id, key, label FROM device_types WHERE id = $1", [deviceTypeId]);
+  return mapDeviceType(updatedResult.rows[0]);
+}
+
+export async function deleteDeviceType(deviceTypeId: number): Promise<void> {
+  const existingResult = await pool.query<DeviceTypeRow>("SELECT id, key, label FROM device_types WHERE id = $1", [deviceTypeId]);
+  const existing = existingResult.rows[0];
+  if (!existing) {
+    throw new Error("Device type not found.");
+  }
+
+  const usageResult = await pool.query<{ count: string }>("SELECT COUNT(*) AS count FROM device_templates WHERE template_type = $1", [existing.key]);
+  if (Number(usageResult.rows[0]?.count ?? 0) > 0) {
+    throw new Error("Device type cannot be deleted while templates still use it.");
+  }
+
+  await pool.query("DELETE FROM device_types WHERE id = $1", [deviceTypeId]);
+}
+
 export async function listDeviceTemplates(): Promise<DeviceTemplate[]> {
   const result = await pool.query<DeviceTemplateRow>(`
     SELECT id, template_type, mount_style, icon_key, name, manufacturer, model, default_height_u, blocks_both_faces, allow_shared_depth
@@ -621,6 +722,9 @@ export async function listDeviceTemplates(): Promise<DeviceTemplate[]> {
 
 export async function createDeviceTemplate(input: DeviceTemplateInput): Promise<DeviceTemplate> {
   const normalized = normalizeTemplateInput(input);
+  if (!(await deviceTypeExists(normalized.templateType))) {
+    throw new Error("Selected device type does not exist.");
+  }
 
   const result = await pool.query<DeviceTemplateRow>(
     `
@@ -668,6 +772,9 @@ export async function createDeviceTemplate(input: DeviceTemplateInput): Promise<
 
 export async function updateDeviceTemplate(templateId: number, input: DeviceTemplateInput): Promise<DeviceTemplate> {
   const normalized = normalizeTemplateInput(input);
+  if (!(await deviceTypeExists(normalized.templateType))) {
+    throw new Error("Selected device type does not exist.");
+  }
 
   const result = await pool.query<DeviceTemplateRow>(
     `

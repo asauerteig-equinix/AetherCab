@@ -3,6 +3,8 @@ import type {
   AuditDetail,
   AuditSummary,
   AuditUpdateInput,
+  DeviceType,
+  DeviceTypeInput,
   DeviceTemplate,
   DeviceTemplateInput,
   FeedbackInput,
@@ -80,6 +82,26 @@ export const api = {
   },
   listTemplates(): Promise<DeviceTemplate[]> {
     return request("/api/device-templates");
+  },
+  listDeviceTypes(): Promise<DeviceType[]> {
+    return request("/api/device-types");
+  },
+  createDeviceType(payload: DeviceTypeInput): Promise<DeviceType> {
+    return request("/api/device-types", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  },
+  updateDeviceType(deviceTypeId: number, payload: DeviceTypeInput): Promise<DeviceType> {
+    return request(`/api/device-types/${deviceTypeId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload)
+    });
+  },
+  deleteDeviceType(deviceTypeId: number): Promise<void> {
+    return request(`/api/device-types/${deviceTypeId}`, {
+      method: "DELETE"
+    });
   },
   createTemplate(payload: DeviceTemplateInput): Promise<DeviceTemplate> {
     return request("/api/device-templates", {
