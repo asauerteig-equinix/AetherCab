@@ -1,6 +1,12 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
-import { getEndUnit, getRackMountPositionLabel, isVerticalPduMountPosition } from "../shared/rack.js";
+import {
+  getEndUnit,
+  getMountPositionFace,
+  getRackMountPositionLabel,
+  getVerticalPduMountPositionsForFace,
+  isVerticalPduMountPosition
+} from "../shared/rack.js";
 import type { RackDetail, RackDevice, RackFace, RackMountPosition } from "../shared/types.js";
 
 type PdfDocument = InstanceType<typeof PDFDocument>;
@@ -51,7 +57,7 @@ function faceLabel(face: RackFace): string {
 
 function deviceFaceLabel(device: RackDevice): string {
   if (isVerticalPduMountPosition(device.mountPosition)) {
-    return "Rear";
+    return getMountPositionFace(device.mountPosition) === "front" ? "Front" : "Rear";
   }
 
   if (device.blocksBothFaces) {
@@ -189,13 +195,17 @@ function applyExcelRangeBorder(
   }
 }
 
-function getExcelFaceSpan(face: RackFace): number {
-  return face === "rear" ? 9 : 5;
+function getExcelFaceSpan(): number {
+  return 9;
 }
 
 function getExcelDeviceRange(face: RackFace, startColumn: number, mountPosition: RackMountPosition): { startColumn: number; endColumn: number } {
-  if (face === "rear" && isVerticalPduMountPosition(mountPosition)) {
+  if (isVerticalPduMountPosition(mountPosition)) {
     const laneColumnMap = {
+      "front-left-outer": startColumn + 1,
+      "front-left-inner": startColumn + 2,
+      "front-right-inner": startColumn + 7,
+      "front-right-outer": startColumn + 8,
       "rear-left-outer": startColumn + 1,
       "rear-left-inner": startColumn + 2,
       "rear-right-inner": startColumn + 7,
@@ -206,9 +216,8 @@ function getExcelDeviceRange(face: RackFace, startColumn: number, mountPosition:
     return { startColumn: laneColumn, endColumn: laneColumn };
   }
 
-  return face === "rear"
-    ? { startColumn: startColumn + 3, endColumn: startColumn + 6 }
-    : { startColumn: startColumn + 1, endColumn: startColumn + 4 };
+  void face;
+  return { startColumn: startColumn + 3, endColumn: startColumn + 6 };
 }
 
 function drawExcelRackFace(
@@ -218,7 +227,7 @@ function drawExcelRackFace(
   startColumn: number,
   startRow: number
 ): void {
-  const faceSpan = getExcelFaceSpan(face);
+  const faceSpan = getExcelFaceSpan();
 
   worksheet.mergeCells(startRow, startColumn, startRow, startColumn + faceSpan - 1);
   const headerCell = worksheet.getCell(startRow, startColumn);
@@ -230,20 +239,14 @@ function drawExcelRackFace(
   const rackDevices = visibleDevicesForFace(detail, face);
 
   worksheet.getColumn(startColumn).width = 8;
-  if (face === "rear") {
-    worksheet.getColumn(startColumn + 1).width = 5.2;
-    worksheet.getColumn(startColumn + 2).width = 5.2;
-    worksheet.getColumn(startColumn + 3).width = 10.5;
-    worksheet.getColumn(startColumn + 4).width = 10.5;
-    worksheet.getColumn(startColumn + 5).width = 10.5;
-    worksheet.getColumn(startColumn + 6).width = 10.5;
-    worksheet.getColumn(startColumn + 7).width = 5.2;
-    worksheet.getColumn(startColumn + 8).width = 5.2;
-  } else {
-    for (let columnIndex = startColumn + 1; columnIndex <= startColumn + 4; columnIndex += 1) {
-      worksheet.getColumn(columnIndex).width = 12;
-    }
-  }
+  worksheet.getColumn(startColumn + 1).width = 5.2;
+  worksheet.getColumn(startColumn + 2).width = 5.2;
+  worksheet.getColumn(startColumn + 3).width = 10.5;
+  worksheet.getColumn(startColumn + 4).width = 10.5;
+  worksheet.getColumn(startColumn + 5).width = 10.5;
+  worksheet.getColumn(startColumn + 6).width = 10.5;
+  worksheet.getColumn(startColumn + 7).width = 5.2;
+  worksheet.getColumn(startColumn + 8).width = 5.2;
 
   for (let unit = detail.totalUnits; unit >= 1; unit -= 1) {
     const rowIndex = rackStartRow + (detail.totalUnits - unit);
@@ -259,12 +262,11 @@ function drawExcelRackFace(
 
     for (let columnIndex = startColumn + 1; columnIndex <= startColumn + faceSpan - 1; columnIndex += 1) {
       const cell = worksheet.getCell(rowIndex, columnIndex);
-      const isRearPduLane =
-        face === "rear" && [startColumn + 1, startColumn + 2, startColumn + 7, startColumn + 8].includes(columnIndex);
+      const isPduLane = [startColumn + 1, startColumn + 2, startColumn + 7, startColumn + 8].includes(columnIndex);
       cell.fill = {
         type: "pattern",
         pattern: "solid",
-        fgColor: { argb: isRearPduLane ? excelPalette.panelBackground : excelPalette.slotBackground }
+        fgColor: { argb: isPduLane ? excelPalette.panelBackground : excelPalette.slotBackground }
       };
       cell.border = createThinBorder(excelPalette.slotLine);
     }
@@ -418,12 +420,12 @@ function drawPdfHeader(pdf: PdfDocument, detail: RackDetail, title: string, subt
 }
 
 function getPdfRackDeviceFrame(
-  face: RackFace,
+  reservePduColumns: boolean,
   rackX: number,
   rackWidth: number,
   mountPosition: RackMountPosition
 ): { x: number; width: number } {
-  if (face === "rear") {
+  if (reservePduColumns) {
     const sidePadding = 10;
     const pduLaneWidth = 18;
     const laneGap = 8;
@@ -468,6 +470,7 @@ function drawPdfRackFace(
   const rackHeight = unitHeight * detail.totalUnits;
   const innerPadding = 8;
   const devices = visibleDevicesForFace(detail, face);
+  const reservePduColumns = devices.some((device) => isVerticalPduMountPosition(device.mountPosition));
 
   pdf.fillColor(pdfPalette.accentStrong).fontSize(9).text(`-- ${faceLabel(face)} --`, x, y - 20, { width, align: "center" });
 
@@ -476,9 +479,9 @@ function drawPdfRackFace(
   pdf.roundedRect(rackX, y, rackWidth, rackHeight, 10).lineWidth(1).strokeColor(pdfPalette.panelBorder).stroke();
   pdf.restore();
 
-  if (face === "rear") {
-    (["rear-left-outer", "rear-left-inner", "rear-right-inner", "rear-right-outer"] as const).forEach((mountPosition) => {
-      const laneFrame = getPdfRackDeviceFrame(face, rackX, rackWidth, mountPosition);
+  if (devices.some((device) => isVerticalPduMountPosition(device.mountPosition))) {
+    getVerticalPduMountPositionsForFace(face).forEach((mountPosition) => {
+      const laneFrame = getPdfRackDeviceFrame(true, rackX, rackWidth, mountPosition);
       pdf.save();
       pdf.roundedRect(laneFrame.x, y + 2, laneFrame.width, rackHeight - 4, 6).fillOpacity(0.18).fill(pdfPalette.accent);
       pdf.restore();
@@ -504,7 +507,7 @@ function drawPdfRackFace(
     const endUnit = getEndUnit(startUnit, device.heightU);
     const topY = y + (detail.totalUnits - endUnit) * unitHeight + 1;
     const height = Math.max(unitHeight * device.heightU - 2, unitHeight - 2);
-    const frame = getPdfRackDeviceFrame(face, rackX, rackWidth, device.mountPosition);
+    const frame = getPdfRackDeviceFrame(reservePduColumns, rackX, rackWidth, device.mountPosition);
     const textX = frame.x + innerPadding;
     const textWidth = frame.width - innerPadding * 2;
     const lines = deviceVisualLines(device);

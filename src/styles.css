@@ -650,6 +650,35 @@ textarea {
   z-index: 2;
 }
 
+.rack-pdu-guide-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: 3;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  transform: translateX(-50%);
+  padding: 8px 12px;
+  border: 1px solid rgba(79, 111, 134, 0.28);
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.94);
+  box-shadow: 0 8px 18px rgba(42, 56, 70, 0.14);
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.rack-pdu-guide-banner strong {
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rack-pdu-guide-banner span {
+  font-size: 0.74rem;
+}
+
 .rack-pdu-lane {
   position: absolute;
   top: 1px;
@@ -663,6 +692,14 @@ textarea {
     rgba(255, 255, 255, 0.26);
   pointer-events: none;
   z-index: 1;
+}
+
+.rack-pdu-lane.active {
+  border-color: rgba(79, 111, 134, 0.62);
+  background:
+    linear-gradient(180deg, rgba(79, 111, 134, 0.2), rgba(79, 111, 134, 0.08)),
+    rgba(255, 255, 255, 0.36);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
 }
 
 .rack-pdu-lane span {
@@ -686,6 +723,7 @@ textarea {
 
 .rack-preview.pdu {
   border-radius: 8px;
+  z-index: 4;
 }
 
 .rack-device {

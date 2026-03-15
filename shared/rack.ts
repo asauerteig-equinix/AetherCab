@@ -1,26 +1,59 @@
 import type { RackDevice, RackDeviceInput, RackFace, RackMountPosition } from "./types.js";
 
-export const verticalPduMountPositions: RackMountPosition[] = [
+export const frontVerticalPduMountPositions: RackMountPosition[] = [
+  "front-left-outer",
+  "front-left-inner",
+  "front-right-inner",
+  "front-right-outer"
+];
+
+export const rearVerticalPduMountPositions: RackMountPosition[] = [
   "rear-left-outer",
   "rear-left-inner",
   "rear-right-inner",
   "rear-right-outer"
 ];
 
+export const verticalPduMountPositions: RackMountPosition[] = [...frontVerticalPduMountPositions, ...rearVerticalPduMountPositions];
+
 const mountPositionSortOrder: Record<RackMountPosition, number> = {
   full: 0,
-  "rear-left-outer": 1,
-  "rear-left-inner": 2,
-  "rear-right-inner": 3,
-  "rear-right-outer": 4
+  "front-left-outer": 1,
+  "front-left-inner": 2,
+  "front-right-inner": 3,
+  "front-right-outer": 4,
+  "rear-left-outer": 5,
+  "rear-left-inner": 6,
+  "rear-right-inner": 7,
+  "rear-right-outer": 8
 };
 
 export function isVerticalPduMountPosition(mountPosition: RackMountPosition): boolean {
   return mountPosition !== "full";
 }
 
+export function getMountPositionFace(mountPosition: RackMountPosition): RackFace | null {
+  if (mountPosition === "full") {
+    return null;
+  }
+
+  return mountPosition.startsWith("front-") ? "front" : "rear";
+}
+
+export function getVerticalPduMountPositionsForFace(face: RackFace): RackMountPosition[] {
+  return face === "front" ? frontVerticalPduMountPositions : rearVerticalPduMountPositions;
+}
+
 export function getRackMountPositionLabel(mountPosition: RackMountPosition): string {
   switch (mountPosition) {
+    case "front-left-outer":
+      return "Front left outer PDU lane";
+    case "front-left-inner":
+      return "Front left inner PDU lane";
+    case "front-right-inner":
+      return "Front right inner PDU lane";
+    case "front-right-outer":
+      return "Front right outer PDU lane";
     case "rear-left-outer":
       return "Rear left outer PDU lane";
     case "rear-left-inner":
@@ -31,6 +64,29 @@ export function getRackMountPositionLabel(mountPosition: RackMountPosition): str
       return "Rear right outer PDU lane";
     default:
       return "Standard rack width";
+  }
+}
+
+export function getRackMountPositionShortLabel(mountPosition: RackMountPosition): string {
+  switch (mountPosition) {
+    case "front-left-outer":
+      return "Front L outer";
+    case "front-left-inner":
+      return "Front L inner";
+    case "front-right-inner":
+      return "Front R inner";
+    case "front-right-outer":
+      return "Front R outer";
+    case "rear-left-outer":
+      return "Rear L outer";
+    case "rear-left-inner":
+      return "Rear L inner";
+    case "rear-right-inner":
+      return "Rear R inner";
+    case "rear-right-outer":
+      return "Rear R outer";
+    default:
+      return "Full width";
   }
 }
 
@@ -57,8 +113,9 @@ export function validateRackPlacement(
   }
 
   if (isVerticalPduMountPosition(device.mountPosition)) {
-    if (device.rackFace !== "rear") {
-      issues.push("Vertical PDUs can only be placed on the rear face.");
+    const mountFace = getMountPositionFace(device.mountPosition);
+    if (device.rackFace !== mountFace) {
+      issues.push("Vertical PDUs must use a PDU lane on the matching rack face.");
     }
 
     if (device.blocksBothFaces) {

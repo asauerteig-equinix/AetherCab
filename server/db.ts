@@ -70,7 +70,7 @@ export async function initializeDatabase(): Promise<void> {
       rack_id INTEGER NOT NULL REFERENCES racks(id) ON DELETE CASCADE,
       placement_type TEXT NOT NULL CHECK (placement_type IN ('rack', 'spare')),
       rack_face TEXT CHECK (rack_face IN ('front', 'rear')),
-      mount_position TEXT NOT NULL DEFAULT 'full' CHECK (mount_position IN ('full', 'rear-left-outer', 'rear-left-inner', 'rear-right-inner', 'rear-right-outer')),
+      mount_position TEXT NOT NULL DEFAULT 'full' CHECK (mount_position IN ('full', 'front-left-outer', 'front-left-inner', 'front-right-inner', 'front-right-outer', 'rear-left-outer', 'rear-left-inner', 'rear-right-inner', 'rear-right-outer')),
       blocks_both_faces BOOLEAN NOT NULL DEFAULT FALSE,
       start_unit INTEGER,
       height_u INTEGER NOT NULL,
@@ -109,6 +109,17 @@ export async function initializeDatabase(): Promise<void> {
   await pool.query(`
     ALTER TABLE rack_devices
     ADD COLUMN IF NOT EXISTS mount_position TEXT NOT NULL DEFAULT 'full'
+  `);
+
+  await pool.query(`
+    ALTER TABLE rack_devices
+    DROP CONSTRAINT IF EXISTS rack_devices_mount_position_check
+  `);
+
+  await pool.query(`
+    ALTER TABLE rack_devices
+    ADD CONSTRAINT rack_devices_mount_position_check
+    CHECK (mount_position IN ('full', 'front-left-outer', 'front-left-inner', 'front-right-inner', 'front-right-outer', 'rear-left-outer', 'rear-left-inner', 'rear-right-inner', 'rear-right-outer'))
   `);
 
   await pool.query(`

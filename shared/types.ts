@@ -3,6 +3,10 @@ export type RackFace = "front" | "rear";
 export type TemplateMountStyle = "full" | "vertical-pdu";
 export type RackMountPosition =
   | "full"
+  | "front-left-outer"
+  | "front-left-inner"
+  | "front-right-inner"
+  | "front-right-outer"
   | "rear-left-outer"
   | "rear-left-inner"
   | "rear-right-inner"

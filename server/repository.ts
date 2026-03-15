@@ -1,4 +1,4 @@
-import { findOverlaps, sortRackDevices, validateRackPlacement } from "../shared/rack.js";
+import { findOverlaps, getMountPositionFace, sortRackDevices, validateRackPlacement } from "../shared/rack.js";
 import type {
   DeviceTemplate,
   DeviceTemplateInput,
@@ -116,7 +116,7 @@ function normalizeDeviceInput(input: RackDeviceInput): RackDeviceInput {
   }
 
   if (normalized.mountPosition !== "full") {
-    normalized.rackFace = "rear";
+    normalized.rackFace = getMountPositionFace(normalized.mountPosition);
     normalized.blocksBothFaces = false;
   }
 

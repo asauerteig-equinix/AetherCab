@@ -1,6 +1,6 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
-import { getAnchoredStartUnit, getRackMountPositionLabel } from "../shared/rack";
+import { getAnchoredStartUnit, getMountPositionFace, getRackMountPositionLabel } from "../shared/rack";
 import type {
   DeviceTemplate,
   DeviceTemplateInput,
@@ -179,7 +179,7 @@ export default function App() {
     try {
       const template = JSON.parse(templatePayload) as DeviceTemplate;
       const targetMountPosition = template.mountStyle === "vertical-pdu" ? mountPosition : "full";
-      const targetRackFace = template.mountStyle === "vertical-pdu" ? "rear" : activeRackFace;
+      const targetRackFace = template.mountStyle === "vertical-pdu" ? (getMountPositionFace(targetMountPosition) ?? activeRackFace) : activeRackFace;
 
       if (template.mountStyle === "vertical-pdu" && mountPosition === "full") {
         setError("Vertical PDUs can only be dropped onto one of the rear PDU lanes.");
