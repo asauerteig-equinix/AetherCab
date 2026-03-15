@@ -13,7 +13,7 @@ export function getAuditStatusLabel(status: AuditStatus): string {
 
 export function formatAuditDateTime(value: string | Date): string {
   const date = value instanceof Date ? value : new Date(value);
-  const parts = new Intl.DateTimeFormat("de-DE", {
+  const parts = new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
     month: "long",
     year: "numeric",
@@ -27,5 +27,5 @@ export function formatAuditDateTime(value: string | Date): string {
   const hour = parts.find((part) => part.type === "hour")?.value ?? "";
   const minute = parts.find((part) => part.type === "minute")?.value ?? "";
 
-  return `${day}. ${month} ${year} | ${hour}:${minute}`;
+  return `${day} ${month} ${year} | ${hour}:${minute}`;
 }

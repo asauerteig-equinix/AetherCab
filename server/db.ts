@@ -314,6 +314,21 @@ export async function initializeDatabase(): Promise<void> {
   `);
 
   await pool.query(`
+    UPDATE device_types
+    SET label = 'Patch Panel'
+    WHERE key = 'patch-panel' AND label = 'Patchpanel'
+  `);
+
+  await pool.query(`
+    UPDATE device_templates
+    SET
+      name = CASE WHEN name = 'Patchpanel 1U' THEN 'Patch Panel 1U' ELSE name END,
+      model = CASE WHEN model = 'Patchpanel 1U' THEN 'Patch Panel 1U' ELSE model END
+    WHERE template_type = 'patch-panel'
+      AND (name = 'Patchpanel 1U' OR model = 'Patchpanel 1U')
+  `);
+
+  await pool.query(`
     INSERT INTO audits (room_id, name, notes)
     SELECT racks.room_id, racks.name, racks.notes
     FROM racks
@@ -367,7 +382,7 @@ async function seedDatabase(): Promise<void> {
       VALUES
         ('server', 'Server'),
         ('switch-router', 'Switch/Router'),
-        ('patch-panel', 'Patchpanel'),
+        ('patch-panel', 'Patch Panel'),
         ('storage', 'Storage'),
         ('ups', 'UPS'),
         ('pdu', 'PDU'),
@@ -395,7 +410,7 @@ async function seedDatabase(): Promise<void> {
         ('server', 'full', 'server', 'Server 2U', 'Generic', 'Rack Server 2U', 2, TRUE, FALSE),
         ('switch-router', 'full', 'switch', 'Switch/Router 1U', 'Generic', 'Network Device 1U', 1, FALSE, FALSE),
         ('switch-router', 'full', 'switch', 'Switch/Router 2U', 'Generic', 'Network Device 2U', 2, TRUE, FALSE),
-        ('patch-panel', 'full', 'patch-panel', 'Patchpanel 1U', 'Generic', 'Patchpanel 1U', 1, FALSE, FALSE),
+        ('patch-panel', 'full', 'patch-panel', 'Patch Panel 1U', 'Generic', 'Patch Panel 1U', 1, FALSE, FALSE),
         ('storage', 'full', 'storage', 'Storage 2U', 'Generic', 'Storage Shelf 2U', 2, TRUE, FALSE),
         ('ups', 'full', 'ups', 'UPS 2U', 'Generic', 'UPS 2U', 2, TRUE, FALSE),
         ('pdu', 'vertical-pdu', 'pdu-vertical', 'Vertical PDU 31U', 'Generic', 'Vertical Rack PDU', 31, FALSE, FALSE)
