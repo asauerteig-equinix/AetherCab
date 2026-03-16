@@ -119,6 +119,16 @@ export function Inspector({ device, recentlyDeletedDeviceName, readOnly = false,
     onChange(nextDraft);
   }
 
+  function updateAndCommitImmediately(nextDraft: RackDeviceInput) {
+    setDraft(nextDraft);
+
+    if (!hasDraftChanges(nextDraft, persistedDevice) || readOnly) {
+      return;
+    }
+
+    onChange(nextDraft);
+  }
+
   function updateInput(
     key: keyof RackDeviceInput,
     transform?: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => RackDeviceInput[keyof RackDeviceInput]
@@ -230,14 +240,13 @@ export function Inspector({ device, recentlyDeletedDeviceName, readOnly = false,
             disabled={readOnly || device.placementType === "spare" || isVerticalPduMountPosition(draft.mountPosition)}
             type="checkbox"
             onChange={(event) => {
-              setDraft({
+              updateAndCommitImmediately({
                 ...draft,
                 blocksBothFaces: event.target.checked,
                 allowSharedDepth: event.target.checked ? false : draft.allowSharedDepth,
                 rackFace: draft.rackFace ?? "front"
               });
             }}
-            onBlur={() => commitDraft()}
           />
         </label>
         <label className="checkbox-field full-width">
@@ -247,13 +256,12 @@ export function Inspector({ device, recentlyDeletedDeviceName, readOnly = false,
             disabled={readOnly || isVerticalPduMountPosition(draft.mountPosition) || draft.blocksBothFaces}
             type="checkbox"
             onChange={(event) => {
-              setDraft({
+              updateAndCommitImmediately({
                 ...draft,
                 allowSharedDepth: event.target.checked,
                 rackFace: draft.rackFace ?? "front"
               });
             }}
-            onBlur={() => commitDraft()}
           />
         </label>
         <label>

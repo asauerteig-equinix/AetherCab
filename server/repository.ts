@@ -356,6 +356,31 @@ async function getAuditStatus(auditId: number): Promise<AuditSummary["status"] |
   return result.rows[0]?.status ?? null;
 }
 
+async function markAuditInProgressWhenFirstRackDeviceIsPlaced(auditId: number): Promise<void> {
+  const status = await getAuditStatus(auditId);
+  if (status !== "created") {
+    return;
+  }
+
+  const placedDeviceResult = await pool.query<{ id: number }>(
+    `
+      SELECT rack_devices.id
+      FROM rack_devices
+      INNER JOIN racks ON racks.id = rack_devices.rack_id
+      WHERE racks.audit_id = $1
+        AND rack_devices.placement_type = 'rack'
+      LIMIT 1
+    `,
+    [auditId]
+  );
+
+  if (placedDeviceResult.rows.length === 0) {
+    return;
+  }
+
+  await pool.query("UPDATE audits SET status = 'in-progress' WHERE id = $1 AND status = 'created'", [auditId]);
+}
+
 async function getAuditIdForRack(rackId: number): Promise<number | null> {
   const result = await pool.query<{ audit_id: number }>("SELECT audit_id FROM racks WHERE id = $1", [rackId]);
   return result.rows[0]?.audit_id ?? null;
@@ -1045,6 +1070,10 @@ export async function createRackDevice(rackId: number, input: RackDeviceInput): 
     ]
   );
 
+  if (normalized.placementType === "rack") {
+    await markAuditInProgressWhenFirstRackDeviceIsPlaced(auditId);
+  }
+
   return mapRackDevice(result.rows[0]);
 }
 
@@ -1189,6 +1218,10 @@ export async function updateRackDevice(rackId: number, deviceId: number, input: 
       rackId
     ]
   );
+
+  if (resolvedInput.placementType === "rack") {
+    await markAuditInProgressWhenFirstRackDeviceIsPlaced(auditId);
+  }
 
   return mapRackDevice(result.rows[0]);
 }

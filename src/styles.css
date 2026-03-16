@@ -1129,6 +1129,22 @@ a {
   width: min(560px, 100%);
 }
 
+.overview-create-modal {
+  width: min(760px, 100%);
+}
+
+.overview-create-grid {
+  align-items: start;
+}
+
+.overview-create-spacer {
+  min-height: 1px;
+}
+
+.overview-create-notes {
+  min-height: 152px;
+}
+
 .rack-edit-note {
   margin: 0;
   color: var(--text-secondary);
@@ -2225,6 +2241,10 @@ textarea {
 
   .audit-edit-grid {
     grid-template-columns: 1fr;
+  }
+
+  .overview-create-spacer {
+    display: none;
   }
 
   .compact-admin-form {

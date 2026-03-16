@@ -484,6 +484,15 @@ export default function App() {
     return detail;
   }
 
+  async function refreshActiveAuditStatusIfCreated() {
+    if (auditDetail?.status !== "created" || activeAuditId === null) {
+      return;
+    }
+
+    await refreshActiveAudit();
+    await refreshAuditList(activeAuditId);
+  }
+
   async function loadRack(rackId: number) {
     try {
       const detail = await api.getRack(rackId);
@@ -545,6 +554,7 @@ export default function App() {
       );
       setRecentlyDeletedDevice(null);
       await loadRack(activeRackId);
+      await refreshActiveAuditStatusIfCreated();
       setMessage(
         template.mountStyle === "vertical-pdu"
           ? `${template.name} was placed at ${anchoredStartUnit}U in ${getRackMountPositionLabel(targetMountPosition)}.`
@@ -567,9 +577,7 @@ export default function App() {
       setSaving(true);
       const resolvedRackFace =
         nextMountPosition === "full"
-          ? device.placementType === "spare"
-            ? targetFace
-            : device.rackFace ?? targetFace
+          ? targetFace
           : getMountPositionFace(nextMountPosition);
       await api.updateDevice(activeRackId, device.id, {
         templateId: device.templateId,
@@ -590,6 +598,7 @@ export default function App() {
         storageLocation: null
       });
       await loadRack(activeRackId);
+      await refreshActiveAuditStatusIfCreated();
       setMessage(
         nextMountPosition === "full"
           ? `${device.name} was moved to ${nextStartUnit}U.`
@@ -611,6 +620,7 @@ export default function App() {
     try {
       setSaving(true);
       const updatedDevice = await api.updateDevice(activeRackId, selectedDevice.id, next);
+      await refreshActiveAuditStatusIfCreated();
       setRackDetail((current) => {
         if (!current) {
           return current;
@@ -737,6 +747,8 @@ export default function App() {
         await loadRack(rackId);
         setSelectedDeviceId(restoredDevice.id);
       }
+
+      await refreshActiveAuditStatusIfCreated();
 
       setMessage(`${device.name} was restored.`);
       setError(null);

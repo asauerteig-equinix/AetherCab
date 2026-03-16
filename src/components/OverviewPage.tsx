@@ -225,12 +225,11 @@ export function OverviewPage({
 
       {createModalOpen ? (
         <div className="audit-edit-modal-backdrop" onClick={() => setCreateModalOpen(false)} role="presentation">
-          <section className="panel rack-edit-modal" onClick={(event) => event.stopPropagation()} role="dialog">
+          <section aria-modal="true" className="panel audit-edit-modal overview-create-modal" onClick={(event) => event.stopPropagation()} role="dialog">
             <div className="audit-edit-topbar">
               <div className="audit-edit-heading">
                 <p className="eyebrow">New Audit</p>
                 <h2>Create audit</h2>
-                <p className="audit-edit-copy">The first rack is created automatically as `0101` with `47U` and rack dimensions `600 x 1000 x 2200 mm`. Every new audit starts in status `Created`.</p>
               </div>
               <button className="ghost-button" onClick={() => setCreateModalOpen(false)} type="button">
                 Close
@@ -238,31 +237,54 @@ export function OverviewPage({
             </div>
 
             <form
-              className="audit-edit-grid clean"
+              className="audit-edit-grid clean overview-create-grid"
               onSubmit={(event) => {
                 event.preventDefault();
                 void handleCreateAudit();
               }}
             >
-              <label>
-                Site
-                <input value={createForm.siteName} onChange={(event) => onCreateFormChange({ ...createForm, siteName: event.target.value })} />
+              <label className="audit-edit-field">
+                <span>Site</span>
+                <input
+                  value={createForm.siteName}
+                  onChange={(event) => onCreateFormChange({ ...createForm, siteName: event.target.value })}
+                  placeholder="Customer site"
+                />
               </label>
-              <label>
-                Room
-                <input value={createForm.roomName} onChange={(event) => onCreateFormChange({ ...createForm, roomName: event.target.value })} />
+              <label className="audit-edit-field">
+                <span>Room</span>
+                <input
+                  value={createForm.roomName}
+                  onChange={(event) => onCreateFormChange({ ...createForm, roomName: event.target.value })}
+                  placeholder="Room / area"
+                />
               </label>
-              <label>
-                Customer / System Name
-                <input value={createForm.auditName} onChange={(event) => onCreateFormChange({ ...createForm, auditName: event.target.value })} />
+              <label className="audit-edit-field full-width">
+                <span>Customer / System Name</span>
+                <input
+                  value={createForm.auditName}
+                  onChange={(event) => onCreateFormChange({ ...createForm, auditName: event.target.value })}
+                  placeholder="Project or system name"
+                />
               </label>
-              <label>
-                Sales Order
-                <input value={createForm.salesOrder} onChange={(event) => onCreateFormChange({ ...createForm, salesOrder: event.target.value })} />
+              <label className="audit-edit-field">
+                <span>Sales Order</span>
+                <input
+                  value={createForm.salesOrder}
+                  onChange={(event) => onCreateFormChange({ ...createForm, salesOrder: event.target.value })}
+                  placeholder="Optional"
+                />
               </label>
-              <label className="full-width">
-                Notes
-                <input value={createForm.notes ?? ""} onChange={(event) => onCreateFormChange({ ...createForm, notes: event.target.value })} />
+              <div className="overview-create-spacer" aria-hidden="true" />
+              <label className="audit-edit-field full-width">
+                <span>Notes</span>
+                <textarea
+                  className="overview-create-notes"
+                  rows={6}
+                  value={createForm.notes ?? ""}
+                  onChange={(event) => onCreateFormChange({ ...createForm, notes: event.target.value })}
+                  placeholder="Optional notes for this audit"
+                />
               </label>
               <div className="audit-edit-actions full-width">
                 <button className="ghost-button" onClick={() => setCreateModalOpen(false)} type="button">

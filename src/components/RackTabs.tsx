@@ -39,10 +39,12 @@ export function RackTabs({
   onDeleteRack
 }: RackTabsProps) {
   const [editorMode, setEditorMode] = useState<"create" | "edit" | null>(null);
+  const [editorRackId, setEditorRackId] = useState<number | null>(null);
   const [deleteRackOpen, setDeleteRackOpen] = useState(false);
   const [deleteRackNameInput, setDeleteRackNameInput] = useState("");
   const [deleteRackConfirmed, setDeleteRackConfirmed] = useState(false);
   const activeRack = audit?.racks.find((rack) => rack.id === activeRackId) ?? null;
+  const editorRack = audit?.racks.find((rack) => rack.id === editorRackId) ?? activeRack;
 
   function resetDeleteRackState() {
     setDeleteRackOpen(false);
@@ -50,17 +52,17 @@ export function RackTabs({
     setDeleteRackConfirmed(false);
   }
 
-  function resetEditForm() {
-    if (!activeRack) {
+  function resetEditForm(rack = editorRack ?? activeRack) {
+    if (!rack) {
       return;
     }
 
     onRackFormChange({
-      rackName: activeRack.name,
-      totalUnits: activeRack.totalUnits,
-      widthMm: activeRack.widthMm,
-      depthMm: activeRack.depthMm,
-      heightMm: activeRack.heightMm
+      rackName: rack.name,
+      totalUnits: rack.totalUnits,
+      widthMm: rack.widthMm,
+      depthMm: rack.depthMm,
+      heightMm: rack.heightMm
     });
   }
 
@@ -79,22 +81,28 @@ export function RackTabs({
     setEditorMode("create");
   }
 
-  function openEditModal() {
-    if (!activeRack || readOnly) {
+  function openEditModal(rack = activeRack) {
+    if (!rack || readOnly) {
       return;
     }
 
-    resetEditForm();
+    setEditorRackId(rack.id);
+    resetEditForm(rack);
+    if (rack.id !== activeRackId) {
+      onSelectRack(rack.id);
+    }
     setEditorMode("edit");
   }
 
   async function handleRackSave() {
     await onSaveRack();
+    setEditorRackId(null);
     setEditorMode(null);
   }
 
   async function handleRackCreate() {
     await onCreateRack();
+    setEditorRackId(null);
     setEditorMode(null);
   }
 
@@ -138,6 +146,7 @@ export function RackTabs({
             <button
               className={rack.id === activeRackId ? "rack-tab selected" : "rack-tab"}
               key={rack.id}
+              onDoubleClick={() => openEditModal(rack)}
               onClick={() => onSelectRack(rack.id)}
               type="button"
             >
@@ -168,7 +177,8 @@ export function RackTabs({
                   });
                 }
 
-            setEditorMode(null);
+                setEditorRackId(null);
+                setEditorMode(null);
           }}
           role="presentation"
         >
@@ -181,7 +191,7 @@ export function RackTabs({
             <div className="audit-edit-topbar">
               <div className="audit-edit-heading">
                 <p className="eyebrow">{editorMode === "create" ? "New Rack" : "Edit Rack"}</p>
-                <h2>{editorMode === "create" ? audit.name : activeRack?.name ?? "Rack"}</h2>
+                <h2>{editorMode === "create" ? audit.name : editorRack?.name ?? "Rack"}</h2>
                 <p className="audit-edit-copy">
                   {editorMode === "create"
                     ? "Add another rack to the current audit."
@@ -203,6 +213,7 @@ export function RackTabs({
                       heightMm: activeRack?.heightMm ?? defaultRackCreateForm.heightMm
                     });
                   }
+                  setEditorRackId(null);
                   setEditorMode(null);
                 }}
                 type="button"
@@ -280,6 +291,7 @@ export function RackTabs({
                         depthMm: activeRack?.depthMm ?? defaultRackCreateForm.depthMm,
                         heightMm: activeRack?.heightMm ?? defaultRackCreateForm.heightMm
                       });
+                      setEditorRackId(null);
                       setEditorMode(null);
                     }}
                     type="button"
@@ -357,6 +369,7 @@ export function RackTabs({
                     disabled={saving}
                     onClick={() => {
                       resetEditForm();
+                      setEditorRackId(null);
                       setEditorMode(null);
                     }}
                     type="button"
