@@ -577,7 +577,9 @@ export default function App() {
       setSaving(true);
       const resolvedRackFace =
         nextMountPosition === "full"
-          ? targetFace
+          ? device.blocksBothFaces
+            ? device.rackFace ?? targetFace
+            : targetFace
           : getMountPositionFace(nextMountPosition);
       await api.updateDevice(activeRackId, device.id, {
         templateId: device.templateId,

@@ -272,7 +272,7 @@ export function OverviewPage({
                 <input
                   value={createForm.salesOrder}
                   onChange={(event) => onCreateFormChange({ ...createForm, salesOrder: event.target.value })}
-                  placeholder="Optional"
+                  placeholder="Sales order"
                 />
               </label>
               <div className="overview-create-spacer" aria-hidden="true" />

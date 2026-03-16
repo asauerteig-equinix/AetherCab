@@ -618,10 +618,10 @@ export async function createAudit(input: AuditCreateInput): Promise<AuditDetail>
   const roomName = input.roomName.trim();
   const auditName = input.auditName.trim();
   const salesOrder = input.salesOrder.trim();
-  const initialRackName = input.initialRackName.trim();
+  const initialRackName = input.initialRackName.trim() || "0101";
 
-  if (!siteName || !roomName || !auditName || !salesOrder || !initialRackName) {
-    throw new Error("Site, room, customer/system name, sales order and initial rack name are required.");
+  if (!siteName || !roomName || !auditName || !salesOrder) {
+    throw new Error("Site, room, customer/system name and sales order are required.");
   }
 
   if (input.initialRackUnits < 1) {
