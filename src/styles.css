@@ -1552,10 +1552,6 @@ textarea {
   overflow: hidden;
 }
 
-.rack-units.drag-active .rack-device {
-  pointer-events: none;
-}
-
 .rack-slot {
   display: flex;
   align-items: center;
