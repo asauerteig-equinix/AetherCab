@@ -196,10 +196,6 @@ function deviceFaceLabel(device: RackDevice): string {
     return getMountPositionFace(device.mountPosition) === "front" ? "Front" : "Rear";
   }
 
-  if (device.blocksBothFaces) {
-    return "Front + Rear";
-  }
-
   return device.rackFace === "rear" ? "Rear" : "Front";
 }
 
@@ -1553,13 +1549,13 @@ function drawPdfInventoryTableHeader(pdf: PdfDocument): void {
   const y = pdf.y;
   const columns = [
     { label: "", width: 30 },
-    { label: "Rack", width: 78 },
+    { label: "Rack", width: 74 },
     { label: "Pos", width: 52 },
-    { label: "Face", width: 48 },
-    { label: "Mount", width: 100 },
-    { label: "Name", width: 124 },
-    { label: "Model", width: 108 },
-    { label: "Details", width: 190 }
+    { label: "Face", width: 46 },
+    { label: "Hostname", width: 108 },
+    { label: "Serial number", width: 104 },
+    { label: "Model", width: 170 },
+    { label: "Manufacturer", width: 186 }
   ] as const;
 
   let columnX = x;
@@ -1581,25 +1577,16 @@ function drawPdfInventoryTableHeader(pdf: PdfDocument): void {
 function drawPdfInventoryRow(pdf: PdfDocument, rack: RackDetail, device: RackDevice): void {
   const x = 36;
   const y = pdf.y;
-  const details = [
-    `${device.heightU}U`,
-    device.allowSharedDepth ? "Shared depth shelf" : null,
-    device.hostname ? `Host: ${device.hostname}` : null,
-    device.serialNumber ? `Serial: ${device.serialNumber}` : null,
-    device.notes ? `Notes: ${device.notes}` : null
-  ]
-    .filter(Boolean)
-    .join(" | ");
   const values = [
     rack.name,
     devicePositionLabel(device),
     deviceFaceLabel(device),
-    deviceMountLabel(device),
-    device.name,
-    `${device.manufacturer} ${device.model}`.trim(),
-    details
+    device.hostname ?? "-",
+    device.serialNumber ?? "-",
+    device.model || "-",
+    device.manufacturer || "-"
   ];
-  const columns = [30, 78, 52, 48, 100, 124, 108, 190];
+  const columns = [30, 74, 52, 46, 108, 104, 170, 186];
 
   let columnX = x;
   columns.forEach((columnWidth, index) => {
@@ -1614,11 +1601,11 @@ function drawPdfInventoryRow(pdf: PdfDocument, rack: RackDetail, device: RackDev
       return;
     }
 
-    const value = values[index - 1];
-    pdf.fillColor(index < 6 ? pdfPalette.textPrimary : pdfPalette.textSecondary).fontSize(8.1).text(value, columnX + 4, y + 5, {
-      width: columnWidth - 8,
-      ellipsis: true
-    });
+      const value = values[index - 1];
+      pdf.fillColor(pdfPalette.textPrimary).fontSize(7.6).text(value, columnX + 4, y + 5, {
+        width: columnWidth - 8,
+        ellipsis: true
+      });
     columnX += columnWidth;
   });
 
@@ -1672,12 +1659,13 @@ function drawPdfPortraitInventoryTableHeader(pdf: PdfDocument): void {
   const y = pdf.y;
   const columns = [
     { label: "", width: 24 },
-    { label: "Rack", width: 56 },
-    { label: "Pos", width: 46 },
-    { label: "Face", width: 44 },
-    { label: "Name", width: 108 },
-    { label: "Model", width: 96 },
-    { label: "Details", width: 149 }
+    { label: "Rack", width: 48 },
+    { label: "Pos", width: 42 },
+    { label: "Face", width: 36 },
+    { label: "Hostname", width: 70 },
+    { label: "Serial", width: 68 },
+    { label: "Model", width: 110 },
+    { label: "Manufacturer", width: 125 }
   ] as const;
 
   let columnX = x;
@@ -1686,10 +1674,10 @@ function drawPdfPortraitInventoryTableHeader(pdf: PdfDocument): void {
     pdf.rect(columnX, y, column.width, 18).fill(pdfPalette.panelBackground);
     pdf.rect(columnX, y, column.width, 18).lineWidth(0.6).strokeColor(pdfPalette.panelBorder).stroke();
     pdf.restore();
-    pdf.fillColor(pdfPalette.textPrimary).fontSize(8).text(column.label, columnX + 4, y + 5, {
-      width: column.width - 8,
-      ellipsis: true
-    });
+      pdf.fillColor(pdfPalette.textPrimary).fontSize(7.1).text(column.label, columnX + 3, y + 5, {
+        width: column.width - 8,
+        ellipsis: true
+      });
     columnX += column.width;
   });
 
@@ -1699,24 +1687,16 @@ function drawPdfPortraitInventoryTableHeader(pdf: PdfDocument): void {
 function drawPdfPortraitInventoryRow(pdf: PdfDocument, rack: RackDetail, device: RackDevice): void {
   const x = 36;
   const y = pdf.y;
-  const details = [
-    deviceMountLabel(device),
-    `${device.heightU}U`,
-    device.allowSharedDepth ? "Shared depth" : null,
-    device.hostname ? `Host: ${device.hostname}` : null,
-    device.serialNumber ? `Serial: ${device.serialNumber}` : null
-  ]
-    .filter(Boolean)
-    .join(" | ");
   const values = [
     rack.name,
     devicePositionLabel(device),
     deviceFaceLabel(device),
-    device.name,
-    `${device.manufacturer} ${device.model}`.trim(),
-    details
+    device.hostname ?? "-",
+    device.serialNumber ?? "-",
+    device.model || "-",
+    device.manufacturer || "-"
   ];
-  const columns = [24, 56, 46, 44, 108, 96, 149];
+  const columns = [24, 48, 42, 36, 70, 68, 110, 125];
 
   let columnX = x;
   columns.forEach((columnWidth, index) => {
@@ -1731,11 +1711,11 @@ function drawPdfPortraitInventoryRow(pdf: PdfDocument, rack: RackDetail, device:
       return;
     }
 
-    const value = values[index - 1];
-    pdf.fillColor(index < 5 ? pdfPalette.textPrimary : pdfPalette.textSecondary).fontSize(7.8).text(value, columnX + 4, y + 6, {
-      width: columnWidth - 8,
-      ellipsis: true
-    });
+      const value = values[index - 1];
+      pdf.fillColor(pdfPalette.textPrimary).fontSize(7.1).text(value, columnX + 3, y + 6, {
+        width: columnWidth - 8,
+        ellipsis: true
+      });
     columnX += columnWidth;
   });
 
