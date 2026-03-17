@@ -167,6 +167,9 @@ export const api = {
   pdfExportUrl(auditId: number): string {
     return `/api/audits/${auditId}/export.pdf`;
   },
+  pdfPortraitExportUrl(auditId: number): string {
+    return `/api/audits/${auditId}/export-portrait.pdf`;
+  },
   sendFeedback(payload: FeedbackInput): Promise<void> {
     return request("/api/feedback", {
       method: "POST",

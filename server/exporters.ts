@@ -56,10 +56,16 @@ const pdfPalette = {
   capacityCritical: "#d45a4c"
 } as const;
 
-const pdfPageOptions = {
+const pdfLandscapePageOptions = {
   margin: 36,
   size: "A4",
   layout: "landscape"
+} as const;
+
+const pdfPortraitPageOptions = {
+  margin: 36,
+  size: "A4",
+  layout: "portrait"
 } as const;
 
 const appBrandName = "Aether C.A.D";
@@ -894,7 +900,10 @@ function drawPdfHeader(
 }
 
 function getPdfRackDeviceFrame(
-  layout: ReturnType<typeof getPdfRackFaceLayoutForFace>,
+  layout: Pick<
+    ReturnType<typeof getPdfRackFaceLayoutForFace>,
+    "rackX" | "rackWidth" | "leftPduMountPositions" | "rightPduMountPositions" | "sidePadding" | "pduLaneWidth" | "laneGap" | "fullX" | "fullWidth"
+  >,
   mountPosition: RackMountPosition
 ): { x: number; width: number } {
   if (mountPosition === "full") {
@@ -986,6 +995,115 @@ function getPdfRackFaceLayoutForFace(
 
 function getPdfPduCalloutSide(mountPosition: RackMountPosition): "left" | "right" {
   return mountPosition.includes("-left-") ? "left" : "right";
+}
+
+function getPdfPduLegendColors(mountPosition: RackMountPosition): { fill: string; border: string; text: string } {
+  return getPduLaneSide(mountPosition) === "left"
+    ? { fill: "#fee2e2", border: "#dc2626", text: "#991b1b" }
+    : { fill: "#dbeafe", border: "#2563eb", text: "#1d4ed8" };
+}
+
+function getPdfPortraitRackFaceLayout(
+  x: number,
+  width: number,
+  leftPduMountPositions: RackMountPosition[],
+  rightPduMountPositions: RackMountPosition[]
+): {
+  labelX: number;
+  labelWidth: number;
+  rackX: number;
+  rackWidth: number;
+  leftPduMountPositions: RackMountPosition[];
+  rightPduMountPositions: RackMountPosition[];
+  sidePadding: number;
+  pduLaneWidth: number;
+  laneGap: number;
+  fullX: number;
+  fullWidth: number;
+} {
+  const labelWidth = 28;
+  const labelGap = 6;
+  const rackX = x + labelWidth + labelGap;
+  const rackWidth = width - labelWidth - labelGap;
+  const sidePadding = 10;
+  const pduLaneWidth = 20;
+  const laneGap = 6;
+  const centerGap = 14;
+  const leftPduWidth =
+    leftPduMountPositions.length * pduLaneWidth +
+    Math.max(0, leftPduMountPositions.length - 1) * laneGap +
+    (leftPduMountPositions.length > 0 ? centerGap : 0);
+  const rightPduWidth =
+    rightPduMountPositions.length * pduLaneWidth +
+    Math.max(0, rightPduMountPositions.length - 1) * laneGap +
+    (rightPduMountPositions.length > 0 ? centerGap : 0);
+
+  return {
+    labelX: x,
+    labelWidth,
+    rackX,
+    rackWidth,
+    leftPduMountPositions,
+    rightPduMountPositions,
+    sidePadding,
+    pduLaneWidth,
+    laneGap,
+    fullX: rackX + sidePadding + leftPduWidth,
+    fullWidth: rackWidth - sidePadding * 2 - leftPduWidth - rightPduWidth
+  };
+}
+
+function getPdfPortraitPduLegendHeight(devices: RackDevice[]): number {
+  const pduDevices = devices.filter((device) => isVerticalPduMountPosition(device.mountPosition));
+  if (pduDevices.length === 0) {
+    return 0;
+  }
+
+  return 20 + pduDevices.length * 28 + Math.max(0, pduDevices.length - 1) * 6;
+}
+
+function drawPdfPortraitPduLegend(
+  pdf: PdfDocument,
+  devices: RackDevice[],
+  x: number,
+  y: number,
+  width: number
+): number {
+  const pduDevices = devices
+    .filter((device) => isVerticalPduMountPosition(device.mountPosition))
+    .sort((left, right) => compareDevicesForGroupedExport(left, right));
+
+  if (pduDevices.length === 0) {
+    return y;
+  }
+
+  pdf.fillColor(pdfPalette.accentStrong).fontSize(9).text("PDU legend", x, y, {
+    width
+  });
+
+  let currentY = y + 14;
+  pduDevices.forEach((device) => {
+    const colors = getPdfPduLegendColors(device.mountPosition);
+    const cardHeight = 22;
+    const swatchSize = 12;
+    const line = `${getRackMountPositionLabel(device.mountPosition)} | ${device.name} | ${deviceSecondaryLine(device)} | ${devicePositionLabel(device)}`;
+
+    pdf.save();
+    pdf.roundedRect(x, currentY, width, cardHeight, 8).fill("#ffffff");
+    pdf.roundedRect(x, currentY, width, cardHeight, 8).lineWidth(0.8).strokeColor(pdfPalette.panelBorder).stroke();
+    pdf.roundedRect(x + 6, currentY + 5, swatchSize, swatchSize, 4).fill(colors.fill);
+    pdf.roundedRect(x + 6, currentY + 5, swatchSize, swatchSize, 4).lineWidth(0.8).strokeColor(colors.border).stroke();
+    pdf.restore();
+
+    pdf.fillColor(colors.text).fontSize(7.2).text(line, x + 24, currentY + 6, {
+      width: width - 30,
+      ellipsis: true
+    });
+
+    currentY += cardHeight + 6;
+  });
+
+  return currentY;
 }
 
 function drawPdfPduCallouts(
@@ -1183,6 +1301,162 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
   });
 }
 
+function drawPdfPortraitRackFace(
+  pdf: PdfDocument,
+  rack: RackDetail,
+  face: RackFace,
+  x: number,
+  y: number,
+  width: number,
+  unitHeight: number
+): number {
+  const visiblePduMountPositions = getVisiblePduMountPositionsForFace(face, rack.devices);
+  const leftPduMountPositions = visiblePduMountPositions.filter((mountPosition) => getPduLaneSide(mountPosition) === "left");
+  const rightPduMountPositions = visiblePduMountPositions.filter((mountPosition) => getPduLaneSide(mountPosition) === "right");
+  const layout = getPdfPortraitRackFaceLayout(x, width, leftPduMountPositions, rightPduMountPositions);
+  const devices = visibleDevicesForFace(rack, face);
+  const rackHeight = unitHeight * rack.totalUnits;
+  const innerPadding = 8;
+
+  pdf.fillColor(pdfPalette.accentStrong).fontSize(9.2).text(`-- ${faceLabel(face)} --`, layout.rackX, y - 20, {
+    width: layout.rackWidth,
+    align: "center"
+  });
+
+  pdf.save();
+  pdf.roundedRect(layout.rackX, y, layout.rackWidth, rackHeight, 10).fill(pdfPalette.panelBackground);
+  pdf.roundedRect(layout.rackX, y, layout.rackWidth, rackHeight, 10).lineWidth(1).strokeColor(pdfPalette.panelBorder).stroke();
+  pdf.restore();
+
+  for (let unit = rack.totalUnits; unit >= 1; unit -= 1) {
+    const rowY = y + (rack.totalUnits - unit) * unitHeight;
+
+    pdf.save();
+    pdf.rect(layout.rackX, rowY, layout.rackWidth, unitHeight).fill(pdfPalette.slotBackground);
+    pdf.rect(layout.rackX, rowY, layout.rackWidth, unitHeight).lineWidth(0.5).strokeColor(pdfPalette.slotLine).stroke();
+    pdf.restore();
+
+    pdf.fillColor(pdfPalette.slotLabel).fontSize(7).text(`${unit}U`, layout.labelX, rowY + 3, {
+      width: layout.labelWidth - 4,
+      align: "right"
+    });
+  }
+
+  devices.forEach((device) => {
+    const startUnit = device.startUnit ?? 1;
+    const endUnit = getEndUnit(startUnit, device.heightU);
+    const topY = y + (rack.totalUnits - endUnit) * unitHeight + 1;
+    const height = Math.max(unitHeight * device.heightU - 2, unitHeight - 2);
+    const frame = getPdfRackDeviceFrame(layout, device.mountPosition);
+    const iconSize = Math.min(14, Math.max(8, Math.min(height - 6, frame.width * 0.18)));
+    const isPdu = isVerticalPduMountPosition(device.mountPosition);
+    const isMirroredFromOppositeFace = device.blocksBothFaces && device.rackFace !== null && device.rackFace !== face;
+    const isSharedDepthDevice = device.allowSharedDepth && !isMirroredFromOppositeFace;
+    const pduColors = isPdu ? getPdfPduLegendColors(device.mountPosition) : null;
+    const showIcon = frame.width >= 34 && height >= 12 && !isPdu;
+    const textX = frame.x + innerPadding + (showIcon ? iconSize + 6 : 0);
+    const textWidth = frame.width - innerPadding * 2 - (showIcon ? iconSize + 6 : 0);
+    const lines = deviceVisualLines(device);
+    const baseFontSize = device.heightU === 1 ? 6.4 : device.heightU === 2 ? 7 : 7.4;
+    const minimumFontSize = device.heightU === 1 ? 5 : 5.4;
+    const verticalPadding = device.heightU === 1 ? 1.5 : 2.5;
+    const availableTextHeight = Math.max(4, height - verticalPadding * 2);
+    const fontSize = Math.min(
+      baseFontSize,
+      Math.max(minimumFontSize, (availableTextHeight - Math.max(0, lines.length - 1) * 1.2) / lines.length)
+    );
+    const lineHeight = fontSize + 1.2;
+    const textBlockHeight = lines.length * lineHeight;
+    const startTextY = topY + Math.max(verticalPadding, (height - textBlockHeight) / 2);
+
+    pdf.save();
+    pdf
+      .roundedRect(frame.x, topY, frame.width, height, isPdu ? 6 : 8)
+      .fill(
+        isMirroredFromOppositeFace
+          ? "#edf3f7"
+          : isPdu
+            ? pduColors!.fill
+            : isSharedDepthDevice
+              ? "#e8f3e6"
+              : pdfPalette.deviceFill
+      );
+    if (isSharedDepthDevice) {
+      pdf.dash(3, { space: 2 });
+    }
+    pdf
+      .roundedRect(frame.x, topY, frame.width, height, isPdu ? 6 : 8)
+      .lineWidth(0.8)
+      .strokeColor(isPdu ? pduColors!.border : isSharedDepthDevice ? "#6f9d62" : pdfPalette.deviceBorder)
+      .stroke();
+    if (isSharedDepthDevice) {
+      pdf.undash();
+    }
+
+    if (isMirroredFromOppositeFace) {
+      pdf.save();
+      pdf.roundedRect(frame.x, topY, frame.width, height, isPdu ? 6 : 8).clip();
+      pdf.opacity(0.22);
+      for (let offset = -height; offset < frame.width + height; offset += 8) {
+        pdf
+          .moveTo(frame.x + offset, topY + height)
+          .lineTo(frame.x + offset + height, topY)
+          .lineWidth(0.55)
+          .strokeColor(pdfPalette.accentStrong)
+          .stroke();
+      }
+      pdf.restore();
+    }
+    pdf.restore();
+
+    if (showIcon) {
+      const iconY = device.heightU > 1 ? topY + Math.max(2, verticalPadding) : topY + Math.max(2, (height - iconSize) / 2);
+      drawPdfDeviceIcon(pdf, device.iconKey, frame.x + innerPadding, iconY, iconSize);
+    }
+
+    if (!isPdu) {
+      lines.forEach((line, index) => {
+        pdf.fillColor(index === 0 ? pdfPalette.textPrimary : pdfPalette.textSecondary).fontSize(fontSize).text(line, textX + 2, startTextY + index * lineHeight, {
+          width: textWidth - 4,
+          lineBreak: false,
+          ellipsis: true
+        });
+      });
+    }
+  });
+
+  const footerY = y + rackHeight + 4;
+  pdf.fillColor(pdfPalette.accentStrong).fontSize(9.2).text(`-- ${faceLabel(face)} --`, layout.rackX, footerY, {
+    width: layout.rackWidth,
+    align: "center"
+  });
+
+  return drawPdfPortraitPduLegend(pdf, devices, layout.rackX, footerY + 18, layout.rackWidth);
+}
+
+function drawPdfPortraitRackViewPage(pdf: PdfDocument, audit: AuditExportDetail, rack: RackDetail): void {
+  drawPdfPageBackground(pdf);
+
+  const contentX = 36;
+  const contentWidth = pdf.page.width - 72;
+  const rackGap = 14;
+  const faceWidth = (contentWidth - rackGap) / 2;
+  const frontX = contentX;
+  const rearX = frontX + faceWidth + rackGap;
+  const capacitySummary = getRackCapacitySummary(rack.totalUnits, rack.devices);
+  const frontLegendHeight = getPdfPortraitPduLegendHeight(visibleDevicesForFace(rack, "front"));
+  const rearLegendHeight = getPdfPortraitPduLegendHeight(visibleDevicesForFace(rack, "rear"));
+  const bottomPadding = Math.max(frontLegendHeight, rearLegendHeight, 26) + 28;
+  const rackStartY = drawPdfHeader(pdf, audit, `${appBrandName} Rack View`, `${appBrandSlogan} | Portrait`, rack, [
+    { x: frontX, width: faceWidth, stats: capacitySummary.front },
+    { x: rearX, width: faceWidth, stats: capacitySummary.rear }
+  ]);
+  const unitHeight = Math.max(8, Math.min(12, Math.floor((pdf.page.height - rackStartY - bottomPadding) / rack.totalUnits)));
+
+  drawPdfPortraitRackFace(pdf, rack, "front", frontX, rackStartY, faceWidth, unitHeight);
+  drawPdfPortraitRackFace(pdf, rack, "rear", rearX, rackStartY, faceWidth, unitHeight);
+}
+
 function ensurePdfTextSpace(pdf: PdfDocument, neededHeight = 36): boolean {
   return pdf.y + neededHeight <= pdf.page.height - 36;
 }
@@ -1275,7 +1549,7 @@ function drawPdfInventoryRow(pdf: PdfDocument, rack: RackDetail, device: RackDev
 }
 
 function startPdfInventoryPage(pdf: PdfDocument, audit: AuditExportDetail, rack: RackDetail, continuation = false): void {
-  pdf.addPage(pdfPageOptions);
+  pdf.addPage(pdfLandscapePageOptions);
   drawPdfPageBackground(pdf);
   drawPdfHeader(
     pdf,
@@ -1314,6 +1588,121 @@ function drawPdfGroupedInventory(pdf: PdfDocument, audit: AuditExportDetail, rac
   });
 }
 
+function drawPdfPortraitInventoryTableHeader(pdf: PdfDocument): void {
+  const x = 36;
+  const y = pdf.y;
+  const columns = [
+    { label: "", width: 24 },
+    { label: "Rack", width: 56 },
+    { label: "Pos", width: 46 },
+    { label: "Face", width: 44 },
+    { label: "Name", width: 108 },
+    { label: "Model", width: 96 },
+    { label: "Details", width: 149 }
+  ] as const;
+
+  let columnX = x;
+  columns.forEach((column) => {
+    pdf.save();
+    pdf.rect(columnX, y, column.width, 18).fill(pdfPalette.panelBackground);
+    pdf.rect(columnX, y, column.width, 18).lineWidth(0.6).strokeColor(pdfPalette.panelBorder).stroke();
+    pdf.restore();
+    pdf.fillColor(pdfPalette.textPrimary).fontSize(8).text(column.label, columnX + 4, y + 5, {
+      width: column.width - 8,
+      ellipsis: true
+    });
+    columnX += column.width;
+  });
+
+  pdf.y = y + 18;
+}
+
+function drawPdfPortraitInventoryRow(pdf: PdfDocument, rack: RackDetail, device: RackDevice): void {
+  const x = 36;
+  const y = pdf.y;
+  const details = [
+    deviceMountLabel(device),
+    `${device.heightU}U`,
+    device.allowSharedDepth ? "Shared depth" : null,
+    device.hostname ? `Host: ${device.hostname}` : null,
+    device.serialNumber ? `Serial: ${device.serialNumber}` : null
+  ]
+    .filter(Boolean)
+    .join(" | ");
+  const values = [
+    rack.name,
+    devicePositionLabel(device),
+    deviceFaceLabel(device),
+    device.name,
+    `${device.manufacturer} ${device.model}`.trim(),
+    details
+  ];
+  const columns = [24, 56, 46, 44, 108, 96, 149];
+
+  let columnX = x;
+  columns.forEach((columnWidth, index) => {
+    pdf.save();
+    pdf.rect(columnX, y, columnWidth, 22).fill("#ffffff");
+    pdf.rect(columnX, y, columnWidth, 22).lineWidth(0.5).strokeColor(pdfPalette.slotLine).stroke();
+    pdf.restore();
+
+    if (index === 0) {
+      drawPdfDeviceIcon(pdf, device.iconKey, columnX + 5, y + 4, 12);
+      columnX += columnWidth;
+      return;
+    }
+
+    const value = values[index - 1];
+    pdf.fillColor(index < 5 ? pdfPalette.textPrimary : pdfPalette.textSecondary).fontSize(7.8).text(value, columnX + 4, y + 6, {
+      width: columnWidth - 8,
+      ellipsis: true
+    });
+    columnX += columnWidth;
+  });
+
+  pdf.y = y + 22;
+}
+
+function startPdfPortraitInventoryPage(pdf: PdfDocument, audit: AuditExportDetail, rack: RackDetail, continuation = false): void {
+  pdf.addPage(pdfPortraitPageOptions);
+  drawPdfPageBackground(pdf);
+  drawPdfHeader(
+    pdf,
+    audit,
+    `${appBrandName} Device List`,
+    continuation ? `${appBrandSlogan} | portrait continued for ${rack.name}` : `${appBrandSlogan} | Portrait`,
+    rack
+  );
+}
+
+function drawPdfPortraitGroupedInventory(pdf: PdfDocument, audit: AuditExportDetail, rack: RackDetail): void {
+  const rackDevices = installedDevices(rack);
+
+  if (rackDevices.length === 0) {
+    pdf.fillColor(pdfPalette.textSecondary).fontSize(10).text("No installed devices documented.");
+    return;
+  }
+
+  groupDevicesForExport(rackDevices).forEach((group) => {
+    if (!ensurePdfTextSpace(pdf, 42)) {
+      startPdfPortraitInventoryPage(pdf, audit, rack, true);
+    }
+
+    drawPdfGroupLabel(pdf, group.label);
+    drawPdfPortraitInventoryTableHeader(pdf);
+
+    group.devices.forEach((device) => {
+      if (!ensurePdfTextSpace(pdf, 24)) {
+        startPdfPortraitInventoryPage(pdf, audit, rack, true);
+        drawPdfGroupLabel(pdf, group.label);
+        drawPdfPortraitInventoryTableHeader(pdf);
+      }
+
+      drawPdfPortraitInventoryRow(pdf, rack, device);
+    });
+  });
+}
+
 export async function buildExcelExport(audit: AuditExportDetail): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
   const usedSheetNames = new Set<string>(["Inventory List"]);
@@ -1333,7 +1722,7 @@ export async function buildExcelExport(audit: AuditExportDetail): Promise<Buffer
 
 export function buildPdfExport(audit: AuditExportDetail): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const pdf = new PDFDocument(pdfPageOptions);
+    const pdf = new PDFDocument(pdfLandscapePageOptions);
     const chunks: Buffer[] = [];
 
     pdf.on("data", (chunk: unknown) => {
@@ -1351,7 +1740,7 @@ export function buildPdfExport(audit: AuditExportDetail): Promise<Buffer> {
 
     audit.racks.forEach((rack, index) => {
       if (index > 0) {
-        pdf.addPage(pdfPageOptions);
+        pdf.addPage(pdfLandscapePageOptions);
       }
 
       const contentX = 36;
@@ -1403,6 +1792,38 @@ export function buildPdfExport(audit: AuditExportDetail): Promise<Buffer> {
 
       startPdfInventoryPage(pdf, audit, rack);
       drawPdfGroupedInventory(pdf, audit, rack);
+    });
+
+    pdf.end();
+  });
+}
+
+export function buildPdfPortraitExport(audit: AuditExportDetail): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const pdf = new PDFDocument(pdfPortraitPageOptions);
+    const chunks: Buffer[] = [];
+
+    pdf.on("data", (chunk: unknown) => {
+      if (Buffer.isBuffer(chunk)) {
+        chunks.push(chunk);
+        return;
+      }
+
+      if (chunk instanceof Uint8Array) {
+        chunks.push(Buffer.from(chunk));
+      }
+    });
+    pdf.on("end", () => resolve(Buffer.concat(chunks)));
+    pdf.on("error", reject);
+
+    audit.racks.forEach((rack, index) => {
+      if (index > 0) {
+        pdf.addPage(pdfPortraitPageOptions);
+      }
+
+      drawPdfPortraitRackViewPage(pdf, audit, rack);
+      startPdfPortraitInventoryPage(pdf, audit, rack);
+      drawPdfPortraitGroupedInventory(pdf, audit, rack);
     });
 
     pdf.end();

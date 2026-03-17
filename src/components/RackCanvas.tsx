@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type DragEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent } from "react";
 import {
   canPlaceRackDeviceAtStartUnit,
   getAnchoredStartUnit,
@@ -10,7 +10,8 @@ import {
   getRackMountPositionLabel,
   getRackMountPositionShortLabel,
   getVisiblePduMountPositionsForFace,
-  isVerticalPduMountPosition
+  isVerticalPduMountPosition,
+  resolveRackFaceForMovedDevice
 } from "../../shared/rack";
 import type { RackDetail, RackDevice, RackFace, RackMountPosition } from "../../shared/types";
 import { getDeviceIconUrl } from "../deviceIcons";
@@ -32,7 +33,13 @@ interface RackCanvasProps {
   onSelectDevice(deviceId: number): void;
   onRackFaceChange(nextFace: RackViewMode): void;
   onTemplateDrop(targetRackFace: RackFace, unit: number, mountPosition: RackMountPosition, templatePayload: string): void;
-  onDeviceMove(device: RackDevice, nextStartUnit: number, nextMountPosition: RackMountPosition, targetRackFace: RackFace): void;
+  onDeviceMove(
+    device: RackDevice,
+    nextStartUnit: number,
+    nextMountPosition: RackMountPosition,
+    targetRackFace: RackFace,
+    dragSourceRackFace?: RackFace
+  ): void;
 }
 
 interface PreviewPlacement {
@@ -46,6 +53,7 @@ interface PreviewPlacement {
 interface DraggingDeviceState {
   deviceId: number;
   offsetUnitsFromTop: number;
+  sourceRackFace: RackFace;
 }
 
 interface PduGuideState {
@@ -71,7 +79,7 @@ interface RackFacePaneProps {
     device: RackDevice,
     startUnit: number,
     endUnit: number,
-    event: DragEvent<HTMLButtonElement>
+    event: DragEvent<HTMLElement>
   ): void;
   onDeviceDragEnd(): void;
 }
@@ -298,6 +306,15 @@ function RackFacePane({
     return () => observer.disconnect();
   }, []);
 
+  function handleDeviceKeyDown(event: KeyboardEvent<HTMLElement>, deviceId: number) {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+
+    event.preventDefault();
+    onSelectDevice(deviceId);
+  }
+
   return (
     <div className="rack-face-section">
       <div className="rack-face-banner">{`-- ${faceLabel} --`}</div>
@@ -393,7 +410,7 @@ function RackFacePane({
             const sharedDepthLabel = device.allowSharedDepth ? " | Shared depth shelf device" : "";
 
             return (
-              <button
+              <article
                 key={`${rackFace}-${device.id}`}
                 data-device-selection="true"
                 className={
@@ -423,7 +440,9 @@ function RackFacePane({
                 onDragStart={(event) => onDeviceDragStart(rackFace, device, startUnit, endUnit, event)}
                 onDragEnd={onDeviceDragEnd}
                 onClick={() => onSelectDevice(device.id)}
-                type="button"
+                onKeyDown={(event) => handleDeviceKeyDown(event, device.id)}
+                role="button"
+                tabIndex={0}
                 title={`${device.name} | ${detailLine} | ${positionLine} | ${faceLine}${sharedDepthLabel}${isMirroredFromOppositeFace ? ` | Mounted on ${device.rackFace}` : ""}`}
               >
                 <span className="rack-device-shell">
@@ -445,7 +464,7 @@ function RackFacePane({
                     )}
                   </span>
                 </span>
-              </button>
+              </article>
             );
           })}
         </div>
@@ -591,7 +610,12 @@ export function RackCanvas({
         return;
       }
 
-      const previewRackFace = getMountPositionFace(hoveredMountPosition) ?? rackFace;
+      const previewRackFace = resolveRackFaceForMovedDevice(
+        device,
+        hoveredMountPosition,
+        rackFace,
+        draggingDevice?.deviceId === device.id ? draggingDevice.sourceRackFace : undefined
+      );
       const isValid = canPlaceRackDeviceAtStartUnit(
           {
             placementType: "rack",
@@ -669,7 +693,13 @@ export function RackCanvas({
         }
 
         resetDragGuides();
-        onDeviceMove(device, nextStartUnit, hoveredMountPosition, rackFace);
+        onDeviceMove(
+          device,
+          nextStartUnit,
+          hoveredMountPosition,
+          rackFace,
+          draggingDevice?.deviceId === device.id ? draggingDevice.sourceRackFace : undefined
+        );
       }
     }
 
@@ -699,7 +729,7 @@ export function RackCanvas({
     device: RackDevice,
     startUnit: number,
     endUnit: number,
-    event: DragEvent<HTMLButtonElement>
+    event: DragEvent<HTMLElement>
   ) {
     if (readOnly) {
       event.preventDefault();
@@ -715,7 +745,7 @@ export function RackCanvas({
     setCurrentDeviceDrag(device.id);
     writeDeviceDragData(event.dataTransfer, device.id);
     event.dataTransfer.effectAllowed = "move";
-    setDraggingDevice({ deviceId: device.id, offsetUnitsFromTop });
+    setDraggingDevice({ deviceId: device.id, offsetUnitsFromTop, sourceRackFace: rackFace });
     setPduGuide(isPdu ? { rackFace: previewRackFace, mountPosition: device.mountPosition, extraSide: getPduLaneSide(device.mountPosition) } : null);
     setPreviewPlacement({
       rackFace: previewRackFace,

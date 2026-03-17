@@ -7,6 +7,7 @@ type InspectorMountStyle = "full" | "vertical";
 interface InspectorProps {
   device: RackDevice | null;
   recentlyDeletedDeviceName: string | null;
+  errorMessage?: string | null;
   readOnly?: boolean;
   onChange(next: RackDeviceInput): void;
   onMoveToTray(): void;
@@ -76,12 +77,34 @@ function hasDraftChanges(left: RackDeviceInput, right: RackDeviceInput): boolean
   );
 }
 
-export function Inspector({ device, recentlyDeletedDeviceName, readOnly = false, onChange, onMoveToTray, onDelete, onUndoDelete, saving }: InspectorProps) {
+export function Inspector({
+  device,
+  recentlyDeletedDeviceName,
+  errorMessage = null,
+  readOnly = false,
+  onChange,
+  onMoveToTray,
+  onDelete,
+  onUndoDelete,
+  saving
+}: InspectorProps) {
   const [draft, setDraft] = useState<RackDeviceInput | null>(() => (device ? toDeviceInput(device) : null));
+  const [heightInputValue, setHeightInputValue] = useState(() => (device ? String(device.heightU) : ""));
 
   useEffect(() => {
     setDraft(device ? toDeviceInput(device) : null);
+    setHeightInputValue(device ? String(device.heightU) : "");
   }, [device]);
+
+  useEffect(() => {
+    if (!errorMessage || !device) {
+      return;
+    }
+
+    const nextDraft = toDeviceInput(device);
+    setDraft(nextDraft);
+    setHeightInputValue(String(nextDraft.heightU));
+  }, [device, errorMessage]);
 
   if (!device || !draft) {
     return (
@@ -141,6 +164,32 @@ export function Inspector({ device, recentlyDeletedDeviceName, readOnly = false,
     };
   }
 
+  function handleHeightInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const nextValue = event.target.value;
+    setHeightInputValue(nextValue);
+
+    if (readOnly || nextValue.trim() === "") {
+      return;
+    }
+
+    const parsedHeight = Number(nextValue);
+    if (!Number.isInteger(parsedHeight) || parsedHeight < 1) {
+      return;
+    }
+
+    const nextDraft = {
+      ...draft,
+      heightU: parsedHeight
+    };
+    setDraft(nextDraft);
+
+    if (!hasDraftChanges(nextDraft, persistedDevice)) {
+      return;
+    }
+
+    onChange(nextDraft);
+  }
+
   return (
     <section className="panel inspector-panel" data-device-selection="true">
       <div className="panel-header">
@@ -156,6 +205,12 @@ export function Inspector({ device, recentlyDeletedDeviceName, readOnly = false,
           <button className="ghost-button" disabled={saving} onClick={onUndoDelete} type="button">
             Undo delete
           </button>
+        </div>
+      ) : null}
+      {errorMessage ? (
+        <div className="inspector-error-card" role="alert">
+          <strong>Change could not be applied.</strong>
+          <span>{errorMessage}</span>
         </div>
       ) : null}
       <div className={device.placementType === "rack" ? "inspector-actions split top" : "inspector-actions top"}>
@@ -270,9 +325,9 @@ export function Inspector({ device, recentlyDeletedDeviceName, readOnly = false,
             disabled={readOnly}
             min={1}
             type="number"
-            value={draft.heightU}
-            onBlur={() => commitDraft()}
-            onChange={updateInput("heightU", (event) => Number(event.target.value))}
+            value={heightInputValue}
+            onBlur={() => setHeightInputValue(String(draft.heightU))}
+            onChange={handleHeightInputChange}
           />
         </label>
         <label className="full-width">

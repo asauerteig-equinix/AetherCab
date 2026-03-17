@@ -1895,6 +1895,28 @@ textarea {
   color: var(--text-primary);
 }
 
+.inspector-error-card {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(189, 78, 78, 0.28);
+  border-radius: 14px;
+  background: rgba(255, 237, 237, 0.9);
+  color: #7f1d1d;
+}
+
+.inspector-error-card strong {
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.inspector-error-card span {
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
 .inspector-actions.split {
   justify-content: space-between;
 }

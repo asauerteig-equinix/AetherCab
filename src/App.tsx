@@ -1,6 +1,12 @@
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
-import { getAnchoredStartUnit, getMountPositionFace, getRackMountPositionLabel, sortRackDevices } from "../shared/rack";
+import {
+  getAnchoredStartUnit,
+  getMountPositionFace,
+  getRackMountPositionLabel,
+  resolveRackFaceForMovedDevice,
+  sortRackDevices
+} from "../shared/rack";
 import type {
   AuditCreateInput,
   AuditDetail,
@@ -185,6 +191,7 @@ export default function App() {
   const [auditSearch, setAuditSearch] = useState("");
   const [message, setMessage] = useState("Loading workspace...");
   const [error, setError] = useState<string | null>(null);
+  const [inspectorError, setInspectorError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [createAuditForm, setCreateAuditForm] = useState<AuditCreateInput>(initialAuditCreateForm);
   const [auditForm, setAuditForm] = useState<AuditUpdateInput>(initialAuditUpdateForm);
@@ -356,6 +363,10 @@ export default function App() {
       setRecentlyDeletedDevice(null);
     }
   }, [recentlyDeletedDevice, selectedDeviceId]);
+
+  useEffect(() => {
+    setInspectorError(null);
+  }, [activeRackId, selectedDeviceId]);
 
   useEffect(() => {
     if (selectedDeviceId === null) {
@@ -568,19 +579,20 @@ export default function App() {
     }
   }
 
-  async function handleDeviceMove(device: RackDevice, nextStartUnit: number, nextMountPosition: RackMountPosition, targetFace: RackFace) {
+  async function handleDeviceMove(
+    device: RackDevice,
+    nextStartUnit: number,
+    nextMountPosition: RackMountPosition,
+    targetFace: RackFace,
+    dragSourceRackFace?: RackFace
+  ) {
     if (activeRackId === null || isCompletedAudit) {
       return;
     }
 
     try {
       setSaving(true);
-      const resolvedRackFace =
-        nextMountPosition === "full"
-          ? device.blocksBothFaces
-            ? device.rackFace ?? targetFace
-            : targetFace
-          : getMountPositionFace(nextMountPosition);
+      const resolvedRackFace = resolveRackFaceForMovedDevice(device, nextMountPosition, targetFace, dragSourceRackFace);
       await api.updateDevice(activeRackId, device.id, {
         templateId: device.templateId,
         placementType: "rack",
@@ -620,6 +632,7 @@ export default function App() {
     }
 
     try {
+      setInspectorError(null);
       setSaving(true);
       const updatedDevice = await api.updateDevice(activeRackId, selectedDevice.id, next);
       await refreshActiveAuditStatusIfCreated();
@@ -638,7 +651,9 @@ export default function App() {
       }
       setError(null);
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Changes could not be saved.");
+      const message = saveError instanceof Error ? saveError.message : "Changes could not be saved.";
+      setInspectorError(message);
+      setError(message);
     } finally {
       setSaving(false);
     }
@@ -1250,12 +1265,13 @@ export default function App() {
               }}
             />
             <div className="hero-actions">
-              {auditDetail ? (
-                <div className="export-actions">
-                  <a href={api.excelExportUrl(auditDetail.id)}>Export Excel</a>
-                  <a href={api.pdfExportUrl(auditDetail.id)}>Export PDF</a>
-                </div>
-              ) : null}
+                {auditDetail ? (
+                  <div className="export-actions">
+                    <a href={api.excelExportUrl(auditDetail.id)}>Export Excel</a>
+                    <a href={api.pdfExportUrl(auditDetail.id)}>Export PDF</a>
+                    <a href={api.pdfPortraitExportUrl(auditDetail.id)}>Export PDF Portrait</a>
+                  </div>
+                ) : null}
             </div>
           </header>
 
@@ -1440,6 +1456,7 @@ export default function App() {
             <Inspector
               device={selectedDevice}
               recentlyDeletedDeviceName={recentlyDeletedDevice?.device.name ?? null}
+              errorMessage={inspectorError}
               readOnly={isCompletedAudit}
               onChange={(next) => {
                 void handleInspectorChange(next);

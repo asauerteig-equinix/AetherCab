@@ -60,6 +60,29 @@ export function getMountPositionFace(mountPosition: RackMountPosition): RackFace
   return mountPosition.startsWith("front-") ? "front" : "rear";
 }
 
+export function resolveRackFaceForMovedDevice(
+  device: Pick<RackDevice, "rackFace" | "blocksBothFaces">,
+  nextMountPosition: RackMountPosition,
+  targetRackFace: RackFace,
+  dragSourceRackFace?: RackFace | null
+): RackFace {
+  const mountPositionFace = getMountPositionFace(nextMountPosition);
+  if (mountPositionFace !== null) {
+    return mountPositionFace;
+  }
+
+  if (!device.blocksBothFaces) {
+    return targetRackFace;
+  }
+
+  const mountedRackFace = device.rackFace ?? targetRackFace;
+  if (dragSourceRackFace === undefined || dragSourceRackFace === null) {
+    return targetRackFace;
+  }
+
+  return dragSourceRackFace === mountedRackFace ? targetRackFace : mountedRackFace;
+}
+
 export function getVerticalPduMountPositionsForFace(face: RackFace): RackMountPosition[] {
   return face === "front" ? frontVerticalPduMountPositions : rearVerticalPduMountPositions;
 }

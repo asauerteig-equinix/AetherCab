@@ -13,7 +13,7 @@ import type {
   RackUpdateInput
 } from "../shared/types.js";
 import { initializeDatabase } from "./db.js";
-import { buildExcelExport, buildPdfExport } from "./exporters.js";
+import { buildExcelExport, buildPdfExport, buildPdfPortraitExport } from "./exporters.js";
 import { sendFeedbackEmail } from "./feedback.js";
 import {
   cloneAudit,
@@ -385,6 +385,22 @@ async function bootstrap(): Promise<void> {
       const file = await buildPdfExport(audit);
       response.setHeader("Content-Type", "application/pdf");
       response.setHeader("Content-Disposition", `attachment; filename="${audit.name}-documentation.pdf"`);
+      response.send(file);
+    })
+  );
+
+  app.get(
+    "/api/audits/:auditId/export-portrait.pdf",
+    asyncRoute(async (request, response) => {
+      const audit = await getAuditExportDetail(Number(request.params.auditId));
+      if (!audit) {
+        response.status(404).json({ error: "Audit not found" });
+        return;
+      }
+
+      const file = await buildPdfPortraitExport(audit);
+      response.setHeader("Content-Type", "application/pdf");
+      response.setHeader("Content-Disposition", `attachment; filename="${audit.name}-documentation-portrait.pdf"`);
       response.send(file);
     })
   );
