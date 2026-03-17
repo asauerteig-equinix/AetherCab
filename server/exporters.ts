@@ -827,11 +827,12 @@ function drawPdfHeader(
   title: string,
   subtitle: string,
   rack?: RackDetail,
-  capacitySections?: Array<{ x: number; width: number; stats: RackFaceCapacityStats }>
+  capacitySections?: Array<{ x: number; width: number; stats: RackFaceCapacityStats }>,
+  metaPartsOverride?: string[]
 ): number {
   const headerX = 36;
   const headerWidth = pdf.page.width - 72;
-  const metaParts = rack
+  const metaParts = metaPartsOverride ?? (rack
     ? [
         audit.siteName,
         audit.roomName,
@@ -851,9 +852,9 @@ function drawPdfHeader(
         getAuditStatusLabel(audit.status),
         formatAuditDateTime(audit.createdAt),
         `${audit.rackCount} rack${audit.rackCount === 1 ? "" : "s"}`
-      ];
+      ]);
 
-  if (audit.notes) {
+  if (!metaPartsOverride && audit.notes) {
     metaParts.push(`Notes: ${audit.notes}`);
   }
 
@@ -897,6 +898,18 @@ function drawPdfHeader(
 
   pdf.y = metaY + metaHeight + 10;
   return pdf.y;
+}
+
+function buildPdfRackHeaderMetaParts(audit: AuditExportDetail, rack: RackDetail): string[] {
+  return [
+    audit.siteName,
+    audit.roomName,
+    audit.name,
+    `SO: ${audit.salesOrder ?? "-"}`,
+    `Exported: ${formatAuditDateTime(new Date())}`,
+    `Rack number: ${rack.name}`,
+    `Cabinet information: ${rack.totalUnits}U | ${rack.widthMm}x${rack.depthMm}x${rack.heightMm} mm`
+  ];
 }
 
 function getPdfRackDeviceFrame(
@@ -1003,6 +1016,54 @@ function getPdfPduLegendColors(mountPosition: RackMountPosition): { fill: string
     : { fill: "#dbeafe", border: "#2563eb", text: "#1d4ed8" };
 }
 
+function getPdfPortraitSingleLaneColors(side: "left" | "right"): { fill: string; border: string; text: string } {
+  return side === "left"
+    ? { fill: "#fee2e2", border: "#dc2626", text: "#991b1b" }
+    : { fill: "#dbeafe", border: "#2563eb", text: "#1d4ed8" };
+}
+
+function getPdfPortraitRenderedPduMeta(
+  face: RackFace,
+  mountPosition: RackMountPosition,
+  visiblePduMountPositions: RackMountPosition[]
+): { fill: string; border: string; text: string; label: string } {
+  const side = getPduLaneSide(mountPosition);
+  if (side === null) {
+    return {
+      ...getPdfPduLegendColors(mountPosition),
+      label: getRackMountPositionLabel(mountPosition)
+    };
+  }
+
+  const sideVisibleMountPositions = visiblePduMountPositions.filter((entry) => getPduLaneSide(entry) === side);
+  if (sideVisibleMountPositions.length <= 1) {
+    return {
+      ...getPdfPortraitSingleLaneColors(side),
+      label: `${faceLabel(face)} ${side} PDU lane`
+    };
+  }
+
+  const renderedIndex = Math.max(0, sideVisibleMountPositions.indexOf(mountPosition));
+  const colors = renderedIndex === 0 ? getPdfPortraitSingleLaneColors("left") : getPdfPortraitSingleLaneColors("right");
+  return {
+    ...colors,
+    label: `${faceLabel(face)} ${side} ${renderedIndex === 0 ? "outer" : "inner"} PDU lane`
+  };
+}
+
+function getPdfPortraitRackFaceFixedWidthAdjustment(leftPduCount: number, rightPduCount: number): number {
+  const labelWidth = 24;
+  const labelGap = 4;
+  const sidePadding = 6;
+  const pduLaneWidth = 18;
+  const laneGap = 4;
+  const centerGap = 8;
+  const leftPduWidth = leftPduCount * pduLaneWidth + Math.max(0, leftPduCount - 1) * laneGap + (leftPduCount > 0 ? centerGap : 0);
+  const rightPduWidth = rightPduCount * pduLaneWidth + Math.max(0, rightPduCount - 1) * laneGap + (rightPduCount > 0 ? centerGap : 0);
+
+  return labelWidth + labelGap + sidePadding * 2 + leftPduWidth + rightPduWidth;
+}
+
 function getPdfPortraitRackFaceLayout(
   x: number,
   width: number,
@@ -1064,7 +1125,9 @@ function getPdfPortraitPduLegendHeight(devices: RackDevice[]): number {
 
 function drawPdfPortraitPduLegend(
   pdf: PdfDocument,
+  face: RackFace,
   devices: RackDevice[],
+  visiblePduMountPositions: RackMountPosition[],
   x: number,
   y: number,
   width: number
@@ -1083,10 +1146,10 @@ function drawPdfPortraitPduLegend(
 
   let currentY = y + 14;
   pduDevices.forEach((device) => {
-    const colors = getPdfPduLegendColors(device.mountPosition);
+    const colors = getPdfPortraitRenderedPduMeta(face, device.mountPosition, visiblePduMountPositions);
     const cardHeight = 22;
     const swatchSize = 12;
-    const line = `${getRackMountPositionLabel(device.mountPosition)} | ${device.name} | ${deviceSecondaryLine(device)} | ${devicePositionLabel(device)}`;
+    const line = `${colors.label} | ${device.name} | ${deviceSecondaryLine(device)} | ${devicePositionLabel(device)}`;
 
     pdf.save();
     pdf.roundedRect(x, currentY, width, cardHeight, 8).fill("#ffffff");
@@ -1352,7 +1415,7 @@ function drawPdfPortraitRackFace(
     const isPdu = isVerticalPduMountPosition(device.mountPosition);
     const isMirroredFromOppositeFace = device.blocksBothFaces && device.rackFace !== null && device.rackFace !== face;
     const isSharedDepthDevice = device.allowSharedDepth && !isMirroredFromOppositeFace;
-    const pduColors = isPdu ? getPdfPduLegendColors(device.mountPosition) : null;
+    const pduColors = isPdu ? getPdfPortraitRenderedPduMeta(face, device.mountPosition, visiblePduMountPositions) : null;
     const showIcon = frame.width >= 30 && height >= 12 && !isPdu;
     const textX = frame.x + innerPadding + (showIcon ? iconSize + 4 : 0);
     const textWidth = frame.width - innerPadding * 2 - (showIcon ? iconSize + 4 : 0);
@@ -1431,7 +1494,7 @@ function drawPdfPortraitRackFace(
     align: "center"
   });
 
-  return drawPdfPortraitPduLegend(pdf, devices, layout.rackX, footerY + 18, layout.rackWidth);
+  return drawPdfPortraitPduLegend(pdf, face, devices, visiblePduMountPositions, layout.rackX, footerY + 18, layout.rackWidth);
 }
 
 function drawPdfPortraitRackViewPage(pdf: PdfDocument, audit: AuditExportDetail, rack: RackDetail): void {
@@ -1440,23 +1503,19 @@ function drawPdfPortraitRackViewPage(pdf: PdfDocument, audit: AuditExportDetail,
   const contentX = 36;
   const contentWidth = pdf.page.width - 72;
   const rackGap = 12;
-  const frontHasPdus = getVisiblePduMountPositionsForFace("front", rack.devices).length > 0;
-  const rearHasPdus = getVisiblePduMountPositionsForFace("rear", rack.devices).length > 0;
-  let frontWidth = (contentWidth - rackGap) / 2;
-  let rearWidth = (contentWidth - rackGap) / 2;
-
-  if (frontHasPdus !== rearHasPdus) {
-    const narrowWidth = 210;
-    const wideWidth = contentWidth - rackGap - narrowWidth;
-
-    if (frontHasPdus) {
-      frontWidth = wideWidth;
-      rearWidth = narrowWidth;
-    } else {
-      frontWidth = narrowWidth;
-      rearWidth = wideWidth;
-    }
-  }
+  const frontVisiblePduMountPositions = getVisiblePduMountPositionsForFace("front", rack.devices);
+  const rearVisiblePduMountPositions = getVisiblePduMountPositionsForFace("rear", rack.devices);
+  const frontAdjustment = getPdfPortraitRackFaceFixedWidthAdjustment(
+    frontVisiblePduMountPositions.filter((mountPosition) => getPduLaneSide(mountPosition) === "left").length,
+    frontVisiblePduMountPositions.filter((mountPosition) => getPduLaneSide(mountPosition) === "right").length
+  );
+  const rearAdjustment = getPdfPortraitRackFaceFixedWidthAdjustment(
+    rearVisiblePduMountPositions.filter((mountPosition) => getPduLaneSide(mountPosition) === "left").length,
+    rearVisiblePduMountPositions.filter((mountPosition) => getPduLaneSide(mountPosition) === "right").length
+  );
+  const sharedDeviceWidth = Math.max(150, (contentWidth - rackGap - frontAdjustment - rearAdjustment) / 2);
+  const frontWidth = sharedDeviceWidth + frontAdjustment;
+  const rearWidth = sharedDeviceWidth + rearAdjustment;
 
   const frontX = contentX;
   const rearX = frontX + frontWidth + rackGap;
@@ -1464,10 +1523,11 @@ function drawPdfPortraitRackViewPage(pdf: PdfDocument, audit: AuditExportDetail,
   const frontLegendHeight = getPdfPortraitPduLegendHeight(visibleDevicesForFace(rack, "front"));
   const rearLegendHeight = getPdfPortraitPduLegendHeight(visibleDevicesForFace(rack, "rear"));
   const bottomPadding = Math.max(frontLegendHeight, rearLegendHeight, 26) + 28;
+  const headerMetaParts = buildPdfRackHeaderMetaParts(audit, rack);
   const rackStartY = drawPdfHeader(pdf, audit, `${appBrandName} Rack View`, `${appBrandSlogan} | Portrait`, rack, [
     { x: frontX, width: frontWidth, stats: capacitySummary.front },
     { x: rearX, width: rearWidth, stats: capacitySummary.rear }
-  ]);
+  ], headerMetaParts);
   const unitHeight = Math.max(8, Math.min(12, Math.floor((pdf.page.height - rackStartY - bottomPadding) / rack.totalUnits)));
 
   drawPdfPortraitRackFace(pdf, rack, "front", frontX, rackStartY, frontWidth, unitHeight);
@@ -1573,7 +1633,9 @@ function startPdfInventoryPage(pdf: PdfDocument, audit: AuditExportDetail, rack:
     audit,
     `${appBrandName} Device List`,
     continuation ? `${appBrandSlogan} | continued for ${rack.name}` : appBrandSlogan,
-    rack
+    rack,
+    undefined,
+    buildPdfRackHeaderMetaParts(audit, rack)
   );
 }
 
@@ -1688,7 +1750,9 @@ function startPdfPortraitInventoryPage(pdf: PdfDocument, audit: AuditExportDetai
     audit,
     `${appBrandName} Device List`,
     continuation ? `${appBrandSlogan} | portrait continued for ${rack.name}` : `${appBrandSlogan} | Portrait`,
-    rack
+    rack,
+    undefined,
+    buildPdfRackHeaderMetaParts(audit, rack)
   );
 }
 
@@ -1798,12 +1862,13 @@ export function buildPdfExport(audit: AuditExportDetail): Promise<Buffer> {
         rearVisiblePduMountPositions.filter((mountPosition) => getPduLaneSide(mountPosition) === "right")
       );
       const capacitySummary = getRackCapacitySummary(rack.totalUnits, rack.devices);
+      const headerMetaParts = buildPdfRackHeaderMetaParts(audit, rack);
 
       drawPdfPageBackground(pdf);
       const rackStartY = drawPdfHeader(pdf, audit, `${appBrandName} Rack View`, appBrandSlogan, rack, [
         { x: frontLayout.rackX, width: frontLayout.rackWidth, stats: capacitySummary.front },
         { x: rearLayout.rackX, width: rearLayout.rackWidth, stats: capacitySummary.rear }
-      ]);
+      ], headerMetaParts);
       drawPdfRackFace(pdf, rack, "front", frontX, rackStartY, frontWidth);
       drawPdfRackFace(pdf, rack, "rear", rearX, rackStartY, rearWidth);
 
