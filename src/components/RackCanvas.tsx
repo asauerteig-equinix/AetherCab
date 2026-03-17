@@ -12,8 +12,15 @@ import {
   getVisiblePduMountPositionsForFace,
   isVerticalPduMountPosition
 } from "../../shared/rack";
-import type { DeviceTemplate, RackDetail, RackDevice, RackFace, RackMountPosition } from "../../shared/types";
+import type { RackDetail, RackDevice, RackFace, RackMountPosition } from "../../shared/types";
 import { getDeviceIconUrl } from "../deviceIcons";
+import {
+  clearCurrentDragPayload,
+  getDraggedDeviceId,
+  getDraggedTemplate,
+  setCurrentDeviceDrag,
+  writeDeviceDragData
+} from "../dragPayload";
 
 type RackViewMode = RackFace | "both";
 
@@ -485,13 +492,13 @@ export function RackCanvas({
 
     event.preventDefault();
     const hoveredUnit = getUnitFromPointer(event);
-    const templatePayload = event.dataTransfer.getData("application/x-aethercad-template");
-    const devicePayload = event.dataTransfer.getData("application/x-aethercad-device");
+    const draggedTemplate = getDraggedTemplate(event.dataTransfer);
+    const draggedDeviceId = getDraggedDeviceId(event.dataTransfer);
 
-    event.dataTransfer.dropEffect = devicePayload || draggingDevice ? "move" : "copy";
+    event.dataTransfer.dropEffect = draggedDeviceId !== null || draggingDevice ? "move" : "copy";
 
-    if (templatePayload) {
-      const template = JSON.parse(templatePayload) as DeviceTemplate;
+    if (draggedTemplate) {
+      const template = draggedTemplate;
       const isPdu = template.mountStyle === "vertical-pdu";
       const extraSide = isPdu ? getPduHoverSide(event, rackWidth) : null;
       const visiblePduMountPositions = isPdu ? getVisiblePduMountPositionsForFace(rackFace, rack.devices, extraSide) : [];
@@ -553,8 +560,8 @@ export function RackCanvas({
       return;
     }
 
-    if (devicePayload) {
-      const device = allDevices.find((entry) => String(entry.id) === devicePayload);
+    if (draggedDeviceId !== null) {
+      const device = allDevices.find((entry) => entry.id === draggedDeviceId);
       if (!device) {
         resetDragGuides();
         return;
@@ -620,11 +627,11 @@ export function RackCanvas({
 
     event.preventDefault();
     const hoveredUnit = getUnitFromPointer(event);
-    const templatePayload = event.dataTransfer.getData("application/x-aethercad-template");
-    const devicePayload = event.dataTransfer.getData("application/x-aethercad-device");
+    const draggedTemplate = getDraggedTemplate(event.dataTransfer);
+    const draggedDeviceId = getDraggedDeviceId(event.dataTransfer);
 
-    if (templatePayload) {
-      const template = JSON.parse(templatePayload) as DeviceTemplate;
+    if (draggedTemplate) {
+      const template = draggedTemplate;
       const mountPosition =
         template.mountStyle === "vertical-pdu"
           ? getPduLaneFromPointer(
@@ -635,12 +642,13 @@ export function RackCanvas({
             )
           : "full";
       resetDragGuides();
-      onTemplateDrop(rackFace, hoveredUnit, mountPosition, templatePayload);
+      onTemplateDrop(rackFace, hoveredUnit, mountPosition, JSON.stringify(template));
+      clearCurrentDragPayload();
       return;
     }
 
-    if (devicePayload) {
-      const device = allDevices.find((entry) => String(entry.id) === devicePayload);
+    if (draggedDeviceId !== null) {
+      const device = allDevices.find((entry) => entry.id === draggedDeviceId);
       if (device) {
         const offsetUnitsFromTop = draggingDevice?.deviceId === device.id ? draggingDevice.offsetUnitsFromTop : device.heightU - 1;
         const nextStartUnit = clamp(hoveredUnit - (device.heightU - 1 - offsetUnitsFromTop), 1, rack.totalUnits - device.heightU + 1);
@@ -656,6 +664,7 @@ export function RackCanvas({
         if (isVerticalPduMountPosition(device.mountPosition) && hoveredMountPosition === "full") {
           resetDragGuides();
           setDraggingDevice(null);
+          clearCurrentDragPayload();
           return;
         }
 
@@ -665,6 +674,7 @@ export function RackCanvas({
     }
 
     setDraggingDevice(null);
+    clearCurrentDragPayload();
   }
 
   function handleDragLeave(event: DragEvent<HTMLDivElement>) {
@@ -702,7 +712,8 @@ export function RackCanvas({
     const isPdu = isVerticalPduMountPosition(device.mountPosition);
     const previewRackFace = getMountPositionFace(device.mountPosition) ?? device.rackFace ?? rackFace;
 
-    event.dataTransfer.setData("application/x-aethercad-device", String(device.id));
+    setCurrentDeviceDrag(device.id);
+    writeDeviceDragData(event.dataTransfer, device.id);
     event.dataTransfer.effectAllowed = "move";
     setDraggingDevice({ deviceId: device.id, offsetUnitsFromTop });
     setPduGuide(isPdu ? { rackFace: previewRackFace, mountPosition: device.mountPosition, extraSide: getPduLaneSide(device.mountPosition) } : null);
@@ -718,6 +729,7 @@ export function RackCanvas({
   function handleDeviceDragEnd() {
     setDraggingDevice(null);
     resetDragGuides();
+    clearCurrentDragPayload();
   }
 
   return (

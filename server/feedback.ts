@@ -1,5 +1,6 @@
 import { hostname } from "node:os";
 import { Socket } from "node:net";
+import { invalidFeedbackEmailMessage, isAllowedFeedbackEmail } from "../shared/feedback.js";
 import type { FeedbackInput } from "../shared/types.js";
 
 const smtpHost = "10.201.140.91";
@@ -7,6 +8,11 @@ const smtpPort = 25;
 const feedbackFromAddress = "feedback-aethercad@eu.equinix.com";
 const feedbackToAddress = "andreas.sauerteig@eu.equinix.com";
 const smtpTimeoutMs = 10000;
+
+interface FeedbackRequestMetadata {
+  browserUserAgent: string | null;
+  ipAddress: string | null;
+}
 
 function sanitizeHeaderValue(value: string): string {
   return value.replace(/[\r\n]+/g, " ").trim();
@@ -18,6 +24,28 @@ function dotStuff(value: string): string {
     .split("\r\n")
     .map((line) => (line.startsWith(".") ? `.${line}` : line))
     .join("\r\n");
+}
+
+function encodeMimeHeader(value: string): string {
+  return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
+}
+
+function formatFeedbackTimestamp(date: Date): string {
+  const formatter = new Intl.DateTimeFormat("de-DE", {
+    timeZone: "Europe/Berlin",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  });
+
+  const parts = formatter.formatToParts(date);
+  const getPart = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+
+  return `${getPart("day")}-${getPart("month")}-${getPart("year")} ${getPart("hour")}:${getPart("minute")}:${getPart("second")}`;
 }
 
 async function readResponse(socket: Socket): Promise<string> {
@@ -79,28 +107,28 @@ async function sendCommand(socket: Socket, command: string, expectedCodes: numbe
   }
 }
 
-export async function sendFeedbackEmail(input: FeedbackInput): Promise<void> {
-  const userName = sanitizeHeaderValue(input.userName);
+export async function sendFeedbackEmail(input: FeedbackInput, metadata: FeedbackRequestMetadata): Promise<void> {
+  const email = sanitizeHeaderValue(input.email);
   const feedbackMessage = input.message.trim();
+  const ipAddress = sanitizeHeaderValue(metadata.ipAddress ?? "Unknown");
+  const browserUserAgent = sanitizeHeaderValue(metadata.browserUserAgent ?? "Unknown");
 
-  if (!userName) {
-    throw new Error("User name is required.");
+  if (!isAllowedFeedbackEmail(email)) {
+    throw new Error(invalidFeedbackEmailMessage);
   }
 
   if (!feedbackMessage) {
     throw new Error("Feedback message is required.");
   }
 
-  const subject = sanitizeHeaderValue(`Feedback fuer Aether C.A.D von ${userName}`);
+  const subject = "Neues feedback f\u00FCr AetherC.A.D";
   const plainTextBody = [
-    "Aether C.A.D feedback",
-    "",
-    `User: ${userName}`,
-    input.auditName ? `Audit: ${input.auditName}` : null,
-    input.contextPath ? `Context: ${input.contextPath}` : null,
-    `Sent: ${new Date().toISOString()}`,
-    "",
-    feedbackMessage
+    feedbackMessage,
+    "----",
+    `Useremail: ${email}`,
+    `Sent: ${formatFeedbackTimestamp(new Date())}`,
+    `IP: ${ipAddress}`,
+    `Browser: ${browserUserAgent}`
   ]
     .filter(Boolean)
     .join("\r\n");
@@ -108,7 +136,7 @@ export async function sendFeedbackEmail(input: FeedbackInput): Promise<void> {
   const emailPayload = [
     `From: ${feedbackFromAddress}`,
     `To: ${feedbackToAddress}`,
-    `Subject: ${subject}`,
+    `Subject: ${encodeMimeHeader(subject)}`,
     `Date: ${new Date().toUTCString()}`,
     "MIME-Version: 1.0",
     'Content-Type: text/plain; charset="utf-8"',

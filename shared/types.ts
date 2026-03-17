@@ -183,7 +183,7 @@ export interface RackUpdateInput {
 }
 
 export interface FeedbackInput {
-  userName: string;
+  email: string;
   message: string;
   contextPath?: string | null;
   auditName?: string | null;

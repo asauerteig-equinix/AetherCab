@@ -111,7 +111,7 @@ const initialTemplateForm: DeviceTemplateInput = {
 };
 
 const initialFeedbackForm: FeedbackInput = {
-  userName: "",
+  email: "",
   message: "",
   contextPath: null,
   auditName: null

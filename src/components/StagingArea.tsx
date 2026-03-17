@@ -2,6 +2,7 @@ import { useState, type DragEvent } from "react";
 import { getRackMountPositionShortLabel, isVerticalPduMountPosition } from "../../shared/rack";
 import type { RackDevice } from "../../shared/types";
 import { getDeviceIconUrl } from "../deviceIcons";
+import { clearCurrentDragPayload, getDraggedDeviceId, setCurrentDeviceDrag, writeDeviceDragData } from "../dragPayload";
 
 interface StagingAreaProps {
   devices: RackDevice[];
@@ -22,10 +23,11 @@ export function StagingArea({ devices, selectedDeviceId, saving, disabled = fals
     if (disabled) {
       return;
     }
-    const deviceId = Number(event.dataTransfer.getData("application/x-aethercad-device"));
-    if (!Number.isNaN(deviceId)) {
+    const deviceId = getDraggedDeviceId(event.dataTransfer);
+    if (deviceId !== null) {
       onStageDevice(deviceId);
     }
+    clearCurrentDragPayload();
   }
 
   return (
@@ -85,9 +87,11 @@ export function StagingArea({ devices, selectedDeviceId, saving, disabled = fals
                   event.preventDefault();
                   return;
                 }
-                event.dataTransfer.setData("application/x-aethercad-device", String(device.id));
+                setCurrentDeviceDrag(device.id);
+                writeDeviceDragData(event.dataTransfer, device.id);
                 event.dataTransfer.effectAllowed = "move";
               }}
+              onDragEnd={clearCurrentDragPayload}
             >
               <img alt="" aria-hidden="true" className="template-icon" src={getDeviceIconUrl(device.iconKey)} />
               <strong>{device.hostname ?? device.name}</strong>

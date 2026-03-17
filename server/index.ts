@@ -113,6 +113,19 @@ function asyncRoute(handler: AsyncRoute) {
   };
 }
 
+function getFeedbackIpAddress(request: Request): string | null {
+  const forwardedFor = request.headers["x-forwarded-for"];
+  if (typeof forwardedFor === "string" && forwardedFor.trim()) {
+    return forwardedFor.split(",")[0]?.trim() ?? null;
+  }
+
+  if (Array.isArray(forwardedFor) && forwardedFor.length > 0) {
+    return forwardedFor[0]?.split(",")[0]?.trim() ?? null;
+  }
+
+  return request.socket.remoteAddress ?? null;
+}
+
 async function bootstrap(): Promise<void> {
   await initializeDatabase();
 
@@ -152,7 +165,10 @@ async function bootstrap(): Promise<void> {
   app.post(
     "/api/feedback",
     asyncRoute(async (request, response) => {
-      await sendFeedbackEmail(request.body as FeedbackInput);
+      await sendFeedbackEmail(request.body as FeedbackInput, {
+        ipAddress: getFeedbackIpAddress(request),
+        browserUserAgent: typeof request.headers["user-agent"] === "string" ? request.headers["user-agent"] : null
+      });
       response.status(204).send();
     })
   );

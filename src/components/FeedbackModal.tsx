@@ -1,4 +1,5 @@
 import type { FeedbackInput } from "../../shared/types";
+import { isAllowedFeedbackEmail } from "../../shared/feedback";
 
 interface FeedbackModalProps {
   draft: FeedbackInput;
@@ -38,7 +39,7 @@ export function FeedbackModal({ draft, open, sending, onDraftChange, onClose, on
     return null;
   }
 
-  const canSend = draft.userName.trim().length > 0 && draft.message.trim().length > 0 && !sending;
+  const canSend = isAllowedFeedbackEmail(draft.email) && draft.message.trim().length > 0 && !sending;
 
   return (
     <div className="audit-edit-modal-backdrop" onClick={onClose}>
@@ -61,11 +62,13 @@ export function FeedbackModal({ draft, open, sending, onDraftChange, onClose, on
 
         <div className="audit-edit-grid clean">
           <label className="audit-edit-field plain">
-            <span>User</span>
+            <span>Email</span>
             <input
-              value={draft.userName}
-              onChange={(event) => onDraftChange({ ...draft, userName: event.target.value })}
-              placeholder="Your name"
+              type="email"
+              value={draft.email}
+              onChange={(event) => onDraftChange({ ...draft, email: event.target.value })}
+              placeholder="your.email@company.com"
+              autoComplete="email"
             />
           </label>
           <label className="audit-edit-field plain feedback-text-field">

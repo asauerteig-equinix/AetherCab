@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { DeviceTemplate } from "../../shared/types";
 import { getDeviceIconUrl } from "../deviceIcons";
+import { clearCurrentDragPayload, setCurrentTemplateDrag, writeTemplateDragData } from "../dragPayload";
 
 interface PaletteProps {
   templates: DeviceTemplate[];
@@ -73,8 +74,10 @@ export function Palette({ templates, collapsed, disabled = false }: PaletteProps
                       event.preventDefault();
                       return;
                     }
-                    event.dataTransfer.setData("application/x-aethercad-template", JSON.stringify(template));
+                    setCurrentTemplateDrag(template);
+                    writeTemplateDragData(event.dataTransfer, template);
                   }}
+                  onDragEnd={clearCurrentDragPayload}
                 >
                   <img alt="" aria-hidden="true" className="template-icon" src={getDeviceIconUrl(template.iconKey)} />
                   <div className="template-copy">
