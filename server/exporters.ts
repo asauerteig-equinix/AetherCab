@@ -998,7 +998,7 @@ function getPdfPduCalloutSide(mountPosition: RackMountPosition): "left" | "right
 }
 
 function getPdfPduLegendColors(mountPosition: RackMountPosition): { fill: string; border: string; text: string } {
-  return getPduLaneSide(mountPosition) === "left"
+  return mountPosition.includes("-outer")
     ? { fill: "#fee2e2", border: "#dc2626", text: "#991b1b" }
     : { fill: "#dbeafe", border: "#2563eb", text: "#1d4ed8" };
 }
@@ -1021,14 +1021,14 @@ function getPdfPortraitRackFaceLayout(
   fullX: number;
   fullWidth: number;
 } {
-  const labelWidth = 28;
-  const labelGap = 6;
+  const labelWidth = 24;
+  const labelGap = 4;
   const rackX = x + labelWidth + labelGap;
   const rackWidth = width - labelWidth - labelGap;
-  const sidePadding = 10;
-  const pduLaneWidth = 20;
-  const laneGap = 6;
-  const centerGap = 14;
+  const sidePadding = 6;
+  const pduLaneWidth = 18;
+  const laneGap = 4;
+  const centerGap = 8;
   const leftPduWidth =
     leftPduMountPositions.length * pduLaneWidth +
     Math.max(0, leftPduMountPositions.length - 1) * laneGap +
@@ -1316,7 +1316,7 @@ function drawPdfPortraitRackFace(
   const layout = getPdfPortraitRackFaceLayout(x, width, leftPduMountPositions, rightPduMountPositions);
   const devices = visibleDevicesForFace(rack, face);
   const rackHeight = unitHeight * rack.totalUnits;
-  const innerPadding = 8;
+  const innerPadding = 6;
 
   pdf.fillColor(pdfPalette.accentStrong).fontSize(9.2).text(`-- ${faceLabel(face)} --`, layout.rackX, y - 20, {
     width: layout.rackWidth,
@@ -1348,14 +1348,14 @@ function drawPdfPortraitRackFace(
     const topY = y + (rack.totalUnits - endUnit) * unitHeight + 1;
     const height = Math.max(unitHeight * device.heightU - 2, unitHeight - 2);
     const frame = getPdfRackDeviceFrame(layout, device.mountPosition);
-    const iconSize = Math.min(14, Math.max(8, Math.min(height - 6, frame.width * 0.18)));
+    const iconSize = Math.min(13, Math.max(7, Math.min(height - 5, frame.width * 0.16)));
     const isPdu = isVerticalPduMountPosition(device.mountPosition);
     const isMirroredFromOppositeFace = device.blocksBothFaces && device.rackFace !== null && device.rackFace !== face;
     const isSharedDepthDevice = device.allowSharedDepth && !isMirroredFromOppositeFace;
     const pduColors = isPdu ? getPdfPduLegendColors(device.mountPosition) : null;
-    const showIcon = frame.width >= 34 && height >= 12 && !isPdu;
-    const textX = frame.x + innerPadding + (showIcon ? iconSize + 6 : 0);
-    const textWidth = frame.width - innerPadding * 2 - (showIcon ? iconSize + 6 : 0);
+    const showIcon = frame.width >= 30 && height >= 12 && !isPdu;
+    const textX = frame.x + innerPadding + (showIcon ? iconSize + 4 : 0);
+    const textWidth = frame.width - innerPadding * 2 - (showIcon ? iconSize + 4 : 0);
     const lines = deviceVisualLines(device);
     const baseFontSize = device.heightU === 1 ? 6.4 : device.heightU === 2 ? 7 : 7.4;
     const minimumFontSize = device.heightU === 1 ? 5 : 5.4;
@@ -1439,22 +1439,39 @@ function drawPdfPortraitRackViewPage(pdf: PdfDocument, audit: AuditExportDetail,
 
   const contentX = 36;
   const contentWidth = pdf.page.width - 72;
-  const rackGap = 14;
-  const faceWidth = (contentWidth - rackGap) / 2;
+  const rackGap = 12;
+  const frontHasPdus = getVisiblePduMountPositionsForFace("front", rack.devices).length > 0;
+  const rearHasPdus = getVisiblePduMountPositionsForFace("rear", rack.devices).length > 0;
+  let frontWidth = (contentWidth - rackGap) / 2;
+  let rearWidth = (contentWidth - rackGap) / 2;
+
+  if (frontHasPdus !== rearHasPdus) {
+    const narrowWidth = 210;
+    const wideWidth = contentWidth - rackGap - narrowWidth;
+
+    if (frontHasPdus) {
+      frontWidth = wideWidth;
+      rearWidth = narrowWidth;
+    } else {
+      frontWidth = narrowWidth;
+      rearWidth = wideWidth;
+    }
+  }
+
   const frontX = contentX;
-  const rearX = frontX + faceWidth + rackGap;
+  const rearX = frontX + frontWidth + rackGap;
   const capacitySummary = getRackCapacitySummary(rack.totalUnits, rack.devices);
   const frontLegendHeight = getPdfPortraitPduLegendHeight(visibleDevicesForFace(rack, "front"));
   const rearLegendHeight = getPdfPortraitPduLegendHeight(visibleDevicesForFace(rack, "rear"));
   const bottomPadding = Math.max(frontLegendHeight, rearLegendHeight, 26) + 28;
   const rackStartY = drawPdfHeader(pdf, audit, `${appBrandName} Rack View`, `${appBrandSlogan} | Portrait`, rack, [
-    { x: frontX, width: faceWidth, stats: capacitySummary.front },
-    { x: rearX, width: faceWidth, stats: capacitySummary.rear }
+    { x: frontX, width: frontWidth, stats: capacitySummary.front },
+    { x: rearX, width: rearWidth, stats: capacitySummary.rear }
   ]);
   const unitHeight = Math.max(8, Math.min(12, Math.floor((pdf.page.height - rackStartY - bottomPadding) / rack.totalUnits)));
 
-  drawPdfPortraitRackFace(pdf, rack, "front", frontX, rackStartY, faceWidth, unitHeight);
-  drawPdfPortraitRackFace(pdf, rack, "rear", rearX, rackStartY, faceWidth, unitHeight);
+  drawPdfPortraitRackFace(pdf, rack, "front", frontX, rackStartY, frontWidth, unitHeight);
+  drawPdfPortraitRackFace(pdf, rack, "rear", rearX, rackStartY, rearWidth, unitHeight);
 }
 
 function ensurePdfTextSpace(pdf: PdfDocument, neededHeight = 36): boolean {
