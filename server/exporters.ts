@@ -957,6 +957,7 @@ function drawPdfPortraitHeaderBackground(pdf: PdfDocument, x: number, y: number,
 }
 
 function drawPdfPortraitFooter(pdf: PdfDocument): void {
+  const currentY = pdf.y;
   const footerX = 36;
   const footerY = pdf.page.height - pdfPortraitFooterBottomInset - pdfPortraitFooterHeight;
   const footerTextX = footerX;
@@ -972,6 +973,7 @@ function drawPdfPortraitFooter(pdf: PdfDocument): void {
   pdf.fillColor(pdfPortraitFooterText).fontSize(8).text("     © 2026 Equinix, Inc. ", footerTextX + equinixWidth + 6, footerTextY + 1, {
     lineBreak: false
   });
+  pdf.y = currentY;
 }
 
 function drawPdfPortraitHeader(
