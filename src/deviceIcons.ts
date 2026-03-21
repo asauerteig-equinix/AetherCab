@@ -1,5 +1,5 @@
 import type { DeviceIconKey } from "../shared/types";
-import { deviceIconOptions, getDefaultIconKeyForTemplateType } from "../shared/deviceIcons";
+import { deviceIconOptions } from "../shared/deviceIcons";
 import accessPointIcon from "./assets/device-icons/access-point.svg";
 import bladeChassisIcon from "./assets/device-icons/blade-chassis.svg";
 import firewallIcon from "./assets/device-icons/firewall.svg";
@@ -38,7 +38,7 @@ export const deviceIconUrlByKey: Record<DeviceIconKey, string> = {
   nas: nasIcon
 };
 
-export { deviceIconOptions, getDefaultIconKeyForTemplateType };
+export { deviceIconOptions };
 
 export function getDeviceIconUrl(iconKey: DeviceIconKey | null | undefined): string {
   return deviceIconUrlByKey[iconKey ?? "generic-device"] ?? genericDeviceIcon;

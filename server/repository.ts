@@ -7,7 +7,7 @@ import {
   sortRackDevices,
   validateRackPlacement
 } from "../shared/rack.js";
-import { getDefaultIconKeyForTemplateType, normalizeDeviceIconKey } from "../shared/deviceIcons.js";
+import { normalizeDeviceIconKey } from "../shared/deviceIcons.js";
 import type {
   AuditCreateInput,
   AuditDetail,
@@ -236,7 +236,7 @@ function normalizeTemplateInput(input: DeviceTemplateInput): DeviceTemplateInput
   const normalized: DeviceTemplateInput = {
     templateType,
     mountStyle: input.mountStyle,
-    iconKey: normalizeDeviceIconKey(input.iconKey, getDefaultIconKeyForTemplateType(templateType)),
+    iconKey: normalizeDeviceIconKey(input.iconKey),
     name: input.name.trim(),
     manufacturer: input.manufacturer.trim(),
     model: input.model.trim(),

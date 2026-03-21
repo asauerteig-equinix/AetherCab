@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { getDefaultIconKeyForTemplateType, getDeviceIconUrl } from "../deviceIcons";
+import { getDeviceIconUrl } from "../deviceIcons";
 import type { AuditSummary, DeviceType, DeviceTypeInput, DeviceTemplate, DeviceTemplateInput } from "../../shared/types";
 import { DeviceIconPicker } from "./DeviceIconPicker";
 
@@ -58,7 +58,7 @@ function applyTemplateTypeToForm(nextTemplateType: string, currentForm: DeviceTe
     ...currentForm,
     templateType: nextTemplateType,
     mountStyle: currentForm.mountStyle,
-    iconKey: getDefaultIconKeyForTemplateType(nextTemplateType),
+    iconKey: currentForm.iconKey,
     blocksBothFaces: currentForm.mountStyle === "vertical-pdu" ? false : currentForm.blocksBothFaces,
     allowSharedDepth: currentForm.mountStyle === "vertical-pdu" ? false : currentForm.allowSharedDepth
   };

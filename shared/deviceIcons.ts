@@ -25,20 +25,6 @@ export const deviceIconOptions: DeviceIconOption[] = [
   { key: "nas", label: "NAS" }
 ];
 
-export const defaultIconByTemplateType: Record<string, DeviceIconKey> = {
-  server: "server",
-  "switch-router": "switch",
-  "patch-panel": "patch-panel",
-  storage: "storage",
-  ups: "ups",
-  pdu: "pdu-vertical",
-  other: "generic-device"
-};
-
-export function getDefaultIconKeyForTemplateType(templateType: string): DeviceIconKey {
-  return defaultIconByTemplateType[templateType] ?? "generic-device";
-}
-
 export function isDeviceIconKey(value: string): value is DeviceIconKey {
   return deviceIconOptions.some((option) => option.key === value);
 }
