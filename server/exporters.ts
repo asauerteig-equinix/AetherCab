@@ -1,5 +1,7 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { formatAuditDateTime, getAuditStatusLabel } from "../shared/audits.js";
 import {
   getEndUnit,
@@ -15,6 +17,17 @@ import {
 import type { AuditExportDetail, DeviceIconKey, RackDetail, RackDevice, RackFace, RackMountPosition } from "../shared/types.js";
 
 type PdfDocument = InstanceType<typeof PDFDocument>;
+type PdfAffineTransform = [number, number, number, number, number, number];
+type PdfSvgPathShape = {
+  d: string;
+  fill: string;
+  transform: PdfAffineTransform;
+};
+type PdfSvgAsset = {
+  width: number;
+  height: number;
+  paths: PdfSvgPathShape[];
+};
 
 const excelPalette = {
   pageBackground: "FFF4F7FA",
@@ -70,6 +83,214 @@ const pdfPortraitPageOptions = {
 
 const appBrandName = "Aether C.A.D";
 const appBrandSlogan = "Customer Audit Documentation";
+const pdfAssetRoot = resolve(process.cwd(), "src", "assets");
+const pdfAssetPaths = {
+  portraitHeaderBackground: resolve(pdfAssetRoot, "eqx_aqua_bg.png"),
+  portraitHeaderTiles: resolve(pdfAssetRoot, "eqx_kacheln.png"),
+  portraitFooterLogo: resolve(pdfAssetRoot, "eqx_full_logo_small.svg")
+} as const;
+const pdfPortraitHeaderTop = 20;
+const pdfPortraitFooterHeight = 34;
+const pdfPortraitFooterBottomInset = 14;
+const pdfPortraitFooterReservedSpace = pdfPortraitFooterHeight + pdfPortraitFooterBottomInset + 8;
+const pdfPortraitFooterBackground = "#11485e";
+const pdfPortraitFooterRed = "#e91c24";
+const pdfPortraitFooterText = "#ffffff";
+const pdfWindowsFontPaths = {
+  arial: resolve("C:\\Windows\\Fonts", "arial.ttf"),
+  arialBold: resolve("C:\\Windows\\Fonts", "arialbd.ttf")
+} as const;
+
+let pdfPortraitFooterLogoCache: PdfSvgAsset | null | undefined;
+const registeredPdfDocs = new WeakSet<PdfDocument>();
+
+function multiplyPdfAffineTransforms(left: PdfAffineTransform, right: PdfAffineTransform): PdfAffineTransform {
+  return [
+    left[0] * right[0] + left[2] * right[1],
+    left[1] * right[0] + left[3] * right[1],
+    left[0] * right[2] + left[2] * right[3],
+    left[1] * right[2] + left[3] * right[3],
+    left[0] * right[4] + left[2] * right[5] + left[4],
+    left[1] * right[4] + left[3] * right[5] + left[5]
+  ];
+}
+
+function parsePdfSvgTransform(value?: string): PdfAffineTransform {
+  const identity: PdfAffineTransform = [1, 0, 0, 1, 0, 0];
+  if (!value) {
+    return identity;
+  }
+
+  const transformPattern = /(matrix|translate)\(([^)]+)\)/g;
+  let current = identity;
+  let match = transformPattern.exec(value);
+
+  while (match) {
+    const [, kind, rawParts] = match;
+    const parts = rawParts
+      .trim()
+      .split(/[\s,]+/)
+      .map((part) => Number(part))
+      .filter((part) => Number.isFinite(part));
+
+    if (kind === "matrix" && parts.length === 6) {
+      current = multiplyPdfAffineTransforms(current, [
+        parts[0],
+        parts[1],
+        parts[2],
+        parts[3],
+        parts[4],
+        parts[5]
+      ]);
+    } else if (kind === "translate" && parts.length >= 1) {
+      current = multiplyPdfAffineTransforms(current, [1, 0, 0, 1, parts[0], parts[1] ?? 0]);
+    }
+
+    match = transformPattern.exec(value);
+  }
+
+  return current;
+}
+
+function parsePdfSvgAttributes(rawAttributes: string): Record<string, string> {
+  const attributes: Record<string, string> = {};
+  const attributePattern = /([:\w-]+)="([^"]*)"/g;
+  let match = attributePattern.exec(rawAttributes);
+
+  while (match) {
+    const [, key, value] = match;
+    attributes[key] = value;
+    match = attributePattern.exec(rawAttributes);
+  }
+
+  return attributes;
+}
+
+function loadPdfSvgAsset(filePath: string): PdfSvgAsset | null {
+  if (!existsSync(filePath)) {
+    return null;
+  }
+
+  const svg = readFileSync(filePath, "utf8");
+  const svgTagMatch = svg.match(/<svg\b([^>]*)>/i);
+  if (!svgTagMatch) {
+    return null;
+  }
+
+  const svgAttributes = parsePdfSvgAttributes(svgTagMatch[1]);
+  const width = Number(svgAttributes.width);
+  const height = Number(svgAttributes.height);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return null;
+  }
+
+  const groupMatch = svg.match(/<g\b[^>]*transform="([^"]+)"/i);
+  const groupTransform = parsePdfSvgTransform(groupMatch?.[1]);
+  const pathPattern = /<path\b([^>]*)\/>/gi;
+  const paths: PdfSvgPathShape[] = [];
+  let match = pathPattern.exec(svg);
+
+  while (match) {
+    const attributes = parsePdfSvgAttributes(match[1]);
+    if (!attributes.d) {
+      match = pathPattern.exec(svg);
+      continue;
+    }
+
+    paths.push({
+      d: attributes.d,
+      fill: attributes.fill ?? "#000000",
+      transform: multiplyPdfAffineTransforms(groupTransform, parsePdfSvgTransform(attributes.transform))
+    });
+    match = pathPattern.exec(svg);
+  }
+
+  return paths.length > 0 ? { width, height, paths } : null;
+}
+
+function getPdfPortraitFooterLogo(): PdfSvgAsset | null {
+  if (pdfPortraitFooterLogoCache === undefined) {
+    pdfPortraitFooterLogoCache = loadPdfSvgAsset(pdfAssetPaths.portraitFooterLogo);
+  }
+
+  return pdfPortraitFooterLogoCache;
+}
+
+function normalizePdfHexColor(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "#000") {
+    return "#000000";
+  }
+
+  if (normalized === "#fff") {
+    return "#ffffff";
+  }
+
+  return normalized;
+}
+
+function drawPdfSvgAsset(
+  pdf: PdfDocument,
+  asset: PdfSvgAsset,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  fillOverrides?: Record<string, string>
+): void {
+  const scale = Math.min(width / asset.width, height / asset.height);
+  const drawWidth = asset.width * scale;
+  const drawHeight = asset.height * scale;
+  const offsetX = x + width - drawWidth;
+  const offsetY = y + height - drawHeight;
+
+  pdf.save();
+  pdf.translate(offsetX, offsetY);
+  pdf.scale(scale);
+
+  asset.paths.forEach((pathShape) => {
+    const normalizedFill = normalizePdfHexColor(pathShape.fill);
+    const fillColor = fillOverrides?.[normalizedFill] ?? normalizedFill;
+    pdf.save();
+    pdf.transform(...pathShape.transform);
+    pdf.path(pathShape.d).fill(fillColor);
+    pdf.restore();
+  });
+
+  pdf.restore();
+}
+
+function ensurePdfWindowsFonts(pdf: PdfDocument): void {
+  if (registeredPdfDocs.has(pdf)) {
+    return;
+  }
+
+  if (existsSync(pdfWindowsFontPaths.arial)) {
+    pdf.registerFont("AetherArial", pdfWindowsFontPaths.arial);
+  }
+
+  if (existsSync(pdfWindowsFontPaths.arialBold)) {
+    pdf.registerFont("AetherArialBold", pdfWindowsFontPaths.arialBold);
+  }
+
+  registeredPdfDocs.add(pdf);
+}
+
+function setPdfArialFont(pdf: PdfDocument, bold = false): void {
+  ensurePdfWindowsFonts(pdf);
+
+  if (bold && existsSync(pdfWindowsFontPaths.arialBold)) {
+    pdf.font("AetherArialBold");
+    return;
+  }
+
+  if (!bold && existsSync(pdfWindowsFontPaths.arial)) {
+    pdf.font("AetherArial");
+    return;
+  }
+
+  pdf.font(bold ? "Helvetica-Bold" : "Helvetica");
+}
 
 function drawPdfDeviceIcon(pdf: PdfDocument, iconKey: DeviceIconKey | null | undefined, x: number, y: number, size: number): void {
   const key = iconKey ?? "generic-device";
@@ -896,6 +1117,156 @@ function drawPdfHeader(
   return pdf.y;
 }
 
+function drawPdfPortraitHeaderBackground(pdf: PdfDocument, x: number, y: number, width: number, height: number): void {
+  pdf.save();
+  pdf.roundedRect(x, y, width, height, 10).clip();
+
+  if (existsSync(pdfAssetPaths.portraitHeaderBackground)) {
+    pdf.image(pdfAssetPaths.portraitHeaderBackground, x, y, { width, height });
+  } else {
+    pdf.rect(x, y, width, height).fill("#afe6e9");
+  }
+
+  if (existsSync(pdfAssetPaths.portraitHeaderTiles)) {
+    pdf.opacity(0.25);
+    pdf.image(pdfAssetPaths.portraitHeaderTiles, x + width - 160, y - 8, {
+      width: 170
+    });
+  }
+
+  pdf.restore();
+  pdf.roundedRect(x, y, width, height, 10).lineWidth(0.7).strokeColor("#9eced2").stroke();
+}
+
+function drawPdfPortraitFooter(pdf: PdfDocument): void {
+  const footerX = 36;
+  const footerWidth = pdf.page.width - 72;
+  const footerY = pdf.page.height - pdfPortraitFooterBottomInset - pdfPortraitFooterHeight;
+  const footerTextX = footerX + 12;
+  const footerTextY = footerY + 11;
+  const footerLogoWidth = 116;
+  const footerLogoHeight = 18;
+  const footerLogoY = footerY + 8;
+  const footerLogoX = footerX + footerWidth - footerLogoWidth - 12;
+
+  pdf.save();
+  pdf.roundedRect(footerX, footerY, footerWidth, pdfPortraitFooterHeight, 8).fill(pdfPortraitFooterBackground);
+  pdf.restore();
+
+  setPdfArialFont(pdf, true);
+  pdf.fillColor(pdfPortraitFooterRed).fontSize(10).text("Equinix.com", footerTextX, footerTextY, {
+    lineBreak: false
+  });
+
+  const equinixWidth = pdf.widthOfString("Equinix.com");
+  setPdfArialFont(pdf);
+  pdf.fillColor(pdfPortraitFooterText).fontSize(8).text("     © 2026 Equinix, Inc. ", footerTextX + equinixWidth + 6, footerTextY + 1, {
+    lineBreak: false
+  });
+
+  const footerLogo = getPdfPortraitFooterLogo();
+  if (footerLogo) {
+    drawPdfSvgAsset(pdf, footerLogo, footerLogoX, footerLogoY, footerLogoWidth, footerLogoHeight, {
+      "#000000": "#ffffff"
+    });
+    return;
+  }
+
+  setPdfArialFont(pdf, true);
+  pdf.fillColor(pdfPortraitFooterText).fontSize(10).text("Equinix", footerLogoX, footerTextY, {
+    width: footerLogoWidth,
+    align: "right",
+    lineBreak: false
+  });
+}
+
+function drawPdfPortraitHeader(
+  pdf: PdfDocument,
+  audit: AuditExportDetail,
+  title: string,
+  subtitle: string,
+  rack?: RackDetail,
+  capacitySections?: Array<{ x: number; width: number; stats: RackFaceCapacityStats }>,
+  metaPartsOverride?: string[]
+): number {
+  const headerX = 36;
+  const headerWidth = pdf.page.width - 72;
+  const innerX = headerX + 14;
+  const innerWidth = headerWidth - 28;
+  const metaParts = metaPartsOverride ?? (rack
+    ? [
+        audit.siteName,
+        audit.roomName,
+        audit.name,
+        `SO: ${audit.salesOrder ?? "-"}`,
+        getAuditStatusLabel(audit.status),
+        formatAuditDateTime(audit.createdAt),
+        rack.name,
+        `${rack.totalUnits}U`,
+        `${rack.widthMm}x${rack.depthMm}x${rack.heightMm} mm`
+      ]
+    : [
+        audit.siteName,
+        audit.roomName,
+        audit.name,
+        `SO: ${audit.salesOrder ?? "-"}`,
+        getAuditStatusLabel(audit.status),
+        formatAuditDateTime(audit.createdAt),
+        `${audit.rackCount} rack${audit.rackCount === 1 ? "" : "s"}`
+      ]);
+
+  if (!metaPartsOverride && audit.notes) {
+    metaParts.push(`Notes: ${audit.notes}`);
+  }
+
+  const metaText = metaParts.join(" | ");
+  const titleY = pdfPortraitHeaderTop + 12;
+  const subtitleY = pdfPortraitHeaderTop + 16;
+  const metaY = pdfPortraitHeaderTop + 34;
+  pdf.fontSize(9.5);
+  const metaHeight = Math.max(
+    12,
+    pdf.heightOfString(metaText, {
+      width: innerWidth
+    })
+  );
+  const headerBottomY = rack ? metaY + metaHeight + 28 : metaY + metaHeight + 12;
+  const headerHeight = headerBottomY - pdfPortraitHeaderTop;
+
+  drawPdfPortraitHeaderBackground(pdf, headerX, pdfPortraitHeaderTop, headerWidth, headerHeight);
+
+  pdf.fillColor(pdfPalette.textPrimary).fontSize(17).text(title, innerX, titleY, {
+    width: 230
+  });
+  pdf.fillColor(pdfPalette.textSecondary).fontSize(9).text(subtitle, innerX + 234, subtitleY, {
+    width: innerWidth - 234,
+    align: "right"
+  });
+  pdf.fillColor(pdfPalette.textSecondary).fontSize(9.5).text(metaText, innerX, metaY, {
+    width: innerWidth,
+    ellipsis: true
+  });
+
+  if (rack) {
+    const capacitySummary = getRackCapacitySummary(rack.totalUnits, rack.devices);
+    const sections = capacitySections ?? [
+      { x: headerX, width: (headerWidth - 14) / 2, stats: capacitySummary.front },
+      { x: headerX + (headerWidth / 2) + 7, width: (headerWidth - 14) / 2, stats: capacitySummary.rear }
+    ];
+    const barY = metaY + metaHeight + 8;
+
+    sections.forEach((section) => {
+      drawPdfCapacityBar(pdf, section.x, barY, section.width, section.stats);
+    });
+
+    pdf.y = headerBottomY + 10;
+    return pdf.y;
+  }
+
+  pdf.y = headerBottomY + 10;
+  return pdf.y;
+}
+
 function buildPdfRackHeaderMetaParts(audit: AuditExportDetail, rack: RackDetail): string[] {
   return [
     audit.siteName,
@@ -1518,9 +1889,9 @@ function drawPdfPortraitRackViewPage(pdf: PdfDocument, audit: AuditExportDetail,
   const capacitySummary = getRackCapacitySummary(rack.totalUnits, rack.devices);
   const frontLegendHeight = getPdfPortraitPduLegendHeight(visibleDevicesForFace(rack, "front"));
   const rearLegendHeight = getPdfPortraitPduLegendHeight(visibleDevicesForFace(rack, "rear"));
-  const bottomPadding = Math.max(frontLegendHeight, rearLegendHeight, 26) + 28;
+  const bottomPadding = Math.max(frontLegendHeight, rearLegendHeight, 26) + pdfPortraitFooterReservedSpace + 10;
   const headerMetaParts = buildPdfRackHeaderMetaParts(audit, rack);
-  const rackStartY = drawPdfHeader(pdf, audit, `${appBrandName} Rack View`, `${appBrandSlogan} | Portrait`, rack, [
+  const rackStartY = drawPdfPortraitHeader(pdf, audit, `${appBrandName} Rack View`, `${appBrandSlogan} | Portrait`, rack, [
     { x: frontX, width: frontWidth, stats: capacitySummary.front },
     { x: rearX, width: rearWidth, stats: capacitySummary.rear }
   ], headerMetaParts);
@@ -1528,10 +1899,11 @@ function drawPdfPortraitRackViewPage(pdf: PdfDocument, audit: AuditExportDetail,
 
   drawPdfPortraitRackFace(pdf, rack, "front", frontX, rackStartY, frontWidth, unitHeight);
   drawPdfPortraitRackFace(pdf, rack, "rear", rearX, rackStartY, rearWidth, unitHeight);
+  drawPdfPortraitFooter(pdf);
 }
 
-function ensurePdfTextSpace(pdf: PdfDocument, neededHeight = 36): boolean {
-  return pdf.y + neededHeight <= pdf.page.height - 36;
+function ensurePdfTextSpace(pdf: PdfDocument, neededHeight = 36, bottomInset = 36): boolean {
+  return pdf.y + neededHeight <= pdf.page.height - bottomInset;
 }
 
 function drawPdfGroupLabel(pdf: PdfDocument, title: string): void {
@@ -1725,7 +2097,7 @@ function drawPdfPortraitInventoryRow(pdf: PdfDocument, rack: RackDetail, device:
 function startPdfPortraitInventoryPage(pdf: PdfDocument, audit: AuditExportDetail, rack: RackDetail, continuation = false): void {
   pdf.addPage(pdfPortraitPageOptions);
   drawPdfPageBackground(pdf);
-  drawPdfHeader(
+  drawPdfPortraitHeader(
     pdf,
     audit,
     `${appBrandName} Device List`,
@@ -1734,6 +2106,7 @@ function startPdfPortraitInventoryPage(pdf: PdfDocument, audit: AuditExportDetai
     undefined,
     buildPdfRackHeaderMetaParts(audit, rack)
   );
+  drawPdfPortraitFooter(pdf);
 }
 
 function drawPdfPortraitGroupedInventory(pdf: PdfDocument, audit: AuditExportDetail, rack: RackDetail): void {
@@ -1745,7 +2118,7 @@ function drawPdfPortraitGroupedInventory(pdf: PdfDocument, audit: AuditExportDet
   }
 
   groupDevicesForExport(rackDevices).forEach((group) => {
-    if (!ensurePdfTextSpace(pdf, 42)) {
+    if (!ensurePdfTextSpace(pdf, 42, pdfPortraitFooterReservedSpace)) {
       startPdfPortraitInventoryPage(pdf, audit, rack, true);
     }
 
@@ -1753,7 +2126,7 @@ function drawPdfPortraitGroupedInventory(pdf: PdfDocument, audit: AuditExportDet
     drawPdfPortraitInventoryTableHeader(pdf);
 
     group.devices.forEach((device) => {
-      if (!ensurePdfTextSpace(pdf, 24)) {
+      if (!ensurePdfTextSpace(pdf, 24, pdfPortraitFooterReservedSpace)) {
         startPdfPortraitInventoryPage(pdf, audit, rack, true);
         drawPdfGroupLabel(pdf, group.label);
         drawPdfPortraitInventoryTableHeader(pdf);
