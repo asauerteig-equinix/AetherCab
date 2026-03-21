@@ -98,6 +98,25 @@ function clearAdminCookie(response: Response): void {
   response.setHeader("Set-Cookie", `${adminCookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
 }
 
+function sanitizeDownloadName(value: string): string {
+  const normalized = value
+    .trim()
+    .split("")
+    .filter((character) => character >= " ")
+    .join("")
+    .replace(/[<>:"/\\|?*]+/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return normalized || "audit";
+}
+
+function getPdfDownloadFilename(audit: { salesOrder: string | null; name: string }): string {
+  const baseName = audit.salesOrder?.trim() || audit.name.trim();
+  return `${sanitizeDownloadName(baseName)}-audit.pdf`;
+}
+
 function requireAdmin(request: Request, response: Response, next: NextFunction): void {
   if (!isAdminAuthenticated(request)) {
     response.status(403).json({ error: "Admin access required." });
@@ -384,7 +403,7 @@ async function bootstrap(): Promise<void> {
 
       const file = await buildPdfExport(audit);
       response.setHeader("Content-Type", "application/pdf");
-      response.setHeader("Content-Disposition", `attachment; filename="${audit.name}-documentation.pdf"`);
+      response.setHeader("Content-Disposition", `attachment; filename="${getPdfDownloadFilename(audit)}"`);
       response.send(file);
     })
   );
@@ -400,7 +419,7 @@ async function bootstrap(): Promise<void> {
 
       const file = await buildPdfPortraitExport(audit);
       response.setHeader("Content-Type", "application/pdf");
-      response.setHeader("Content-Disposition", `attachment; filename="${audit.name}-documentation-portrait.pdf"`);
+      response.setHeader("Content-Disposition", `attachment; filename="${getPdfDownloadFilename(audit)}"`);
       response.send(file);
     })
   );
