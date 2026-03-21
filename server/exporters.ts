@@ -299,6 +299,13 @@ function deviceVisualLabel(device: RackDevice): string {
   return deviceVisualLines(device).join("\n");
 }
 
+function deviceInventoryModelValue(device: RackDevice): string {
+  const model = device.model || "-";
+  const powerSpec = formatPowerSpec(device);
+
+  return powerSpec ? `${model} | ${powerSpec}` : model;
+}
+
 function faceSortValue(device: RackDevice): number {
   if (device.blocksBothFaces) {
     return 2;
@@ -1741,14 +1748,13 @@ function drawPdfInventoryTableHeader(pdf: PdfDocument): void {
   const y = pdf.y;
   const columns = [
     { label: "", width: 30 },
-    { label: "Rack", width: 68 },
-    { label: "Pos", width: 48 },
-    { label: "Face", width: 42 },
-    { label: "Hostname", width: 96 },
-    { label: "Serial number", width: 88 },
-    { label: "Power", width: 72 },
-    { label: "Model", width: 150 },
-    { label: "Manufacturer", width: 176 }
+    { label: "Rack", width: 74 },
+    { label: "Pos", width: 52 },
+    { label: "Face", width: 46 },
+    { label: "Hostname", width: 108 },
+    { label: "Serial number", width: 104 },
+    { label: "Model", width: 170 },
+    { label: "Manufacturer", width: 186 }
   ] as const;
 
   let columnX = x;
@@ -1776,11 +1782,10 @@ function drawPdfInventoryRow(pdf: PdfDocument, rack: RackDetail, device: RackDev
     deviceFaceLabel(device),
     device.hostname ?? "-",
     device.serialNumber ?? "-",
-    formatPowerSpec(device) ?? "-",
-    device.model || "-",
+    deviceInventoryModelValue(device),
     device.manufacturer || "-"
   ];
-  const columns = [30, 68, 48, 42, 96, 88, 72, 150, 176];
+  const columns = [30, 74, 52, 46, 108, 104, 170, 186];
 
   let columnX = x;
   columns.forEach((columnWidth, index) => {
@@ -1853,14 +1858,13 @@ function drawPdfPortraitInventoryTableHeader(pdf: PdfDocument): void {
   const y = pdf.y;
   const columns = [
     { label: "", width: 24 },
-    { label: "Rack", width: 44 },
-    { label: "Pos", width: 38 },
-    { label: "Face", width: 34 },
-    { label: "Hostname", width: 58 },
-    { label: "Serial", width: 56 },
-    { label: "Power", width: 52 },
-    { label: "Model", width: 96 },
-    { label: "Manufacturer", width: 121 }
+    { label: "Rack", width: 48 },
+    { label: "Pos", width: 42 },
+    { label: "Face", width: 36 },
+    { label: "Hostname", width: 70 },
+    { label: "Serial", width: 68 },
+    { label: "Model", width: 110 },
+    { label: "Manufacturer", width: 125 }
   ] as const;
 
   let columnX = x;
@@ -1888,11 +1892,10 @@ function drawPdfPortraitInventoryRow(pdf: PdfDocument, rack: RackDetail, device:
     deviceFaceLabel(device),
     device.hostname ?? "-",
     device.serialNumber ?? "-",
-    formatPowerSpec(device) ?? "-",
-    device.model || "-",
+    deviceInventoryModelValue(device),
     device.manufacturer || "-"
   ];
-  const columns = [24, 44, 38, 34, 58, 56, 52, 96, 121];
+  const columns = [24, 48, 42, 36, 70, 68, 110, 125];
 
   let columnX = x;
   columns.forEach((columnWidth, index) => {
