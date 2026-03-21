@@ -74,15 +74,14 @@ const appBrandName = "Aether C.A.D";
 const appBrandSlogan = "Customer Audit Documentation";
 const pdfAssetRoot = resolve(process.cwd(), "src", "assets");
 const pdfAssetPaths = {
-  portraitHeaderBackground: resolve(pdfAssetRoot, "eqx_aqua_bg.png"),
-  portraitHeaderTiles: resolve(pdfAssetRoot, "eqx_kacheln.png")
+  portraitHeaderBackground: resolve(pdfAssetRoot, "eqx_aqua_bg.png")
 } as const;
 const pdfPortraitHeaderTop = 0;
 const pdfPortraitFooterHeight = 20;
 const pdfPortraitFooterBottomInset = 10;
 const pdfPortraitFooterReservedSpace = pdfPortraitFooterHeight + pdfPortraitFooterBottomInset + 12;
 const pdfPortraitFooterRed = "#e91c24";
-const pdfPortraitFooterText = "#ffffff";
+const pdfPortraitFooterText = "#18232d";
 const pdfWindowsFontPaths = {
   arial: resolve("C:\\Windows\\Fonts", "arial.ttf"),
   arialBold: resolve("C:\\Windows\\Fonts", "arialbd.ttf")
@@ -953,15 +952,6 @@ function drawPdfPortraitHeaderBackground(pdf: PdfDocument, x: number, y: number,
   } else {
     pdf.save();
     pdf.rect(x, y, width, height).fill("#afe6e9");
-    pdf.restore();
-  }
-
-  if (existsSync(pdfAssetPaths.portraitHeaderTiles)) {
-    pdf.save();
-    pdf.opacity(1);
-    pdf.image(pdfAssetPaths.portraitHeaderTiles, x + width - 220, y + 8, {
-      fit: [200, Math.max(28, height - 16)]
-    });
     pdf.restore();
   }
 }
