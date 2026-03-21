@@ -8,6 +8,7 @@ import {
   validateRackPlacement
 } from "../shared/rack.js";
 import { normalizeDeviceIconKey } from "../shared/deviceIcons.js";
+import { getVoltageForPowerPhase } from "../shared/power.js";
 import type {
   AuditCreateInput,
   AuditDetail,
@@ -23,6 +24,7 @@ import type {
   RackDevice,
   RackDeviceInput,
   RackFace,
+  PowerPhase,
   RackSummary,
   RackUpdateInput
 } from "../shared/types.js";
@@ -77,6 +79,10 @@ interface RackDeviceRow {
   start_unit: number | null;
   height_u: number;
   icon_key: RackDevice["iconKey"];
+  has_power_spec: boolean;
+  power_phase: PowerPhase | null;
+  voltage_v: number | null;
+  current_a: number | null;
   name: string;
   manufacturer: string;
   model: string;
@@ -93,6 +99,10 @@ interface DeviceTemplateRow {
   template_type: string;
   mount_style: DeviceTemplate["mountStyle"];
   icon_key: DeviceTemplate["iconKey"];
+  has_power_spec: boolean;
+  power_phase: PowerPhase | null;
+  voltage_v: number | null;
+  current_a: number | null;
   name: string;
   manufacturer: string;
   model: string;
@@ -149,6 +159,10 @@ function mapRackDevice(row: RackDeviceRow): RackDevice {
     startUnit: row.start_unit,
     heightU: row.height_u,
     iconKey: row.icon_key,
+    hasPowerSpec: row.has_power_spec,
+    powerPhase: row.power_phase,
+    voltageV: row.voltage_v,
+    currentA: row.current_a,
     name: row.name,
     manufacturer: row.manufacturer,
     model: row.model,
@@ -184,6 +198,15 @@ function normalizeDeviceTypeInput(input: DeviceTypeInput): DeviceTypeInput {
 }
 
 function normalizeDeviceInput(input: RackDeviceInput): RackDeviceInput {
+  const hasPowerSpec = input.hasPowerSpec ?? false;
+  const powerPhase = hasPowerSpec ? input.powerPhase ?? null : null;
+  const voltageV =
+    !hasPowerSpec
+      ? null
+      : powerPhase === "custom"
+        ? input.voltageV ?? null
+        : getVoltageForPowerPhase(powerPhase);
+  const currentA = hasPowerSpec ? input.currentA ?? null : null;
   const normalized: RackDeviceInput = {
     templateId: input.templateId ?? null,
     placementType: input.placementType,
@@ -194,6 +217,10 @@ function normalizeDeviceInput(input: RackDeviceInput): RackDeviceInput {
     startUnit: input.startUnit,
     heightU: input.heightU,
     iconKey: input.iconKey ?? null,
+    hasPowerSpec,
+    powerPhase,
+    voltageV,
+    currentA,
     name: input.name.trim(),
     manufacturer: input.manufacturer.trim(),
     model: input.model.trim(),
@@ -224,6 +251,20 @@ function normalizeDeviceInput(input: RackDeviceInput): RackDeviceInput {
     throw new Error("Name, manufacturer and model are required.");
   }
 
+  if (normalized.hasPowerSpec) {
+    if (normalized.powerPhase === null) {
+      throw new Error("Power phase is required when power input specs are enabled.");
+    }
+
+    if (voltageV === null || voltageV < 1) {
+      throw new Error("Voltage must be greater than 0 when power input specs are enabled.");
+    }
+
+    if (currentA === null || currentA < 1) {
+      throw new Error("Current must be greater than 0 when power input specs are enabled.");
+    }
+  }
+
   if (normalized.placementType === "rack" && normalized.rackFace === null) {
     throw new Error("Rack face is required for rack devices.");
   }
@@ -233,10 +274,23 @@ function normalizeDeviceInput(input: RackDeviceInput): RackDeviceInput {
 
 function normalizeTemplateInput(input: DeviceTemplateInput): DeviceTemplateInput {
   const templateType = input.templateType.trim().toLowerCase();
+  const hasPowerSpec = input.hasPowerSpec ?? false;
+  const powerPhase = hasPowerSpec ? input.powerPhase ?? null : null;
+  const voltageV =
+    !hasPowerSpec
+      ? null
+      : powerPhase === "custom"
+        ? input.voltageV ?? null
+        : getVoltageForPowerPhase(powerPhase);
+  const currentA = hasPowerSpec ? input.currentA ?? null : null;
   const normalized: DeviceTemplateInput = {
     templateType,
     mountStyle: input.mountStyle,
     iconKey: normalizeDeviceIconKey(input.iconKey),
+    hasPowerSpec,
+    powerPhase,
+    voltageV,
+    currentA,
     name: input.name.trim(),
     manufacturer: input.manufacturer.trim(),
     model: input.model.trim(),
@@ -247,6 +301,20 @@ function normalizeTemplateInput(input: DeviceTemplateInput): DeviceTemplateInput
 
   if (!normalized.templateType || !normalized.name || !normalized.manufacturer || !normalized.model) {
     throw new Error("Template type, name, manufacturer and model are required.");
+  }
+
+  if (normalized.hasPowerSpec) {
+    if (normalized.powerPhase === null) {
+      throw new Error("Power phase is required when power input specs are enabled.");
+    }
+
+    if (normalized.voltageV === null || normalized.voltageV < 1) {
+      throw new Error("Voltage must be greater than 0 when power input specs are enabled.");
+    }
+
+    if (normalized.currentA === null || normalized.currentA < 1) {
+      throw new Error("Current must be greater than 0 when power input specs are enabled.");
+    }
   }
 
   if (normalized.mountStyle === "vertical-pdu") {
@@ -439,6 +507,10 @@ async function duplicateAuditData(client: PoolClient, sourceAudit: AuditDetail, 
             start_unit,
             height_u,
             icon_key,
+            has_power_spec,
+            power_phase,
+            voltage_v,
+            current_a,
             name,
             manufacturer,
             model,
@@ -448,7 +520,7 @@ async function duplicateAuditData(client: PoolClient, sourceAudit: AuditDetail, 
             storage_location,
             updated_at
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, CURRENT_TIMESTAMP)
         `,
         [
           nextRackId,
@@ -461,6 +533,10 @@ async function duplicateAuditData(client: PoolClient, sourceAudit: AuditDetail, 
           device.startUnit,
           device.heightU,
           device.iconKey,
+          device.hasPowerSpec,
+          device.powerPhase,
+          device.voltageV,
+          device.currentA,
           device.name,
           device.manufacturer,
           device.model,
@@ -882,7 +958,7 @@ export async function deleteDeviceType(deviceTypeId: number): Promise<void> {
 
 export async function listDeviceTemplates(): Promise<DeviceTemplate[]> {
   const result = await pool.query<DeviceTemplateRow>(`
-    SELECT id, template_type, mount_style, icon_key, name, manufacturer, model, default_height_u, blocks_both_faces, allow_shared_depth
+    SELECT id, template_type, mount_style, icon_key, has_power_spec, power_phase, voltage_v, current_a, name, manufacturer, model, default_height_u, blocks_both_faces, allow_shared_depth
     FROM device_templates
     ORDER BY template_type, default_height_u, name
   `);
@@ -892,6 +968,10 @@ export async function listDeviceTemplates(): Promise<DeviceTemplate[]> {
     templateType: row.template_type,
     mountStyle: row.mount_style,
     iconKey: row.icon_key,
+    hasPowerSpec: row.has_power_spec,
+    powerPhase: row.power_phase,
+    voltageV: row.voltage_v,
+    currentA: row.current_a,
     name: row.name,
     manufacturer: row.manufacturer,
     model: row.model,
@@ -913,6 +993,10 @@ export async function createDeviceTemplate(input: DeviceTemplateInput): Promise<
         template_type,
         mount_style,
         icon_key,
+        has_power_spec,
+        power_phase,
+        voltage_v,
+        current_a,
         name,
         manufacturer,
         model,
@@ -920,13 +1004,17 @@ export async function createDeviceTemplate(input: DeviceTemplateInput): Promise<
         blocks_both_faces,
         allow_shared_depth
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING id, template_type, mount_style, icon_key, name, manufacturer, model, default_height_u, blocks_both_faces, allow_shared_depth
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      RETURNING id, template_type, mount_style, icon_key, has_power_spec, power_phase, voltage_v, current_a, name, manufacturer, model, default_height_u, blocks_both_faces, allow_shared_depth
     `,
     [
       normalized.templateType,
       normalized.mountStyle,
       normalized.iconKey,
+      normalized.hasPowerSpec,
+      normalized.powerPhase,
+      normalized.voltageV,
+      normalized.currentA,
       normalized.name,
       normalized.manufacturer,
       normalized.model,
@@ -942,6 +1030,10 @@ export async function createDeviceTemplate(input: DeviceTemplateInput): Promise<
     templateType: row.template_type,
     mountStyle: row.mount_style,
     iconKey: row.icon_key,
+    hasPowerSpec: row.has_power_spec,
+    powerPhase: row.power_phase,
+    voltageV: row.voltage_v,
+    currentA: row.current_a,
     name: row.name,
     manufacturer: row.manufacturer,
     model: row.model,
@@ -964,19 +1056,27 @@ export async function updateDeviceTemplate(templateId: number, input: DeviceTemp
         template_type = $1,
         mount_style = $2,
         icon_key = $3,
-        name = $4,
-        manufacturer = $5,
-        model = $6,
-        default_height_u = $7,
-        blocks_both_faces = $8,
-        allow_shared_depth = $9
-      WHERE id = $10
-      RETURNING id, template_type, mount_style, icon_key, name, manufacturer, model, default_height_u, blocks_both_faces, allow_shared_depth
+        has_power_spec = $4,
+        power_phase = $5,
+        voltage_v = $6,
+        current_a = $7,
+        name = $8,
+        manufacturer = $9,
+        model = $10,
+        default_height_u = $11,
+        blocks_both_faces = $12,
+        allow_shared_depth = $13
+      WHERE id = $14
+      RETURNING id, template_type, mount_style, icon_key, has_power_spec, power_phase, voltage_v, current_a, name, manufacturer, model, default_height_u, blocks_both_faces, allow_shared_depth
     `,
     [
       normalized.templateType,
       normalized.mountStyle,
       normalized.iconKey,
+      normalized.hasPowerSpec,
+      normalized.powerPhase,
+      normalized.voltageV,
+      normalized.currentA,
       normalized.name,
       normalized.manufacturer,
       normalized.model,
@@ -991,7 +1091,19 @@ export async function updateDeviceTemplate(templateId: number, input: DeviceTemp
     throw new Error("Device template not found.");
   }
 
-  await pool.query("UPDATE rack_devices SET icon_key = $1 WHERE template_id = $2", [normalized.iconKey, templateId]);
+  await pool.query(
+    `
+      UPDATE rack_devices
+      SET
+        icon_key = $1,
+        has_power_spec = $2,
+        power_phase = $3,
+        voltage_v = $4,
+        current_a = $5
+      WHERE template_id = $6
+    `,
+    [normalized.iconKey, normalized.hasPowerSpec, normalized.powerPhase, normalized.voltageV, normalized.currentA, templateId]
+  );
 
   const row = result.rows[0];
   return {
@@ -999,6 +1111,10 @@ export async function updateDeviceTemplate(templateId: number, input: DeviceTemp
     templateType: row.template_type,
     mountStyle: row.mount_style,
     iconKey: row.icon_key,
+    hasPowerSpec: row.has_power_spec,
+    powerPhase: row.power_phase,
+    voltageV: row.voltage_v,
+    currentA: row.current_a,
     name: row.name,
     manufacturer: row.manufacturer,
     model: row.model,
@@ -1038,6 +1154,10 @@ export async function createRackDevice(rackId: number, input: RackDeviceInput): 
         start_unit,
         height_u,
         icon_key,
+        has_power_spec,
+        power_phase,
+        voltage_v,
+        current_a,
         name,
         manufacturer,
         model,
@@ -1046,7 +1166,7 @@ export async function createRackDevice(rackId: number, input: RackDeviceInput): 
         notes,
         storage_location,
         updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, CURRENT_TIMESTAMP)
       RETURNING *
     `,
     [
@@ -1060,6 +1180,10 @@ export async function createRackDevice(rackId: number, input: RackDeviceInput): 
       normalized.startUnit,
       normalized.heightU,
       normalized.iconKey ?? null,
+      normalized.hasPowerSpec,
+      normalized.powerPhase,
+      normalized.voltageV,
+      normalized.currentA,
       normalized.name,
       normalized.manufacturer,
       normalized.model,
@@ -1186,15 +1310,19 @@ export async function updateRackDevice(rackId: number, deviceId: number, input: 
         start_unit = $7,
         height_u = $8,
         icon_key = $9,
-        name = $10,
-        manufacturer = $11,
-        model = $12,
-        serial_number = $13,
-        hostname = $14,
-        notes = $15,
-        storage_location = $16,
+        has_power_spec = $10,
+        power_phase = $11,
+        voltage_v = $12,
+        current_a = $13,
+        name = $14,
+        manufacturer = $15,
+        model = $16,
+        serial_number = $17,
+        hostname = $18,
+        notes = $19,
+        storage_location = $20,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $17 AND rack_id = $18
+      WHERE id = $21 AND rack_id = $22
       RETURNING *
     `,
     [
@@ -1207,6 +1335,10 @@ export async function updateRackDevice(rackId: number, deviceId: number, input: 
       resolvedInput.startUnit,
       resolvedInput.heightU,
       resolvedInput.iconKey ?? null,
+      resolvedInput.hasPowerSpec,
+      resolvedInput.powerPhase,
+      resolvedInput.voltageV,
+      resolvedInput.currentA,
       resolvedInput.name,
       resolvedInput.manufacturer,
       resolvedInput.model,

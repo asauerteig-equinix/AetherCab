@@ -73,6 +73,10 @@ export async function initializeDatabase(): Promise<void> {
       template_type TEXT NOT NULL DEFAULT 'other',
       mount_style TEXT NOT NULL DEFAULT 'full' CHECK (mount_style IN ('full', 'vertical-pdu')),
       icon_key TEXT NOT NULL DEFAULT 'generic-device',
+      has_power_spec BOOLEAN NOT NULL DEFAULT FALSE,
+      power_phase TEXT CHECK (power_phase IN ('single-phase', 'three-phase', 'custom')),
+      voltage_v INTEGER,
+      current_a INTEGER,
       name TEXT NOT NULL,
       manufacturer TEXT NOT NULL,
       model TEXT NOT NULL,
@@ -100,6 +104,10 @@ export async function initializeDatabase(): Promise<void> {
       start_unit INTEGER,
       height_u INTEGER NOT NULL,
       icon_key TEXT,
+      has_power_spec BOOLEAN NOT NULL DEFAULT FALSE,
+      power_phase TEXT CHECK (power_phase IN ('single-phase', 'three-phase', 'custom')),
+      voltage_v INTEGER,
+      current_a INTEGER,
       name TEXT NOT NULL,
       manufacturer TEXT NOT NULL,
       model TEXT NOT NULL,
@@ -197,6 +205,26 @@ export async function initializeDatabase(): Promise<void> {
 
   await pool.query(`
     ALTER TABLE device_templates
+    ADD COLUMN IF NOT EXISTS has_power_spec BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+
+  await pool.query(`
+    ALTER TABLE device_templates
+    ADD COLUMN IF NOT EXISTS power_phase TEXT
+  `);
+
+  await pool.query(`
+    ALTER TABLE device_templates
+    ADD COLUMN IF NOT EXISTS voltage_v INTEGER
+  `);
+
+  await pool.query(`
+    ALTER TABLE device_templates
+    ADD COLUMN IF NOT EXISTS current_a INTEGER
+  `);
+
+  await pool.query(`
+    ALTER TABLE device_templates
     ADD COLUMN IF NOT EXISTS blocks_both_faces BOOLEAN NOT NULL DEFAULT FALSE
   `);
 
@@ -271,6 +299,48 @@ export async function initializeDatabase(): Promise<void> {
   `);
 
   await pool.query(`
+    ALTER TABLE rack_devices
+    ADD COLUMN IF NOT EXISTS has_power_spec BOOLEAN NOT NULL DEFAULT FALSE
+  `);
+
+  await pool.query(`
+    ALTER TABLE rack_devices
+    ADD COLUMN IF NOT EXISTS power_phase TEXT
+  `);
+
+  await pool.query(`
+    ALTER TABLE rack_devices
+    ADD COLUMN IF NOT EXISTS voltage_v INTEGER
+  `);
+
+  await pool.query(`
+    ALTER TABLE rack_devices
+    ADD COLUMN IF NOT EXISTS current_a INTEGER
+  `);
+
+  await pool.query(`
+    ALTER TABLE device_templates
+    DROP CONSTRAINT IF EXISTS device_templates_power_phase_check
+  `);
+
+  await pool.query(`
+    ALTER TABLE device_templates
+    ADD CONSTRAINT device_templates_power_phase_check
+    CHECK (power_phase IS NULL OR power_phase IN ('single-phase', 'three-phase', 'custom'))
+  `);
+
+  await pool.query(`
+    ALTER TABLE rack_devices
+    DROP CONSTRAINT IF EXISTS rack_devices_power_phase_check
+  `);
+
+  await pool.query(`
+    ALTER TABLE rack_devices
+    ADD CONSTRAINT rack_devices_power_phase_check
+    CHECK (power_phase IS NULL OR power_phase IN ('single-phase', 'three-phase', 'custom'))
+  `);
+
+  await pool.query(`
     UPDATE rack_devices
     SET rack_face = 'front'
     WHERE placement_type = 'rack' AND rack_face IS NULL
@@ -303,6 +373,12 @@ export async function initializeDatabase(): Promise<void> {
   `);
 
   await pool.query(`
+    UPDATE device_templates
+    SET power_phase = NULL, voltage_v = NULL, current_a = NULL
+    WHERE has_power_spec = FALSE
+  `);
+
+  await pool.query(`
     UPDATE rack_devices
     SET mount_position = 'full'
     WHERE mount_position IS NULL
@@ -321,6 +397,12 @@ export async function initializeDatabase(): Promise<void> {
     UPDATE rack_devices
     SET allow_shared_depth = FALSE
     WHERE mount_position <> 'full' OR blocks_both_faces = TRUE
+  `);
+
+  await pool.query(`
+    UPDATE rack_devices
+    SET power_phase = NULL, voltage_v = NULL, current_a = NULL
+    WHERE has_power_spec = FALSE
   `);
 
   await pool.query(`
@@ -434,6 +516,10 @@ async function seedDatabase(): Promise<void> {
         template_type,
         mount_style,
         icon_key,
+        has_power_spec,
+        power_phase,
+        voltage_v,
+        current_a,
         name,
         manufacturer,
         model,
@@ -442,14 +528,14 @@ async function seedDatabase(): Promise<void> {
         allow_shared_depth
       )
       VALUES
-        ('server', 'full', 'server', 'Server 1U', 'Generic', 'Rack Server 1U', 1, TRUE, FALSE),
-        ('server', 'full', 'server', 'Server 2U', 'Generic', 'Rack Server 2U', 2, TRUE, FALSE),
-        ('switch-router', 'full', 'switch', 'Switch/Router 1U', 'Generic', 'Network Device 1U', 1, FALSE, FALSE),
-        ('switch-router', 'full', 'switch', 'Switch/Router 2U', 'Generic', 'Network Device 2U', 2, TRUE, FALSE),
-        ('patch-panel', 'full', 'patch-panel', 'Patch Panel 1U', 'Generic', 'Patch Panel 1U', 1, FALSE, FALSE),
-        ('storage', 'full', 'storage', 'Storage 2U', 'Generic', 'Storage Shelf 2U', 2, TRUE, FALSE),
-        ('ups', 'full', 'ups', 'UPS 2U', 'Generic', 'UPS 2U', 2, TRUE, FALSE),
-        ('pdu', 'vertical-pdu', 'pdu-vertical', 'Vertical PDU 31U', 'Generic', 'Vertical Rack PDU', 31, FALSE, FALSE)
+        ('server', 'full', 'server', FALSE, NULL, NULL, NULL, 'Server 1U', 'Generic', 'Rack Server 1U', 1, TRUE, FALSE),
+        ('server', 'full', 'server', FALSE, NULL, NULL, NULL, 'Server 2U', 'Generic', 'Rack Server 2U', 2, TRUE, FALSE),
+        ('switch-router', 'full', 'switch', FALSE, NULL, NULL, NULL, 'Switch/Router 1U', 'Generic', 'Network Device 1U', 1, FALSE, FALSE),
+        ('switch-router', 'full', 'switch', FALSE, NULL, NULL, NULL, 'Switch/Router 2U', 'Generic', 'Network Device 2U', 2, TRUE, FALSE),
+        ('patch-panel', 'full', 'patch-panel', FALSE, NULL, NULL, NULL, 'Patch Panel 1U', 'Generic', 'Patch Panel 1U', 1, FALSE, FALSE),
+        ('storage', 'full', 'storage', FALSE, NULL, NULL, NULL, 'Storage 2U', 'Generic', 'Storage Shelf 2U', 2, TRUE, FALSE),
+        ('ups', 'full', 'ups', FALSE, NULL, NULL, NULL, 'UPS 2U', 'Generic', 'UPS 2U', 2, TRUE, FALSE),
+        ('pdu', 'vertical-pdu', 'pdu-vertical', TRUE, 'single-phase', 230, 32, 'Vertical PDU 31U', 'Generic', 'Vertical Rack PDU', 31, FALSE, FALSE)
       ON CONFLICT (name, manufacturer, model) DO NOTHING
     `
   );
@@ -494,6 +580,10 @@ async function seedDatabase(): Promise<void> {
         start_unit,
         height_u,
         icon_key,
+        has_power_spec,
+        power_phase,
+        voltage_v,
+        current_a,
         name,
         manufacturer,
         model,
@@ -502,10 +592,10 @@ async function seedDatabase(): Promise<void> {
         notes,
         storage_location
       ) VALUES
-        ($1, 'rack', 'front', 'full', TRUE, 40, 2, 'storage', 'Storage Shelf 01', 'Dell', 'EMC Unity Shelf', 'D-EMC-4401', 'unity-shelf-01', 'Primary storage shelf', NULL),
-        ($1, 'rack', 'rear', 'full', FALSE, 38, 1, 'switch', 'Core Switch 01', 'Cisco', 'Catalyst 9300', 'C9300-01', 'core-sw-01', 'Top of rack core switch', NULL),
-        ($1, 'rack', 'rear', 'rear-left-outer', FALSE, 3, 31, 'pdu-vertical', 'PDU A', 'APC', 'Metered PDU', 'APC-PDU-A', NULL, 'Rear left vertical PDU', NULL),
-        ($1, 'spare', NULL, 'full', FALSE, NULL, 1, 'generic-device', 'SFP Module Kit', 'Cisco', 'SFP-10G-SR', NULL, NULL, 'Loose spare transceivers', 'Accessory box')
+        ($1, 'rack', 'front', 'full', TRUE, 40, 2, 'storage', FALSE, NULL, NULL, NULL, 'Storage Shelf 01', 'Dell', 'EMC Unity Shelf', 'D-EMC-4401', 'unity-shelf-01', 'Primary storage shelf', NULL),
+        ($1, 'rack', 'rear', 'full', FALSE, 38, 1, 'switch', FALSE, NULL, NULL, NULL, 'Core Switch 01', 'Cisco', 'Catalyst 9300', 'C9300-01', 'core-sw-01', 'Top of rack core switch', NULL),
+        ($1, 'rack', 'rear', 'rear-left-outer', FALSE, 3, 31, 'pdu-vertical', TRUE, 'single-phase', 230, 32, 'PDU A', 'APC', 'Metered PDU', 'APC-PDU-A', NULL, 'Rear left vertical PDU', NULL),
+        ($1, 'spare', NULL, 'full', FALSE, NULL, 1, 'generic-device', FALSE, NULL, NULL, NULL, 'SFP Module Kit', 'Cisco', 'SFP-10G-SR', NULL, NULL, 'Loose spare transceivers', 'Accessory box')
     `,
     [rackId]
   );

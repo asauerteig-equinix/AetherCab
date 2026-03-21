@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { getDeviceIconUrl } from "../deviceIcons";
+import { getVoltageForPowerPhase, isStandardPowerCurrent, powerCurrentOptions, powerPhaseOptions } from "../../shared/power";
 import type { AuditSummary, DeviceType, DeviceTypeInput, DeviceTemplate, DeviceTemplateInput } from "../../shared/types";
 import { DeviceIconPicker } from "./DeviceIconPicker";
 
@@ -37,6 +38,10 @@ function toTemplateForm(template: DeviceTemplate): DeviceTemplateInput {
     templateType: template.templateType,
     mountStyle: template.mountStyle,
     iconKey: template.iconKey,
+    hasPowerSpec: template.hasPowerSpec,
+    powerPhase: template.powerPhase,
+    voltageV: template.voltageV,
+    currentA: template.currentA,
     name: template.name,
     manufacturer: template.manufacturer,
     model: template.model,
@@ -62,6 +67,14 @@ function applyTemplateTypeToForm(nextTemplateType: string, currentForm: DeviceTe
     blocksBothFaces: currentForm.mountStyle === "vertical-pdu" ? false : currentForm.blocksBothFaces,
     allowSharedDepth: currentForm.mountStyle === "vertical-pdu" ? false : currentForm.allowSharedDepth
   };
+}
+
+function getPowerCurrentSelectValue(currentA: number | null): string {
+  if (currentA === null) {
+    return String(powerCurrentOptions[0]);
+  }
+
+  return isStandardPowerCurrent(currentA) ? String(currentA) : "custom";
 }
 
 function getTemplatePlacementLabel(template: DeviceTemplate): string {
@@ -215,6 +228,87 @@ export function AdminTemplatesPage({
                       ))}
                     </select>
                   </label>
+                  <label className="checkbox-field full-width">
+                    Has power input specs
+                    <input
+                      checked={form.hasPowerSpec}
+                      type="checkbox"
+                      onChange={(event) =>
+                        onFormChange({
+                          ...form,
+                          hasPowerSpec: event.target.checked,
+                          powerPhase: event.target.checked ? form.powerPhase ?? "single-phase" : null,
+                          voltageV: event.target.checked ? form.voltageV ?? getVoltageForPowerPhase(form.powerPhase ?? "single-phase") : null,
+                          currentA: event.target.checked ? form.currentA ?? 16 : null
+                        })
+                      }
+                    />
+                  </label>
+                  {form.hasPowerSpec ? (
+                    <>
+                      <label>
+                        Power type
+                        <select
+                          value={form.powerPhase ?? "single-phase"}
+                          onChange={(event) => {
+                            const nextPhase = event.target.value as DeviceTemplateInput["powerPhase"];
+                            onFormChange({
+                              ...form,
+                              powerPhase: nextPhase,
+                              voltageV: nextPhase === "custom" ? form.voltageV ?? 230 : getVoltageForPowerPhase(nextPhase)
+                            });
+                          }}
+                        >
+                          {powerPhaseOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        Input current
+                        <select
+                          value={getPowerCurrentSelectValue(form.currentA)}
+                          onChange={(event) =>
+                            onFormChange({
+                              ...form,
+                              currentA: event.target.value === "custom" ? form.currentA ?? 16 : Number(event.target.value)
+                            })
+                          }
+                        >
+                          {powerCurrentOptions.map((currentA) => (
+                            <option key={currentA} value={currentA}>
+                              {currentA}A
+                            </option>
+                          ))}
+                          <option value="custom">Custom</option>
+                        </select>
+                      </label>
+                      {form.powerPhase === "custom" ? (
+                        <label>
+                          Voltage V
+                          <input
+                            min={1}
+                            type="number"
+                            value={form.voltageV ?? ""}
+                            onChange={(event) => onFormChange({ ...form, voltageV: Number(event.target.value) || null })}
+                          />
+                        </label>
+                      ) : null}
+                      {getPowerCurrentSelectValue(form.currentA) === "custom" ? (
+                        <label>
+                          Current A
+                          <input
+                            min={1}
+                            type="number"
+                            value={form.currentA ?? ""}
+                            onChange={(event) => onFormChange({ ...form, currentA: Number(event.target.value) || null })}
+                          />
+                        </label>
+                      ) : null}
+                    </>
+                  ) : null}
                   <label className="full-width">
                     Icon
                     <button className="ghost-button admin-inline-toggle" onClick={() => setShowCreateIcons((current) => !current)} type="button">
@@ -567,6 +661,87 @@ export function AdminTemplatesPage({
                   ))}
                 </select>
               </label>
+              <label className="checkbox-field full-width">
+                Has power input specs
+                <input
+                  checked={editingForm.hasPowerSpec}
+                  type="checkbox"
+                  onChange={(event) =>
+                    setEditingForm({
+                      ...editingForm,
+                      hasPowerSpec: event.target.checked,
+                      powerPhase: event.target.checked ? editingForm.powerPhase ?? "single-phase" : null,
+                      voltageV: event.target.checked ? editingForm.voltageV ?? getVoltageForPowerPhase(editingForm.powerPhase ?? "single-phase") : null,
+                      currentA: event.target.checked ? editingForm.currentA ?? 16 : null
+                    })
+                  }
+                />
+              </label>
+              {editingForm.hasPowerSpec ? (
+                <>
+                  <label>
+                    Power type
+                    <select
+                      value={editingForm.powerPhase ?? "single-phase"}
+                      onChange={(event) => {
+                        const nextPhase = event.target.value as DeviceTemplateInput["powerPhase"];
+                        setEditingForm({
+                          ...editingForm,
+                          powerPhase: nextPhase,
+                          voltageV: nextPhase === "custom" ? editingForm.voltageV ?? 230 : getVoltageForPowerPhase(nextPhase)
+                        });
+                      }}
+                    >
+                      {powerPhaseOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Input current
+                    <select
+                      value={getPowerCurrentSelectValue(editingForm.currentA)}
+                      onChange={(event) =>
+                        setEditingForm({
+                          ...editingForm,
+                          currentA: event.target.value === "custom" ? editingForm.currentA ?? 16 : Number(event.target.value)
+                        })
+                      }
+                    >
+                      {powerCurrentOptions.map((currentA) => (
+                        <option key={currentA} value={currentA}>
+                          {currentA}A
+                        </option>
+                      ))}
+                      <option value="custom">Custom</option>
+                    </select>
+                  </label>
+                  {editingForm.powerPhase === "custom" ? (
+                    <label>
+                      Voltage V
+                      <input
+                        min={1}
+                        type="number"
+                        value={editingForm.voltageV ?? ""}
+                        onChange={(event) => setEditingForm({ ...editingForm, voltageV: Number(event.target.value) || null })}
+                      />
+                    </label>
+                  ) : null}
+                  {getPowerCurrentSelectValue(editingForm.currentA) === "custom" ? (
+                    <label>
+                      Current A
+                      <input
+                        min={1}
+                        type="number"
+                        value={editingForm.currentA ?? ""}
+                        onChange={(event) => setEditingForm({ ...editingForm, currentA: Number(event.target.value) || null })}
+                      />
+                    </label>
+                  ) : null}
+                </>
+              ) : null}
               <label className="full-width">
                 Icon
                 <button className="ghost-button admin-inline-toggle" onClick={() => setShowEditIcons((current) => !current)} type="button">

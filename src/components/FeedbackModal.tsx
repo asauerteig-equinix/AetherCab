@@ -83,6 +83,7 @@ export function FeedbackModal({ draft, open, sending, onDraftChange, onClose, on
         </div>
 
         <div className="feedback-modal-actions">
+          <p className="feedback-modal-signoff">Made in Germany 🇩🇪 with ❤️</p>
           <button className="primary-button feedback-send-button" disabled={!canSend} onClick={onSend} type="button">
             <span className="feedback-button-icon">
               <SendIcon />

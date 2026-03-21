@@ -2,6 +2,7 @@ export type PlacementType = "rack" | "spare";
 export type RackFace = "front" | "rear";
 export type TemplateMountStyle = "full" | "vertical-pdu";
 export type AuditStatus = "created" | "in-progress" | "completed";
+export type PowerPhase = "single-phase" | "three-phase" | "custom";
 export type DeviceIconKey =
   | "generic-device"
   | "server"
@@ -72,6 +73,10 @@ export interface DeviceTemplate {
   templateType: string;
   mountStyle: TemplateMountStyle;
   iconKey: DeviceIconKey;
+  hasPowerSpec: boolean;
+  powerPhase: PowerPhase | null;
+  voltageV: number | null;
+  currentA: number | null;
   name: string;
   manufacturer: string;
   model: string;
@@ -84,6 +89,10 @@ export interface DeviceTemplateInput {
   templateType: string;
   mountStyle: TemplateMountStyle;
   iconKey: DeviceIconKey;
+  hasPowerSpec: boolean;
+  powerPhase: PowerPhase | null;
+  voltageV: number | null;
+  currentA: number | null;
   name: string;
   manufacturer: string;
   model: string;
@@ -104,6 +113,10 @@ export interface RackDevice {
   startUnit: number | null;
   heightU: number;
   iconKey: DeviceIconKey | null;
+  hasPowerSpec: boolean;
+  powerPhase: PowerPhase | null;
+  voltageV: number | null;
+  currentA: number | null;
   name: string;
   manufacturer: string;
   model: string;
@@ -137,6 +150,10 @@ export interface RackDeviceInput {
   startUnit: number | null;
   heightU: number;
   iconKey?: DeviceIconKey | null;
+  hasPowerSpec?: boolean;
+  powerPhase?: PowerPhase | null;
+  voltageV?: number | null;
+  currentA?: number | null;
   name: string;
   manufacturer: string;
   model: string;

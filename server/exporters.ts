@@ -2,6 +2,7 @@ import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
+import { formatPowerSpec } from "../shared/power.js";
 import { formatAuditDateTime, getAuditStatusLabel } from "../shared/audits.js";
 import {
   getEndUnit,
@@ -264,7 +265,18 @@ function devicePrimaryLine(device: RackDevice): string {
 }
 
 function deviceSecondaryLine(device: RackDevice): string {
-  return `${device.manufacturer} ${device.model}`.trim();
+  const base = `${device.manufacturer} ${device.model}`.trim();
+  const powerSpec = formatPowerSpec(device);
+
+  if (!powerSpec) {
+    return base;
+  }
+
+  if (!base) {
+    return powerSpec;
+  }
+
+  return `${base} | ${powerSpec}`;
 }
 
 function deviceVisualLines(device: RackDevice): string[] {
@@ -673,23 +685,24 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, audit: AuditExportDetai
     { header: "Name", key: "name", width: 24 },
     { header: "Manufacturer", key: "manufacturer", width: 20 },
     { header: "Model", key: "model", width: 22 },
+    { header: "Power", key: "powerSpec", width: 14 },
     { header: "Hostname", key: "hostname", width: 18 },
     { header: "Serial", key: "serialNumber", width: 18 },
     { header: "Notes", key: "notes", width: 28 }
   ];
 
-  worksheet.mergeCells("A1:P1");
+  worksheet.mergeCells("A1:Q1");
   const titleCell = worksheet.getCell("A1");
   titleCell.value = `${appBrandName} Inventory Export`;
   titleCell.font = { name: "Bahnschrift", size: 16, bold: true, color: { argb: excelPalette.textPrimary } };
   titleCell.alignment = { vertical: "middle", horizontal: "left" };
 
-  worksheet.mergeCells("A2:P2");
+  worksheet.mergeCells("A2:Q2");
   const metaCell = worksheet.getCell("A2");
   metaCell.value = `${audit.siteName} | ${audit.roomName} | ${audit.name} | SO: ${audit.salesOrder ?? "-"} | ${getAuditStatusLabel(audit.status)} | ${formatAuditDateTime(audit.createdAt)} | ${audit.rackCount} rack${audit.rackCount === 1 ? "" : "s"}`;
   styleExcelMeta(metaCell);
 
-  worksheet.mergeCells("A3:P3");
+  worksheet.mergeCells("A3:Q3");
   const notesCell = worksheet.getCell("A3");
   notesCell.value = audit.notes ? `Notes: ${audit.notes}` : "Notes: -";
   styleExcelMeta(notesCell);
@@ -711,7 +724,7 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, audit: AuditExportDetai
       audit: "",
       rack: `${rack.name} (${rack.totalUnits}U)`
     });
-    worksheet.mergeCells(`A${rackRow.number}:P${rackRow.number}`);
+    worksheet.mergeCells(`A${rackRow.number}:Q${rackRow.number}`);
     const rackCell = worksheet.getCell(`A${rackRow.number}`);
     rackCell.value = `Rack: ${rack.name} (${rack.totalUnits}U | ${rack.widthMm}x${rack.depthMm}x${rack.heightMm} mm) | SO: ${audit.salesOrder ?? "-"} | ${getAuditStatusLabel(audit.status)}`;
     rackCell.font = { name: "Bahnschrift", size: 10, bold: true, color: { argb: excelPalette.accentStrong } };
@@ -746,7 +759,7 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, audit: AuditExportDetai
       const groupRow = worksheet.addRow({
         group: group.label
       });
-      worksheet.mergeCells(`A${groupRow.number}:P${groupRow.number}`);
+      worksheet.mergeCells(`A${groupRow.number}:Q${groupRow.number}`);
       const groupCell = worksheet.getCell(`A${groupRow.number}`);
       groupCell.value = group.label;
       groupCell.font = { name: "Bahnschrift", size: 10, bold: true, color: { argb: excelPalette.accentStrong } };
@@ -769,6 +782,7 @@ function buildInventorySheet(workbook: ExcelJS.Workbook, audit: AuditExportDetai
           name: device.name,
           manufacturer: device.manufacturer,
           model: device.model,
+          powerSpec: formatPowerSpec(device) ?? "",
           hostname: device.hostname ?? "",
           serialNumber: device.serialNumber ?? "",
           notes: [device.allowSharedDepth ? "Shared depth shelf placement" : null, device.notes ?? null].filter(Boolean).join(" | ")
@@ -1727,13 +1741,14 @@ function drawPdfInventoryTableHeader(pdf: PdfDocument): void {
   const y = pdf.y;
   const columns = [
     { label: "", width: 30 },
-    { label: "Rack", width: 74 },
-    { label: "Pos", width: 52 },
-    { label: "Face", width: 46 },
-    { label: "Hostname", width: 108 },
-    { label: "Serial number", width: 104 },
-    { label: "Model", width: 170 },
-    { label: "Manufacturer", width: 186 }
+    { label: "Rack", width: 68 },
+    { label: "Pos", width: 48 },
+    { label: "Face", width: 42 },
+    { label: "Hostname", width: 96 },
+    { label: "Serial number", width: 88 },
+    { label: "Power", width: 72 },
+    { label: "Model", width: 150 },
+    { label: "Manufacturer", width: 176 }
   ] as const;
 
   let columnX = x;
@@ -1761,10 +1776,11 @@ function drawPdfInventoryRow(pdf: PdfDocument, rack: RackDetail, device: RackDev
     deviceFaceLabel(device),
     device.hostname ?? "-",
     device.serialNumber ?? "-",
+    formatPowerSpec(device) ?? "-",
     device.model || "-",
     device.manufacturer || "-"
   ];
-  const columns = [30, 74, 52, 46, 108, 104, 170, 186];
+  const columns = [30, 68, 48, 42, 96, 88, 72, 150, 176];
 
   let columnX = x;
   columns.forEach((columnWidth, index) => {
@@ -1837,13 +1853,14 @@ function drawPdfPortraitInventoryTableHeader(pdf: PdfDocument): void {
   const y = pdf.y;
   const columns = [
     { label: "", width: 24 },
-    { label: "Rack", width: 48 },
-    { label: "Pos", width: 42 },
-    { label: "Face", width: 36 },
-    { label: "Hostname", width: 70 },
-    { label: "Serial", width: 68 },
-    { label: "Model", width: 110 },
-    { label: "Manufacturer", width: 125 }
+    { label: "Rack", width: 44 },
+    { label: "Pos", width: 38 },
+    { label: "Face", width: 34 },
+    { label: "Hostname", width: 58 },
+    { label: "Serial", width: 56 },
+    { label: "Power", width: 52 },
+    { label: "Model", width: 96 },
+    { label: "Manufacturer", width: 121 }
   ] as const;
 
   let columnX = x;
@@ -1871,10 +1888,11 @@ function drawPdfPortraitInventoryRow(pdf: PdfDocument, rack: RackDetail, device:
     deviceFaceLabel(device),
     device.hostname ?? "-",
     device.serialNumber ?? "-",
+    formatPowerSpec(device) ?? "-",
     device.model || "-",
     device.manufacturer || "-"
   ];
-  const columns = [24, 48, 42, 36, 70, 68, 110, 125];
+  const columns = [24, 44, 38, 34, 58, 56, 52, 96, 121];
 
   let columnX = x;
   columns.forEach((columnWidth, index) => {

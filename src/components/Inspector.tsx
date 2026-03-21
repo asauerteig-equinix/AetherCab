@@ -1,4 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from "react";
+import { getVoltageForPowerPhase, isStandardPowerCurrent, powerCurrentOptions, powerPhaseOptions } from "../../shared/power";
 import { getVerticalPduMountPositionsForFace, isVerticalPduMountPosition } from "../../shared/rack";
 import type { RackDevice, RackDeviceInput } from "../../shared/types";
 
@@ -35,6 +36,14 @@ function resolveVerticalMountPosition(
   return getVerticalPduMountPositionsForFace(rackFace ?? "front")[0];
 }
 
+function getPowerCurrentSelectValue(currentA: number | null): string {
+  if (currentA === null) {
+    return String(powerCurrentOptions[0]);
+  }
+
+  return isStandardPowerCurrent(currentA) ? String(currentA) : "custom";
+}
+
 function toDeviceInput(device: RackDevice): RackDeviceInput {
   return {
     templateId: device.templateId,
@@ -46,6 +55,10 @@ function toDeviceInput(device: RackDevice): RackDeviceInput {
     startUnit: device.startUnit,
     heightU: device.heightU,
     iconKey: device.iconKey,
+    hasPowerSpec: device.hasPowerSpec,
+    powerPhase: device.powerPhase,
+    voltageV: device.voltageV,
+    currentA: device.currentA,
     name: device.name,
     manufacturer: device.manufacturer,
     model: device.model,
@@ -67,6 +80,10 @@ function hasDraftChanges(left: RackDeviceInput, right: RackDeviceInput): boolean
     left.startUnit !== right.startUnit ||
     left.heightU !== right.heightU ||
     left.iconKey !== right.iconKey ||
+    left.hasPowerSpec !== right.hasPowerSpec ||
+    left.powerPhase !== right.powerPhase ||
+    left.voltageV !== right.voltageV ||
+    left.currentA !== right.currentA ||
     left.name !== right.name ||
     left.manufacturer !== right.manufacturer ||
     left.model !== right.model ||
@@ -330,6 +347,85 @@ export function Inspector({
             onChange={handleHeightInputChange}
           />
         </label>
+        {draft.hasPowerSpec ? (
+          <>
+            <label>
+              Power type
+              <select
+                disabled={readOnly}
+                value={draft.powerPhase ?? "single-phase"}
+                onBlur={() => commitDraft()}
+                onChange={(event) => {
+                  const nextPhase = event.target.value as RackDeviceInput["powerPhase"];
+                  setDraft({
+                    ...draft,
+                    powerPhase: nextPhase,
+                    voltageV: nextPhase === "custom" ? draft.voltageV ?? 230 : getVoltageForPowerPhase(nextPhase)
+                  });
+                }}
+              >
+                {powerPhaseOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Input current
+              <select
+                disabled={readOnly}
+                value={getPowerCurrentSelectValue(draft.currentA ?? null)}
+                onBlur={() => commitDraft()}
+                onChange={(event) => {
+                  setDraft({
+                    ...draft,
+                    currentA: event.target.value === "custom" ? draft.currentA ?? 16 : Number(event.target.value)
+                  });
+                }}
+              >
+                {powerCurrentOptions.map((currentA) => (
+                  <option key={currentA} value={currentA}>
+                    {currentA}A
+                  </option>
+                ))}
+                <option value="custom">Custom</option>
+              </select>
+            </label>
+            {draft.powerPhase === "custom" ? (
+              <label>
+                Voltage V
+                <input
+                  disabled={readOnly}
+                  min={1}
+                  type="number"
+                  value={draft.voltageV ?? ""}
+                  onBlur={() => commitDraft()}
+                  onChange={updateInput("voltageV", (event) => {
+                    const nextValue = Number(event.target.value);
+                    return Number.isFinite(nextValue) && nextValue > 0 ? nextValue : null;
+                  })}
+                />
+              </label>
+            ) : null}
+            {getPowerCurrentSelectValue(draft.currentA ?? null) === "custom" ? (
+              <label>
+                Current A
+                <input
+                  disabled={readOnly}
+                  min={1}
+                  type="number"
+                  value={draft.currentA ?? ""}
+                  onBlur={() => commitDraft()}
+                  onChange={updateInput("currentA", (event) => {
+                    const nextValue = Number(event.target.value);
+                    return Number.isFinite(nextValue) && nextValue > 0 ? nextValue : null;
+                  })}
+                />
+              </label>
+            ) : null}
+          </>
+        ) : null}
         <label className="full-width">
           Notes
           <textarea
