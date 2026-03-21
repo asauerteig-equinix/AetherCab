@@ -174,6 +174,23 @@ export interface AuditCreateInput {
   notes?: string | null;
 }
 
+export interface ExternalAuditCreateInput {
+  siteName: string;
+  roomName: string;
+  auditName: string;
+  salesOrder: string;
+  initialRackName?: string | null;
+  initialRackUnits?: number | null;
+  notes?: string | null;
+}
+
+export interface ExternalAuditCreateResult {
+  audit: AuditDetail;
+  auditId: number;
+  rackId: number | null;
+  openUrl: string;
+}
+
 export interface RackCreateInput {
   rackName: string;
   totalUnits: number;

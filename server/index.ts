@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 import { createHash, timingSafeEqual } from "node:crypto";
 import type {
   AuditCreateInput,
+  ExternalAuditCreateInput,
+  ExternalAuditCreateResult,
   AuditUpdateInput,
   DeviceTypeInput,
   DeviceTemplateInput,
@@ -117,6 +119,64 @@ function getPdfDownloadFilename(audit: { salesOrder: string | null; name: string
   return `${sanitizeDownloadName(baseName)}-audit.pdf`;
 }
 
+function getRequestOrigin(request: Request): string {
+  const forwardedProtoHeader = request.headers["x-forwarded-proto"];
+  const forwardedProto = Array.isArray(forwardedProtoHeader)
+    ? forwardedProtoHeader[0]
+    : forwardedProtoHeader?.split(",")[0];
+  const protocol = forwardedProto?.trim() || request.protocol;
+  const host = request.get("host");
+
+  if (!host) {
+    throw new Error("Request host header is required.");
+  }
+
+  return `${protocol}://${host}`;
+}
+
+function buildAuditOpenUrl(request: Request, auditId: number, rackId: number | null): string {
+  const searchParams = new URLSearchParams({
+    audit: String(auditId),
+    view: "both"
+  });
+
+  if (rackId !== null) {
+    searchParams.set("rack", String(rackId));
+  }
+
+  return `${getRequestOrigin(request)}/audits?${searchParams.toString()}`;
+}
+
+function setIntegrationCorsHeaders(response: Response): void {
+  response.setHeader("Access-Control-Allow-Origin", "*");
+  response.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  response.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
+
+function parseRequiredExternalString(value: unknown, label: string): string {
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error(`${label} is required.`);
+  }
+
+  return value.trim();
+}
+
+function normalizeExternalAuditCreateInput(input: unknown): AuditCreateInput {
+  const payload = (typeof input === "object" && input !== null ? input : {}) as Partial<ExternalAuditCreateInput>;
+
+  return {
+    siteName: parseRequiredExternalString(payload.siteName, "Site name"),
+    roomName: parseRequiredExternalString(payload.roomName, "Room name"),
+    auditName: parseRequiredExternalString(payload.auditName, "Audit name"),
+    salesOrder: parseRequiredExternalString(payload.salesOrder, "Sales order"),
+    status: "created",
+    initialRackName: typeof payload.initialRackName === "string" && payload.initialRackName.trim() ? payload.initialRackName : "0101",
+    initialRackUnits:
+      typeof payload.initialRackUnits === "number" && Number.isFinite(payload.initialRackUnits) ? payload.initialRackUnits : 47,
+    notes: typeof payload.notes === "string" ? payload.notes : null
+  };
+}
+
 function requireAdmin(request: Request, response: Response, next: NextFunction): void {
   if (!isAdminAuthenticated(request)) {
     response.status(403).json({ error: "Admin access required." });
@@ -152,6 +212,14 @@ async function bootstrap(): Promise<void> {
   const clientDistPath = resolve(process.cwd(), "dist", "client");
 
   app.use(express.json());
+  app.use("/api/integrations", (_request, response, next) => {
+    setIntegrationCorsHeaders(response);
+    next();
+  });
+
+  app.options("/api/integrations/audits", (_request, response) => {
+    response.status(204).send();
+  });
 
   app.get("/api/admin/session", (request, response) => {
     response.json({ authenticated: isAdminAuthenticated(request) });
@@ -203,6 +271,22 @@ async function bootstrap(): Promise<void> {
     "/api/audits",
     asyncRoute(async (request, response) => {
       response.status(201).json(await createAudit(request.body as AuditCreateInput));
+    })
+  );
+
+  app.post(
+    "/api/integrations/audits",
+    asyncRoute(async (request, response) => {
+      const audit = await createAudit(normalizeExternalAuditCreateInput(request.body));
+      const rackId = audit.racks[0]?.id ?? null;
+      const result: ExternalAuditCreateResult = {
+        audit,
+        auditId: audit.id,
+        rackId,
+        openUrl: buildAuditOpenUrl(request, audit.id, rackId)
+      };
+
+      response.status(201).json(result);
     })
   );
 
