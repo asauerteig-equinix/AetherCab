@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { formatAuditDateTime, getAuditStatusLabel } from "../shared/audits.js";
 import {
@@ -17,17 +17,6 @@ import {
 import type { AuditExportDetail, DeviceIconKey, RackDetail, RackDevice, RackFace, RackMountPosition } from "../shared/types.js";
 
 type PdfDocument = InstanceType<typeof PDFDocument>;
-type PdfAffineTransform = [number, number, number, number, number, number];
-type PdfSvgPathShape = {
-  d: string;
-  fill: string;
-  transform: PdfAffineTransform;
-};
-type PdfSvgAsset = {
-  width: number;
-  height: number;
-  paths: PdfSvgPathShape[];
-};
 
 const excelPalette = {
   pageBackground: "FFF4F7FA",
@@ -50,7 +39,7 @@ const excelPalette = {
 } as const;
 
 const pdfPalette = {
-  pageBackground: "#f5f7fa",
+  pageBackground: "#e9edf0",
   panelBackground: "#eef2f6",
   panelBorder: "#b8c3cd",
   slotBackground: "#f9fbfc",
@@ -86,8 +75,7 @@ const appBrandSlogan = "Customer Audit Documentation";
 const pdfAssetRoot = resolve(process.cwd(), "src", "assets");
 const pdfAssetPaths = {
   portraitHeaderBackground: resolve(pdfAssetRoot, "eqx_aqua_bg.png"),
-  portraitHeaderTiles: resolve(pdfAssetRoot, "eqx_kacheln.png"),
-  portraitFooterLogo: resolve(pdfAssetRoot, "eqx_full_logo_small.svg")
+  portraitHeaderTiles: resolve(pdfAssetRoot, "eqx_kacheln.png")
 } as const;
 const pdfPortraitHeaderTop = 0;
 const pdfPortraitFooterHeight = 20;
@@ -100,164 +88,7 @@ const pdfWindowsFontPaths = {
   arialBold: resolve("C:\\Windows\\Fonts", "arialbd.ttf")
 } as const;
 
-let pdfPortraitFooterLogoCache: PdfSvgAsset | null | undefined;
 const registeredPdfDocs = new WeakSet<PdfDocument>();
-
-function multiplyPdfAffineTransforms(left: PdfAffineTransform, right: PdfAffineTransform): PdfAffineTransform {
-  return [
-    left[0] * right[0] + left[2] * right[1],
-    left[1] * right[0] + left[3] * right[1],
-    left[0] * right[2] + left[2] * right[3],
-    left[1] * right[2] + left[3] * right[3],
-    left[0] * right[4] + left[2] * right[5] + left[4],
-    left[1] * right[4] + left[3] * right[5] + left[5]
-  ];
-}
-
-function parsePdfSvgTransform(value?: string): PdfAffineTransform {
-  const identity: PdfAffineTransform = [1, 0, 0, 1, 0, 0];
-  if (!value) {
-    return identity;
-  }
-
-  const transformPattern = /(matrix|translate)\(([^)]+)\)/g;
-  let current = identity;
-  let match = transformPattern.exec(value);
-
-  while (match) {
-    const [, kind, rawParts] = match;
-    const parts = rawParts
-      .trim()
-      .split(/[\s,]+/)
-      .map((part) => Number(part))
-      .filter((part) => Number.isFinite(part));
-
-    if (kind === "matrix" && parts.length === 6) {
-      current = multiplyPdfAffineTransforms(current, [
-        parts[0],
-        parts[1],
-        parts[2],
-        parts[3],
-        parts[4],
-        parts[5]
-      ]);
-    } else if (kind === "translate" && parts.length >= 1) {
-      current = multiplyPdfAffineTransforms(current, [1, 0, 0, 1, parts[0], parts[1] ?? 0]);
-    }
-
-    match = transformPattern.exec(value);
-  }
-
-  return current;
-}
-
-function parsePdfSvgAttributes(rawAttributes: string): Record<string, string> {
-  const attributes: Record<string, string> = {};
-  const attributePattern = /([:\w-]+)="([^"]*)"/g;
-  let match = attributePattern.exec(rawAttributes);
-
-  while (match) {
-    const [, key, value] = match;
-    attributes[key] = value;
-    match = attributePattern.exec(rawAttributes);
-  }
-
-  return attributes;
-}
-
-function loadPdfSvgAsset(filePath: string): PdfSvgAsset | null {
-  if (!existsSync(filePath)) {
-    return null;
-  }
-
-  const svg = readFileSync(filePath, "utf8");
-  const svgTagMatch = svg.match(/<svg\b([^>]*)>/i);
-  if (!svgTagMatch) {
-    return null;
-  }
-
-  const svgAttributes = parsePdfSvgAttributes(svgTagMatch[1]);
-  const width = Number(svgAttributes.width);
-  const height = Number(svgAttributes.height);
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-    return null;
-  }
-
-  const groupMatch = svg.match(/<g\b[^>]*transform="([^"]+)"/i);
-  const groupTransform = parsePdfSvgTransform(groupMatch?.[1]);
-  const pathPattern = /<path\b([^>]*)\/>/gi;
-  const paths: PdfSvgPathShape[] = [];
-  let match = pathPattern.exec(svg);
-
-  while (match) {
-    const attributes = parsePdfSvgAttributes(match[1]);
-    if (!attributes.d) {
-      match = pathPattern.exec(svg);
-      continue;
-    }
-
-    paths.push({
-      d: attributes.d,
-      fill: attributes.fill ?? "#000000",
-      transform: multiplyPdfAffineTransforms(groupTransform, parsePdfSvgTransform(attributes.transform))
-    });
-    match = pathPattern.exec(svg);
-  }
-
-  return paths.length > 0 ? { width, height, paths } : null;
-}
-
-function getPdfPortraitFooterLogo(): PdfSvgAsset | null {
-  if (pdfPortraitFooterLogoCache === undefined) {
-    pdfPortraitFooterLogoCache = loadPdfSvgAsset(pdfAssetPaths.portraitFooterLogo);
-  }
-
-  return pdfPortraitFooterLogoCache;
-}
-
-function normalizePdfHexColor(value: string): string {
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "#000") {
-    return "#000000";
-  }
-
-  if (normalized === "#fff") {
-    return "#ffffff";
-  }
-
-  return normalized;
-}
-
-function drawPdfSvgAsset(
-  pdf: PdfDocument,
-  asset: PdfSvgAsset,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  fillOverrides?: Record<string, string>
-): void {
-  const scale = Math.min(width / asset.width, height / asset.height);
-  const drawWidth = asset.width * scale;
-  const drawHeight = asset.height * scale;
-  const offsetX = x + width - drawWidth;
-  const offsetY = y + height - drawHeight;
-
-  pdf.save();
-  pdf.translate(offsetX, offsetY);
-  pdf.scale(scale);
-
-  asset.paths.forEach((pathShape) => {
-    const normalizedFill = normalizePdfHexColor(pathShape.fill);
-    const fillColor = fillOverrides?.[normalizedFill] ?? normalizedFill;
-    pdf.save();
-    pdf.transform(...pathShape.transform);
-    pdf.path(pathShape.d).fill(fillColor);
-    pdf.restore();
-  });
-
-  pdf.restore();
-}
 
 function ensurePdfWindowsFonts(pdf: PdfDocument): void {
   if (registeredPdfDocs.has(pdf)) {
@@ -1127,9 +958,9 @@ function drawPdfPortraitHeaderBackground(pdf: PdfDocument, x: number, y: number,
 
   if (existsSync(pdfAssetPaths.portraitHeaderTiles)) {
     pdf.save();
-    pdf.opacity(0.82);
-    pdf.image(pdfAssetPaths.portraitHeaderTiles, x + width - 250, y + 4, {
-      width: 250
+    pdf.opacity(1);
+    pdf.image(pdfAssetPaths.portraitHeaderTiles, x + width - 220, y + 8, {
+      fit: [200, Math.max(28, height - 16)]
     });
     pdf.restore();
   }
@@ -1137,14 +968,9 @@ function drawPdfPortraitHeaderBackground(pdf: PdfDocument, x: number, y: number,
 
 function drawPdfPortraitFooter(pdf: PdfDocument): void {
   const footerX = 36;
-  const footerWidth = pdf.page.width - 72;
   const footerY = pdf.page.height - pdfPortraitFooterBottomInset - pdfPortraitFooterHeight;
   const footerTextX = footerX;
   const footerTextY = footerY + 8;
-  const footerLogoWidth = 118;
-  const footerLogoHeight = 18;
-  const footerLogoY = footerY + 1;
-  const footerLogoX = footerX + footerWidth - footerLogoWidth;
 
   setPdfArialFont(pdf, true);
   pdf.fillColor(pdfPortraitFooterRed).fontSize(10).text("Equinix.com", footerTextX, footerTextY, {
@@ -1154,19 +980,6 @@ function drawPdfPortraitFooter(pdf: PdfDocument): void {
   const equinixWidth = pdf.widthOfString("Equinix.com");
   setPdfArialFont(pdf);
   pdf.fillColor(pdfPortraitFooterText).fontSize(8).text("     © 2026 Equinix, Inc. ", footerTextX + equinixWidth + 6, footerTextY + 1, {
-    lineBreak: false
-  });
-
-  const footerLogo = getPdfPortraitFooterLogo();
-  if (footerLogo) {
-    drawPdfSvgAsset(pdf, footerLogo, footerLogoX, footerLogoY, footerLogoWidth, footerLogoHeight);
-    return;
-  }
-
-  setPdfArialFont(pdf, true);
-  pdf.fillColor(pdfPalette.textPrimary).fontSize(10).text("Equinix", footerLogoX, footerTextY, {
-    width: footerLogoWidth,
-    align: "right",
     lineBreak: false
   });
 }
