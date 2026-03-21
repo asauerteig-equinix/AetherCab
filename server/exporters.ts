@@ -89,11 +89,10 @@ const pdfAssetPaths = {
   portraitHeaderTiles: resolve(pdfAssetRoot, "eqx_kacheln.png"),
   portraitFooterLogo: resolve(pdfAssetRoot, "eqx_full_logo_small.svg")
 } as const;
-const pdfPortraitHeaderTop = 20;
-const pdfPortraitFooterHeight = 34;
-const pdfPortraitFooterBottomInset = 14;
-const pdfPortraitFooterReservedSpace = pdfPortraitFooterHeight + pdfPortraitFooterBottomInset + 8;
-const pdfPortraitFooterBackground = "#11485e";
+const pdfPortraitHeaderTop = 0;
+const pdfPortraitFooterHeight = 20;
+const pdfPortraitFooterBottomInset = 10;
+const pdfPortraitFooterReservedSpace = pdfPortraitFooterHeight + pdfPortraitFooterBottomInset + 12;
 const pdfPortraitFooterRed = "#e91c24";
 const pdfPortraitFooterText = "#ffffff";
 const pdfWindowsFontPaths = {
@@ -1118,40 +1117,34 @@ function drawPdfHeader(
 }
 
 function drawPdfPortraitHeaderBackground(pdf: PdfDocument, x: number, y: number, width: number, height: number): void {
-  pdf.save();
-  pdf.roundedRect(x, y, width, height, 10).clip();
-
   if (existsSync(pdfAssetPaths.portraitHeaderBackground)) {
     pdf.image(pdfAssetPaths.portraitHeaderBackground, x, y, { width, height });
   } else {
+    pdf.save();
     pdf.rect(x, y, width, height).fill("#afe6e9");
+    pdf.restore();
   }
 
   if (existsSync(pdfAssetPaths.portraitHeaderTiles)) {
-    pdf.opacity(0.25);
-    pdf.image(pdfAssetPaths.portraitHeaderTiles, x + width - 160, y - 8, {
-      width: 170
+    pdf.save();
+    pdf.opacity(0.82);
+    pdf.image(pdfAssetPaths.portraitHeaderTiles, x + width - 250, y + 4, {
+      width: 250
     });
+    pdf.restore();
   }
-
-  pdf.restore();
-  pdf.roundedRect(x, y, width, height, 10).lineWidth(0.7).strokeColor("#9eced2").stroke();
 }
 
 function drawPdfPortraitFooter(pdf: PdfDocument): void {
   const footerX = 36;
   const footerWidth = pdf.page.width - 72;
   const footerY = pdf.page.height - pdfPortraitFooterBottomInset - pdfPortraitFooterHeight;
-  const footerTextX = footerX + 12;
-  const footerTextY = footerY + 11;
-  const footerLogoWidth = 116;
+  const footerTextX = footerX;
+  const footerTextY = footerY + 8;
+  const footerLogoWidth = 118;
   const footerLogoHeight = 18;
-  const footerLogoY = footerY + 8;
-  const footerLogoX = footerX + footerWidth - footerLogoWidth - 12;
-
-  pdf.save();
-  pdf.roundedRect(footerX, footerY, footerWidth, pdfPortraitFooterHeight, 8).fill(pdfPortraitFooterBackground);
-  pdf.restore();
+  const footerLogoY = footerY + 1;
+  const footerLogoX = footerX + footerWidth - footerLogoWidth;
 
   setPdfArialFont(pdf, true);
   pdf.fillColor(pdfPortraitFooterRed).fontSize(10).text("Equinix.com", footerTextX, footerTextY, {
@@ -1166,14 +1159,12 @@ function drawPdfPortraitFooter(pdf: PdfDocument): void {
 
   const footerLogo = getPdfPortraitFooterLogo();
   if (footerLogo) {
-    drawPdfSvgAsset(pdf, footerLogo, footerLogoX, footerLogoY, footerLogoWidth, footerLogoHeight, {
-      "#000000": "#ffffff"
-    });
+    drawPdfSvgAsset(pdf, footerLogo, footerLogoX, footerLogoY, footerLogoWidth, footerLogoHeight);
     return;
   }
 
   setPdfArialFont(pdf, true);
-  pdf.fillColor(pdfPortraitFooterText).fontSize(10).text("Equinix", footerLogoX, footerTextY, {
+  pdf.fillColor(pdfPalette.textPrimary).fontSize(10).text("Equinix", footerLogoX, footerTextY, {
     width: footerLogoWidth,
     align: "right",
     lineBreak: false
@@ -1189,10 +1180,10 @@ function drawPdfPortraitHeader(
   capacitySections?: Array<{ x: number; width: number; stats: RackFaceCapacityStats }>,
   metaPartsOverride?: string[]
 ): number {
-  const headerX = 36;
-  const headerWidth = pdf.page.width - 72;
-  const innerX = headerX + 14;
-  const innerWidth = headerWidth - 28;
+  const headerX = 0;
+  const headerWidth = pdf.page.width;
+  const innerX = 36;
+  const innerWidth = pdf.page.width - 72;
   const metaParts = metaPartsOverride ?? (rack
     ? [
         audit.siteName,
@@ -1220,9 +1211,9 @@ function drawPdfPortraitHeader(
   }
 
   const metaText = metaParts.join(" | ");
-  const titleY = pdfPortraitHeaderTop + 12;
-  const subtitleY = pdfPortraitHeaderTop + 16;
-  const metaY = pdfPortraitHeaderTop + 34;
+  const titleY = pdfPortraitHeaderTop + 24;
+  const subtitleY = pdfPortraitHeaderTop + 28;
+  const metaY = pdfPortraitHeaderTop + 46;
   pdf.fontSize(9.5);
   const metaHeight = Math.max(
     12,
@@ -1250,8 +1241,8 @@ function drawPdfPortraitHeader(
   if (rack) {
     const capacitySummary = getRackCapacitySummary(rack.totalUnits, rack.devices);
     const sections = capacitySections ?? [
-      { x: headerX, width: (headerWidth - 14) / 2, stats: capacitySummary.front },
-      { x: headerX + (headerWidth / 2) + 7, width: (headerWidth - 14) / 2, stats: capacitySummary.rear }
+      { x: 36, width: (pdf.page.width - 86) / 2, stats: capacitySummary.front },
+      { x: 36 + ((pdf.page.width - 72) / 2) + 7, width: (pdf.page.width - 86) / 2, stats: capacitySummary.rear }
     ];
     const barY = metaY + metaHeight + 8;
 
@@ -1307,6 +1298,14 @@ function getPdfRackDeviceFrame(
   }
 
   return { x: layout.fullX, width: layout.fullWidth };
+}
+
+function getPdfDeviceCornerRadius(height: number, isPdu: boolean): number {
+  if (isPdu) {
+    return Math.max(1.5, Math.min(3, height * 0.12));
+  }
+
+  return Math.max(1.5, Math.min(3.5, height * 0.1));
 }
 
 function getPdfRackFaceLayoutForFace(
@@ -1649,6 +1648,7 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
     const isMirroredFromOppositeFace = device.blocksBothFaces && device.rackFace !== null && device.rackFace !== face;
     const isSharedDepthDevice = device.allowSharedDepth && !isMirroredFromOppositeFace;
     const showIcon = frame.width >= 24 && height >= 12 && !isPdu;
+    const cornerRadius = getPdfDeviceCornerRadius(height, isPdu);
     const textX = frame.x + innerPadding + (showIcon ? iconSize + 6 : 0);
     const textWidth = frame.width - innerPadding * 2 - (showIcon ? iconSize + 6 : 0);
     const lines = deviceVisualLines(device);
@@ -1666,13 +1666,13 @@ function drawPdfRackFace(pdf: PdfDocument, rack: RackDetail, face: RackFace, x: 
 
     pdf.save();
     pdf
-      .roundedRect(frame.x, topY, frame.width, height, isPdu ? 6 : 8)
+      .roundedRect(frame.x, topY, frame.width, height, cornerRadius)
       .fill(isMirroredFromOppositeFace ? "#edf3f7" : isSharedDepthDevice ? "#e8f3e6" : pdfPalette.deviceFill);
     if (isSharedDepthDevice) {
       pdf.dash(3, { space: 2 });
     }
     pdf
-      .roundedRect(frame.x, topY, frame.width, height, isPdu ? 6 : 8)
+      .roundedRect(frame.x, topY, frame.width, height, cornerRadius)
       .lineWidth(0.8)
       .strokeColor(isSharedDepthDevice ? "#6f9d62" : pdfPalette.deviceBorder)
       .stroke();
@@ -1784,6 +1784,7 @@ function drawPdfPortraitRackFace(
     const isSharedDepthDevice = device.allowSharedDepth && !isMirroredFromOppositeFace;
     const pduColors = isPdu ? getPdfPortraitRenderedPduMeta(face, device.mountPosition, visiblePduMountPositions) : null;
     const showIcon = frame.width >= 30 && height >= 12 && !isPdu;
+    const cornerRadius = getPdfDeviceCornerRadius(height, isPdu);
     const textX = frame.x + innerPadding + (showIcon ? iconSize + 4 : 0);
     const textWidth = frame.width - innerPadding * 2 - (showIcon ? iconSize + 4 : 0);
     const lines = deviceVisualLines(device);
@@ -1801,7 +1802,7 @@ function drawPdfPortraitRackFace(
 
     pdf.save();
     pdf
-      .roundedRect(frame.x, topY, frame.width, height, isPdu ? 6 : 8)
+      .roundedRect(frame.x, topY, frame.width, height, cornerRadius)
       .fill(
         isMirroredFromOppositeFace
           ? "#edf3f7"
@@ -1815,7 +1816,7 @@ function drawPdfPortraitRackFace(
       pdf.dash(3, { space: 2 });
     }
     pdf
-      .roundedRect(frame.x, topY, frame.width, height, isPdu ? 6 : 8)
+      .roundedRect(frame.x, topY, frame.width, height, cornerRadius)
       .lineWidth(0.8)
       .strokeColor(isPdu ? pduColors!.border : isSharedDepthDevice ? "#6f9d62" : pdfPalette.deviceBorder)
       .stroke();
@@ -1825,7 +1826,7 @@ function drawPdfPortraitRackFace(
 
     if (isMirroredFromOppositeFace) {
       pdf.save();
-      pdf.roundedRect(frame.x, topY, frame.width, height, isPdu ? 6 : 8).clip();
+      pdf.roundedRect(frame.x, topY, frame.width, height, cornerRadius).clip();
       pdf.opacity(0.22);
       for (let offset = -height; offset < frame.width + height; offset += 8) {
         pdf
