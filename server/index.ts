@@ -29,6 +29,7 @@ import {
   deleteRack,
   deleteRackDevice,
   deleteDeviceTemplate,
+  findOrCreateExternalAudit,
   getAudit,
   getAuditExportDetail,
   getRack,
@@ -277,7 +278,7 @@ async function bootstrap(): Promise<void> {
   app.post(
     "/api/integrations/audits",
     asyncRoute(async (request, response) => {
-      const audit = await createAudit(normalizeExternalAuditCreateInput(request.body));
+      const { audit, created } = await findOrCreateExternalAudit(normalizeExternalAuditCreateInput(request.body));
       const rackId = audit.racks[0]?.id ?? null;
       const result: ExternalAuditCreateResult = {
         audit,
@@ -286,7 +287,7 @@ async function bootstrap(): Promise<void> {
         openUrl: buildAuditOpenUrl(request, audit.id, rackId)
       };
 
-      response.status(201).json(result);
+      response.status(created ? 201 : 200).json(result);
     })
   );
 

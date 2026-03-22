@@ -117,6 +117,11 @@ interface DeviceTypeRow {
   label: string;
 }
 
+interface ExternalAuditResolution {
+  audit: AuditDetail;
+  created: boolean;
+}
+
 function mapAuditSummary(row: AuditSummaryRow): AuditSummary {
   return {
     id: row.id,
@@ -417,6 +422,11 @@ async function getAuditBase(auditId: number): Promise<AuditSummaryRow | null> {
   );
 
   return result.rows[0] ?? null;
+}
+
+async function getAuditIdByRoomAndName(roomId: number, auditName: string): Promise<number | null> {
+  const result = await pool.query<{ id: number }>("SELECT id FROM audits WHERE room_id = $1 AND name = $2", [roomId, auditName]);
+  return result.rows[0]?.id ?? null;
 }
 
 async function getAuditStatus(auditId: number): Promise<AuditSummary["status"] | null> {
@@ -731,6 +741,71 @@ export async function createAudit(input: AuditCreateInput): Promise<AuditDetail>
   }
 
   return audit;
+}
+
+export async function findOrCreateExternalAudit(input: AuditCreateInput): Promise<ExternalAuditResolution> {
+  const siteName = input.siteName.trim();
+  const roomName = input.roomName.trim();
+  const auditName = input.auditName.trim();
+  const salesOrder = input.salesOrder.trim();
+  const initialRackName = input.initialRackName.trim() || "0101";
+
+  if (!siteName || !roomName || !auditName || !salesOrder) {
+    throw new Error("Site, room, customer/system name and sales order are required.");
+  }
+
+  if (input.initialRackUnits < 1) {
+    throw new Error("Rack must have at least 1U.");
+  }
+
+  const siteId = await getOrCreateSiteId(siteName);
+  const roomId = await getOrCreateRoomId(siteId, roomName);
+  const auditInsertResult = await pool.query<{ id: number }>(
+    `
+      INSERT INTO audits (room_id, name, sales_order, status, notes)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (room_id, name) DO NOTHING
+      RETURNING id
+    `,
+    [roomId, auditName, salesOrder, input.status, input.notes?.trim() || null]
+  );
+
+  const createdAuditId = auditInsertResult.rows[0]?.id ?? null;
+
+  if (createdAuditId !== null) {
+    await pool.query(
+      `
+        INSERT INTO racks (audit_id, room_id, name, total_units, width_mm, depth_mm, height_mm, notes)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)
+      `,
+      [createdAuditId, roomId, initialRackName, input.initialRackUnits, 600, 1000, 2200]
+    );
+
+    const audit = await getAudit(createdAuditId);
+    if (!audit) {
+      throw new Error("Failed to load created audit.");
+    }
+
+    return {
+      audit,
+      created: true
+    };
+  }
+
+  const existingAuditId = await getAuditIdByRoomAndName(roomId, auditName);
+  if (existingAuditId === null) {
+    throw new Error("Failed to resolve existing audit.");
+  }
+
+  const audit = await getAudit(existingAuditId);
+  if (!audit) {
+    throw new Error("Failed to load existing audit.");
+  }
+
+  return {
+    audit,
+    created: false
+  };
 }
 
 export async function updateAudit(auditId: number, input: AuditUpdateInput): Promise<AuditDetail> {
