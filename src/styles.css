@@ -1519,7 +1519,31 @@ textarea {
 }
 
 .rack-face-section {
+  --rack-face-accent: rgba(93, 165, 255, 0.82);
+  --rack-face-border: rgba(93, 165, 255, 0.32);
+  --rack-face-surface-top: rgba(93, 165, 255, 0.1);
+  --rack-face-surface-side: rgba(93, 165, 255, 0.12);
+  --rack-face-shell: #dfe7ee;
+  --rack-face-rail: rgba(112, 128, 144, 0.32);
   min-width: 0;
+}
+
+.rack-face-front {
+  --rack-face-accent: rgba(78, 149, 237, 0.88);
+  --rack-face-border: rgba(78, 149, 237, 0.34);
+  --rack-face-surface-top: rgba(124, 190, 255, 0.16);
+  --rack-face-surface-side: rgba(124, 190, 255, 0.16);
+  --rack-face-shell: #e7f2fb;
+  --rack-face-rail: rgba(96, 153, 219, 0.38);
+}
+
+.rack-face-rear {
+  --rack-face-accent: rgba(214, 104, 104, 0.9);
+  --rack-face-border: rgba(214, 104, 104, 0.3);
+  --rack-face-surface-top: rgba(245, 158, 158, 0.14);
+  --rack-face-surface-side: rgba(245, 158, 158, 0.14);
+  --rack-face-shell: #f8e9e9;
+  --rack-face-rail: rgba(191, 113, 113, 0.34);
 }
 
 .rack-face-grid.both .rack-frame {
@@ -1533,7 +1557,7 @@ textarea {
 .rack-face-banner {
   margin: 12px 0 10px;
   text-align: center;
-  color: var(--accent-strong);
+  color: var(--rack-face-accent);
   font-size: 0.82rem;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -1547,17 +1571,20 @@ textarea {
   border-radius: 16px;
   padding: 20px 16px;
   background:
-    linear-gradient(180deg, rgba(111, 135, 154, 0.08), transparent 18%),
-    linear-gradient(90deg, rgba(143, 160, 176, 0.14), rgba(255, 255, 255, 0.5) 14%, rgba(255, 255, 255, 0.5) 86%, rgba(143, 160, 176, 0.14)),
-    #dfe7ee;
-  border: 1px solid var(--line-soft);
+    linear-gradient(180deg, var(--rack-face-surface-top), transparent 18%),
+    linear-gradient(90deg, var(--rack-face-surface-side), rgba(255, 255, 255, 0.52) 14%, rgba(255, 255, 255, 0.52) 86%, var(--rack-face-surface-side)),
+    var(--rack-face-shell);
+  border: 1px solid var(--rack-face-border);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.45),
+    0 10px 24px rgba(42, 56, 70, 0.06);
 }
 
 .rack-units {
   position: relative;
   border-radius: 10px;
-  border-left: 10px solid rgba(112, 128, 144, 0.32);
-  border-right: 10px solid rgba(112, 128, 144, 0.32);
+  border-left: 10px solid var(--rack-face-rail);
+  border-right: 10px solid var(--rack-face-rail);
   overflow: hidden;
 }
 

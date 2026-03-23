@@ -316,7 +316,7 @@ function RackFacePane({
   }
 
   return (
-    <div className="rack-face-section">
+    <div className={rackFace === "front" ? "rack-face-section rack-face-front" : "rack-face-section rack-face-rear"}>
       <div className="rack-face-banner">{`-- ${faceLabel} --`}</div>
       <div className="rack-frame">
         <div

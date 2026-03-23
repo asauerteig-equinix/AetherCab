@@ -710,7 +710,7 @@ export async function createAudit(input: AuditCreateInput): Promise<AuditDetail>
     throw new Error("Site, room, customer/system name and sales order are required.");
   }
 
-  if (input.initialRackUnits < 1) {
+  if (!Number.isInteger(input.initialRackUnits) || input.initialRackUnits < 1) {
     throw new Error("Rack must have at least 1U.");
   }
 
@@ -754,7 +754,7 @@ export async function findOrCreateExternalAudit(input: AuditCreateInput): Promis
     throw new Error("Site, room, customer/system name and sales order are required.");
   }
 
-  if (input.initialRackUnits < 1) {
+  if (!Number.isInteger(input.initialRackUnits) || input.initialRackUnits < 1) {
     throw new Error("Rack must have at least 1U.");
   }
 
@@ -870,11 +870,18 @@ export async function createRackInAudit(auditId: number, input: RackCreateInput)
     throw new Error("Rack name is required.");
   }
 
-  if (input.totalUnits < 1) {
+  if (!Number.isInteger(input.totalUnits) || input.totalUnits < 1) {
     throw new Error("Rack must have at least 1U.");
   }
 
-  if (input.widthMm < 1 || input.depthMm < 1 || input.heightMm < 1) {
+  if (
+    !Number.isInteger(input.widthMm) ||
+    !Number.isInteger(input.depthMm) ||
+    !Number.isInteger(input.heightMm) ||
+    input.widthMm < 1 ||
+    input.depthMm < 1 ||
+    input.heightMm < 1
+  ) {
     throw new Error("Rack dimensions must be greater than 0 mm.");
   }
 
@@ -907,11 +914,18 @@ export async function updateRack(rackId: number, input: RackUpdateInput): Promis
     throw new Error("Rack name is required.");
   }
 
-  if (input.totalUnits < 1) {
+  if (!Number.isInteger(input.totalUnits) || input.totalUnits < 1) {
     throw new Error("Rack must have at least 1U.");
   }
 
-  if (input.widthMm < 1 || input.depthMm < 1 || input.heightMm < 1) {
+  if (
+    !Number.isInteger(input.widthMm) ||
+    !Number.isInteger(input.depthMm) ||
+    !Number.isInteger(input.heightMm) ||
+    input.widthMm < 1 ||
+    input.depthMm < 1 ||
+    input.heightMm < 1
+  ) {
     throw new Error("Rack dimensions must be greater than 0 mm.");
   }
 
