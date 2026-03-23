@@ -24,9 +24,31 @@ const defaultRackCreateForm: RackCreateInput = {
   heightMm: 2200
 };
 
+interface RackFormValues {
+  rackName: string;
+  totalUnits: number;
+  widthMm: number;
+  depthMm: number;
+  heightMm: number;
+}
+
 function getNextNumberInputValue(rawValue: string, currentValue: number): number {
   const nextValue = Number(rawValue);
   return Number.isNaN(nextValue) ? currentValue : nextValue;
+}
+
+function isPositiveInteger(value: number): boolean {
+  return Number.isInteger(value) && value > 0;
+}
+
+function getSafeRackFormValues(form: RackFormValues, fallback: RackFormValues): RackFormValues {
+  return {
+    rackName: form.rackName,
+    totalUnits: isPositiveInteger(form.totalUnits) ? form.totalUnits : fallback.totalUnits,
+    widthMm: isPositiveInteger(form.widthMm) ? form.widthMm : fallback.widthMm,
+    depthMm: isPositiveInteger(form.depthMm) ? form.depthMm : fallback.depthMm,
+    heightMm: isPositiveInteger(form.heightMm) ? form.heightMm : fallback.heightMm
+  };
 }
 
 export function RackTabs({
@@ -50,6 +72,22 @@ export function RackTabs({
   const [deleteRackConfirmed, setDeleteRackConfirmed] = useState(false);
   const activeRack = audit?.racks.find((rack) => rack.id === activeRackId) ?? null;
   const editorRack = audit?.racks.find((rack) => rack.id === editorRackId) ?? activeRack;
+  const activeRackFormValues: RackFormValues = {
+    rackName: activeRack?.name ?? "",
+    totalUnits: activeRack?.totalUnits ?? defaultRackCreateForm.totalUnits,
+    widthMm: activeRack?.widthMm ?? defaultRackCreateForm.widthMm,
+    depthMm: activeRack?.depthMm ?? defaultRackCreateForm.depthMm,
+    heightMm: activeRack?.heightMm ?? defaultRackCreateForm.heightMm
+  };
+  const editorRackFormValues: RackFormValues = {
+    rackName: editorRack?.name ?? activeRackFormValues.rackName,
+    totalUnits: editorRack?.totalUnits ?? activeRackFormValues.totalUnits,
+    widthMm: editorRack?.widthMm ?? activeRackFormValues.widthMm,
+    depthMm: editorRack?.depthMm ?? activeRackFormValues.depthMm,
+    heightMm: editorRack?.heightMm ?? activeRackFormValues.heightMm
+  };
+  const safeNewRackForm = getSafeRackFormValues(newRackForm, activeRackFormValues);
+  const safeRackForm = getSafeRackFormValues(rackForm, editorRackFormValues);
 
   function resetDeleteRackState() {
     setDeleteRackOpen(false);
@@ -239,8 +277,8 @@ export function RackTabs({
                   <span>Rack Name</span>
                   <input
                     disabled={readOnly}
-                    value={newRackForm.rackName}
-                    onChange={(event) => onNewRackFormChange({ ...newRackForm, rackName: event.target.value })}
+                    value={safeNewRackForm.rackName}
+                    onChange={(event) => onNewRackFormChange({ ...safeNewRackForm, rackName: event.target.value })}
                   />
                 </label>
                 <label className="audit-edit-field plain">
@@ -249,11 +287,11 @@ export function RackTabs({
                     disabled={readOnly}
                     min={1}
                     type="number"
-                    value={newRackForm.totalUnits}
+                    value={safeNewRackForm.totalUnits}
                     onChange={(event) =>
                       onNewRackFormChange({
-                        ...newRackForm,
-                        totalUnits: getNextNumberInputValue(event.target.value, newRackForm.totalUnits)
+                        ...safeNewRackForm,
+                        totalUnits: getNextNumberInputValue(event.target.value, safeNewRackForm.totalUnits)
                       })
                     }
                   />
@@ -264,11 +302,11 @@ export function RackTabs({
                     disabled={readOnly}
                     min={1}
                     type="number"
-                    value={newRackForm.widthMm}
+                    value={safeNewRackForm.widthMm}
                     onChange={(event) =>
                       onNewRackFormChange({
-                        ...newRackForm,
-                        widthMm: getNextNumberInputValue(event.target.value, newRackForm.widthMm)
+                        ...safeNewRackForm,
+                        widthMm: getNextNumberInputValue(event.target.value, safeNewRackForm.widthMm)
                       })
                     }
                   />
@@ -279,11 +317,11 @@ export function RackTabs({
                     disabled={readOnly}
                     min={1}
                     type="number"
-                    value={newRackForm.depthMm}
+                    value={safeNewRackForm.depthMm}
                     onChange={(event) =>
                       onNewRackFormChange({
-                        ...newRackForm,
-                        depthMm: getNextNumberInputValue(event.target.value, newRackForm.depthMm)
+                        ...safeNewRackForm,
+                        depthMm: getNextNumberInputValue(event.target.value, safeNewRackForm.depthMm)
                       })
                     }
                   />
@@ -294,11 +332,11 @@ export function RackTabs({
                     disabled={readOnly}
                     min={1}
                     type="number"
-                    value={newRackForm.heightMm}
+                    value={safeNewRackForm.heightMm}
                     onChange={(event) =>
                       onNewRackFormChange({
-                        ...newRackForm,
-                        heightMm: getNextNumberInputValue(event.target.value, newRackForm.heightMm)
+                        ...safeNewRackForm,
+                        heightMm: getNextNumberInputValue(event.target.value, safeNewRackForm.heightMm)
                       })
                     }
                   />
@@ -340,8 +378,8 @@ export function RackTabs({
                   <span>Rack Name</span>
                   <input
                     disabled={readOnly}
-                    value={rackForm.rackName}
-                    onChange={(event) => onRackFormChange({ ...rackForm, rackName: event.target.value })}
+                    value={safeRackForm.rackName}
+                    onChange={(event) => onRackFormChange({ ...safeRackForm, rackName: event.target.value })}
                   />
                 </label>
                 <label className="audit-edit-field plain">
@@ -350,11 +388,11 @@ export function RackTabs({
                     disabled={readOnly}
                     min={1}
                     type="number"
-                    value={rackForm.totalUnits}
+                    value={safeRackForm.totalUnits}
                     onChange={(event) =>
                       onRackFormChange({
-                        ...rackForm,
-                        totalUnits: getNextNumberInputValue(event.target.value, rackForm.totalUnits)
+                        ...safeRackForm,
+                        totalUnits: getNextNumberInputValue(event.target.value, safeRackForm.totalUnits)
                       })
                     }
                   />
@@ -365,11 +403,11 @@ export function RackTabs({
                     disabled={readOnly}
                     min={1}
                     type="number"
-                    value={rackForm.widthMm}
+                    value={safeRackForm.widthMm}
                     onChange={(event) =>
                       onRackFormChange({
-                        ...rackForm,
-                        widthMm: getNextNumberInputValue(event.target.value, rackForm.widthMm)
+                        ...safeRackForm,
+                        widthMm: getNextNumberInputValue(event.target.value, safeRackForm.widthMm)
                       })
                     }
                   />
@@ -380,11 +418,11 @@ export function RackTabs({
                     disabled={readOnly}
                     min={1}
                     type="number"
-                    value={rackForm.depthMm}
+                    value={safeRackForm.depthMm}
                     onChange={(event) =>
                       onRackFormChange({
-                        ...rackForm,
-                        depthMm: getNextNumberInputValue(event.target.value, rackForm.depthMm)
+                        ...safeRackForm,
+                        depthMm: getNextNumberInputValue(event.target.value, safeRackForm.depthMm)
                       })
                     }
                   />
@@ -395,11 +433,11 @@ export function RackTabs({
                     disabled={readOnly}
                     min={1}
                     type="number"
-                    value={rackForm.heightMm}
+                    value={safeRackForm.heightMm}
                     onChange={(event) =>
                       onRackFormChange({
-                        ...rackForm,
-                        heightMm: getNextNumberInputValue(event.target.value, rackForm.heightMm)
+                        ...safeRackForm,
+                        heightMm: getNextNumberInputValue(event.target.value, safeRackForm.heightMm)
                       })
                     }
                   />
