@@ -61,7 +61,7 @@ export function getMountPositionFace(mountPosition: RackMountPosition): RackFace
 }
 
 export function resolveRackFaceForMovedDevice(
-  device: Pick<RackDevice, "placementType" | "rackFace" | "blocksBothFaces">,
+  device: Pick<RackDevice, "rackFace" | "blocksBothFaces">,
   nextMountPosition: RackMountPosition,
   targetRackFace: RackFace,
   dragSourceRackFace?: RackFace | null
@@ -69,13 +69,6 @@ export function resolveRackFaceForMovedDevice(
   const mountPositionFace = getMountPositionFace(nextMountPosition);
   if (mountPositionFace !== null) {
     return mountPositionFace;
-  }
-
-  // Full-width devices that are already mounted in the rack keep their
-  // original face when repositioned by drag and drop. This avoids accidental
-  // face flips when moving them vertically inside the editor.
-  if (device.placementType === "rack" && device.rackFace !== null) {
-    return device.rackFace;
   }
 
   if (!device.blocksBothFaces) {

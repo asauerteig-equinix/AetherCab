@@ -1436,8 +1436,8 @@ export default function App() {
                 onTemplateDrop={(targetRackFace, unit, mountPosition, templatePayload) => {
                   void handleTemplateDrop(targetRackFace, unit, mountPosition, templatePayload);
                 }}
-                onDeviceMove={(device, nextStartUnit, nextMountPosition, targetRackFace) => {
-                  void handleDeviceMove(device, nextStartUnit, nextMountPosition, targetRackFace);
+                onDeviceMove={(device, nextStartUnit, nextMountPosition, targetRackFace, dragSourceRackFace) => {
+                  void handleDeviceMove(device, nextStartUnit, nextMountPosition, targetRackFace, dragSourceRackFace);
                 }}
               />
             ) : (
