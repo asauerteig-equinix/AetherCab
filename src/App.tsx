@@ -153,23 +153,6 @@ function toRackUpdateForm(rack: RackDetail): RackUpdateInput {
   };
 }
 
-function isPositiveInteger(value: number | null | undefined): value is number {
-  return value !== null && value !== undefined && Number.isInteger(value) && value > 0;
-}
-
-function getSanitizedRackUpdateInput(
-  form: RackUpdateInput,
-  fallback?: Pick<RackDetail, "name" | "totalUnits" | "widthMm" | "depthMm" | "heightMm"> | null
-): RackUpdateInput {
-  return {
-    rackName: form.rackName,
-    totalUnits: isPositiveInteger(form.totalUnits) ? form.totalUnits : fallback?.totalUnits ?? initialRackUpdateForm.totalUnits,
-    widthMm: isPositiveInteger(form.widthMm) ? form.widthMm : fallback?.widthMm ?? initialRackUpdateForm.widthMm,
-    depthMm: isPositiveInteger(form.depthMm) ? form.depthMm : fallback?.depthMm ?? initialRackUpdateForm.depthMm,
-    heightMm: isPositiveInteger(form.heightMm) ? form.heightMm : fallback?.heightMm ?? initialRackUpdateForm.heightMm
-  };
-}
-
 function templateToRackDevice(
   template: DeviceTemplate,
   startUnit: number | null,
@@ -530,11 +513,6 @@ export default function App() {
   }
 
   async function loadRack(rackId: number) {
-    if (!isPositiveInteger(rackId)) {
-      setError("Rack could not be loaded.");
-      return;
-    }
-
     try {
       const detail = await api.getRack(rackId);
       setRackDetail(detail);
@@ -913,15 +891,13 @@ export default function App() {
   }
 
   async function handleRackUpdate() {
-    if (!isPositiveInteger(activeRackId) || isCompletedAudit) {
+    if (activeRackId === null || isCompletedAudit) {
       return;
     }
 
     try {
       setSaving(true);
-      const nextRackForm = getSanitizedRackUpdateInput(rackForm, rackDetail);
-      setRackForm(nextRackForm);
-      const updatedRack = await api.updateRack(activeRackId, nextRackForm);
+      const updatedRack = await api.updateRack(activeRackId, rackForm);
       setRackDetail(updatedRack);
       setRackForm(toRackUpdateForm(updatedRack));
       await refreshActiveAudit(activeRackId);

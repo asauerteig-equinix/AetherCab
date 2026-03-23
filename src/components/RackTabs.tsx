@@ -24,31 +24,9 @@ const defaultRackCreateForm: RackCreateInput = {
   heightMm: 2200
 };
 
-interface RackFormValues {
-  rackName: string;
-  totalUnits: number;
-  widthMm: number;
-  depthMm: number;
-  heightMm: number;
-}
-
 function getNextNumberInputValue(rawValue: string, currentValue: number): number {
   const nextValue = Number(rawValue);
   return Number.isNaN(nextValue) ? currentValue : nextValue;
-}
-
-function isPositiveInteger(value: number): boolean {
-  return Number.isInteger(value) && value > 0;
-}
-
-function getSafeRackFormValues(form: RackFormValues, fallback: RackFormValues): RackFormValues {
-  return {
-    rackName: form.rackName,
-    totalUnits: isPositiveInteger(form.totalUnits) ? form.totalUnits : fallback.totalUnits,
-    widthMm: isPositiveInteger(form.widthMm) ? form.widthMm : fallback.widthMm,
-    depthMm: isPositiveInteger(form.depthMm) ? form.depthMm : fallback.depthMm,
-    heightMm: isPositiveInteger(form.heightMm) ? form.heightMm : fallback.heightMm
-  };
 }
 
 export function RackTabs({
@@ -72,22 +50,6 @@ export function RackTabs({
   const [deleteRackConfirmed, setDeleteRackConfirmed] = useState(false);
   const activeRack = audit?.racks.find((rack) => rack.id === activeRackId) ?? null;
   const editorRack = audit?.racks.find((rack) => rack.id === editorRackId) ?? activeRack;
-  const activeRackFormValues: RackFormValues = {
-    rackName: activeRack?.name ?? "",
-    totalUnits: activeRack?.totalUnits ?? defaultRackCreateForm.totalUnits,
-    widthMm: activeRack?.widthMm ?? defaultRackCreateForm.widthMm,
-    depthMm: activeRack?.depthMm ?? defaultRackCreateForm.depthMm,
-    heightMm: activeRack?.heightMm ?? defaultRackCreateForm.heightMm
-  };
-  const editorRackFormValues: RackFormValues = {
-    rackName: editorRack?.name ?? activeRackFormValues.rackName,
-    totalUnits: editorRack?.totalUnits ?? activeRackFormValues.totalUnits,
-    widthMm: editorRack?.widthMm ?? activeRackFormValues.widthMm,
-    depthMm: editorRack?.depthMm ?? activeRackFormValues.depthMm,
-    heightMm: editorRack?.heightMm ?? activeRackFormValues.heightMm
-  };
-  const safeNewRackForm = getSafeRackFormValues(newRackForm, activeRackFormValues);
-  const safeRackForm = getSafeRackFormValues(rackForm, editorRackFormValues);
 
   function resetDeleteRackState() {
     setDeleteRackOpen(false);
@@ -170,7 +132,7 @@ export function RackTabs({
             <button className="ghost-button" disabled={readOnly} onClick={openCreateModal} type="button">
               Add rack
             </button>
-            <button className="ghost-button" disabled={!activeRack || readOnly} onClick={openEditModal} type="button">
+            <button className="ghost-button" disabled={!activeRack || readOnly} onClick={() => openEditModal()} type="button">
               Edit rack
             </button>
             <button
@@ -277,8 +239,8 @@ export function RackTabs({
                   <span>Rack Name</span>
                   <input
                     disabled={readOnly}
-                    value={safeNewRackForm.rackName}
-                    onChange={(event) => onNewRackFormChange({ ...safeNewRackForm, rackName: event.target.value })}
+                    value={newRackForm.rackName}
+                    onChange={(event) => onNewRackFormChange({ ...newRackForm, rackName: event.target.value })}
                   />
                 </label>
                 <label className="audit-edit-field plain">
@@ -287,11 +249,11 @@ export function RackTabs({
                     disabled={readOnly}
                     min={1}
                     type="number"
-                    value={safeNewRackForm.totalUnits}
+                    value={newRackForm.totalUnits}
                     onChange={(event) =>
                       onNewRackFormChange({
-                        ...safeNewRackForm,
-                        totalUnits: getNextNumberInputValue(event.target.value, safeNewRackForm.totalUnits)
+                        ...newRackForm,
+                        totalUnits: getNextNumberInputValue(event.target.value, newRackForm.totalUnits)
                       })
                     }
                   />
@@ -302,11 +264,11 @@ export function RackTabs({
                     disabled={readOnly}
                     min={1}
                     type="number"
-                    value={safeNewRackForm.widthMm}
+                    value={newRackForm.widthMm}
                     onChange={(event) =>
                       onNewRackFormChange({
-                        ...safeNewRackForm,
-                        widthMm: getNextNumberInputValue(event.target.value, safeNewRackForm.widthMm)
+                        ...newRackForm,
+                        widthMm: getNextNumberInputValue(event.target.value, newRackForm.widthMm)
                       })
                     }
                   />
@@ -317,11 +279,11 @@ export function RackTabs({
                     disabled={readOnly}
                     min={1}
                     type="number"
-                    value={safeNewRackForm.depthMm}
+                    value={newRackForm.depthMm}
                     onChange={(event) =>
                       onNewRackFormChange({
-                        ...safeNewRackForm,
-                        depthMm: getNextNumberInputValue(event.target.value, safeNewRackForm.depthMm)
+                        ...newRackForm,
+                        depthMm: getNextNumberInputValue(event.target.value, newRackForm.depthMm)
                       })
                     }
                   />
@@ -332,11 +294,11 @@ export function RackTabs({
                     disabled={readOnly}
                     min={1}
                     type="number"
-                    value={safeNewRackForm.heightMm}
+                    value={newRackForm.heightMm}
                     onChange={(event) =>
                       onNewRackFormChange({
-                        ...safeNewRackForm,
-                        heightMm: getNextNumberInputValue(event.target.value, safeNewRackForm.heightMm)
+                        ...newRackForm,
+                        heightMm: getNextNumberInputValue(event.target.value, newRackForm.heightMm)
                       })
                     }
                   />
@@ -378,8 +340,8 @@ export function RackTabs({
                   <span>Rack Name</span>
                   <input
                     disabled={readOnly}
-                    value={safeRackForm.rackName}
-                    onChange={(event) => onRackFormChange({ ...safeRackForm, rackName: event.target.value })}
+                    value={rackForm.rackName}
+                    onChange={(event) => onRackFormChange({ ...rackForm, rackName: event.target.value })}
                   />
                 </label>
                 <label className="audit-edit-field plain">
@@ -388,11 +350,11 @@ export function RackTabs({
                     disabled={readOnly}
                     min={1}
                     type="number"
-                    value={safeRackForm.totalUnits}
+                    value={rackForm.totalUnits}
                     onChange={(event) =>
                       onRackFormChange({
-                        ...safeRackForm,
-                        totalUnits: getNextNumberInputValue(event.target.value, safeRackForm.totalUnits)
+                        ...rackForm,
+                        totalUnits: getNextNumberInputValue(event.target.value, rackForm.totalUnits)
                       })
                     }
                   />
@@ -403,11 +365,11 @@ export function RackTabs({
                     disabled={readOnly}
                     min={1}
                     type="number"
-                    value={safeRackForm.widthMm}
+                    value={rackForm.widthMm}
                     onChange={(event) =>
                       onRackFormChange({
-                        ...safeRackForm,
-                        widthMm: getNextNumberInputValue(event.target.value, safeRackForm.widthMm)
+                        ...rackForm,
+                        widthMm: getNextNumberInputValue(event.target.value, rackForm.widthMm)
                       })
                     }
                   />
@@ -418,11 +380,11 @@ export function RackTabs({
                     disabled={readOnly}
                     min={1}
                     type="number"
-                    value={safeRackForm.depthMm}
+                    value={rackForm.depthMm}
                     onChange={(event) =>
                       onRackFormChange({
-                        ...safeRackForm,
-                        depthMm: getNextNumberInputValue(event.target.value, safeRackForm.depthMm)
+                        ...rackForm,
+                        depthMm: getNextNumberInputValue(event.target.value, rackForm.depthMm)
                       })
                     }
                   />
@@ -433,11 +395,11 @@ export function RackTabs({
                     disabled={readOnly}
                     min={1}
                     type="number"
-                    value={safeRackForm.heightMm}
+                    value={rackForm.heightMm}
                     onChange={(event) =>
                       onRackFormChange({
-                        ...safeRackForm,
-                        heightMm: getNextNumberInputValue(event.target.value, safeRackForm.heightMm)
+                        ...rackForm,
+                        heightMm: getNextNumberInputValue(event.target.value, rackForm.heightMm)
                       })
                     }
                   />
